@@ -1,0 +1,5 @@
+Evaluation not started.
+Blockers discovered before holdout exposure:
+- holdout_queries_v1.json is absent from the supplied attachments and workspace.
+- the workspace and all visible SUT directories are not Git repositories.
+No hidden query was opened or executed. No SUT behavior was changed.

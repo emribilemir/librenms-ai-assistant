@@ -1,0 +1,20 @@
+{
+  "suite": "librenms-prompt-eval legacy 56-suite (frozen)",
+  "runner": "eval_runner.py (unchanged)",
+  "model": "librenms-qwen",
+  "think": false,
+  "system_sha": "d320cbd8e984",
+  "deterministic_pass": 55,
+  "deterministic_total": 56,
+  "deterministic_rate": 98.21,
+  "judge_used": false,
+  "judge_note": "Secondary semantic judge step skipped on purpose: local Qwen must not judge itself (no-local-judge policy). Deterministic grading is identical to the frozen runner.",
+  "previous_recorded_final": {
+    "total": 56,
+    "passed": 55,
+    "system_sha": "d320cbd8e984"
+  },
+  "failing_ids": [
+    "T46"
+  ]
+}

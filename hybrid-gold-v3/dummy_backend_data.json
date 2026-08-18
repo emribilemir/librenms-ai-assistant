@@ -1,0 +1,207 @@
+{
+  "101": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  },
+  "102": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "down",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [
+      {
+        "alert_id": "A-102-1",
+        "state": "active",
+        "severity": "critical",
+        "rule": "Device down",
+        "entity": "device:102",
+        "message": "Device is unreachable."
+      }
+    ],
+    "events": [
+      {
+        "timestamp": "2026-08-17T13:50:00+03:00",
+        "severity": "critical",
+        "message": "Device polling failed."
+      }
+    ]
+  },
+  "103": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  },
+  "104": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  },
+  "105": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  },
+  "106": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "access"
+      },
+      {
+        "ifIndex": 8,
+        "ifName": "8",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "down",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [
+      {
+        "alert_id": "A-106-1",
+        "state": "active",
+        "severity": "critical",
+        "rule": "Port operationally down",
+        "entity": "port:8",
+        "message": "Port 8 is admin up but oper down."
+      }
+    ],
+    "events": [
+      {
+        "timestamp": "2026-08-17T14:01:00+03:00",
+        "severity": "warning",
+        "message": "Port 8 changed state from up to down."
+      },
+      {
+        "timestamp": "2026-08-17T14:03:10+03:00",
+        "severity": "info",
+        "message": "Port 8 changed state from down to up."
+      },
+      {
+        "timestamp": "2026-08-17T14:07:42+03:00",
+        "severity": "warning",
+        "message": "Port 8 changed state from up to down."
+      }
+    ]
+  },
+  "107": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  },
+  "108": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "down",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [
+      {
+        "alert_id": "A-108-1",
+        "state": "active",
+        "severity": "critical",
+        "rule": "Device down",
+        "entity": "device:108",
+        "message": "Device is unreachable."
+      }
+    ],
+    "events": []
+  },
+  "109": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": [
+      {
+        "timestamp": "2026-08-17T12:00:00+03:00",
+        "severity": "info",
+        "message": "Routine polling succeeded."
+      }
+    ]
+  },
+  "110": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  },
+  "111": {
+    "ports": [
+      {
+        "ifIndex": 1,
+        "ifName": "1",
+        "ifAdminStatus": "up",
+        "ifOperStatus": "up",
+        "ifAlias": "uplink"
+      }
+    ],
+    "alerts": [],
+    "events": []
+  }
+}

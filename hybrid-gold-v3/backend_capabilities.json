@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "read_only": true,
+  "tools": [
+    {
+      "name": "get_device",
+      "input": {"hostname": "string OR device_id"},
+      "purpose": "Retrieve authoritative device identity and current status."
+    },
+    {
+      "name": "get_ports",
+      "input": {"device_id": "integer"},
+      "purpose": "Retrieve port state for a resolved device."
+    },
+    {
+      "name": "get_alerts",
+      "input": {"device_id": "integer"},
+      "purpose": "Retrieve active alert evidence for a resolved device."
+    },
+    {
+      "name": "get_events",
+      "input": {"device_id": "integer"},
+      "purpose": "Retrieve event/log-like evidence for a resolved device."
+    }
+  ],
+  "forbidden_capability_classes": ["write", "reboot", "configuration_change", "delete"]
+}

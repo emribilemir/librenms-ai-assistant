@@ -1,0 +1,61 @@
+{
+  "suite": "hybrid-gold-v3 (Gold 40)",
+  "mode": "system_under_test",
+  "adapter": "sut_adapter.py",
+  "planner_schema": "gold",
+  "deterministic_pass": 40,
+  "deterministic_total": 40,
+  "dimensions": {
+    "A": {
+      "pass": 38,
+      "total": 38
+    },
+    "B": {
+      "pass": 39,
+      "total": 39
+    },
+    "C": {
+      "pass": 16,
+      "total": 16
+    },
+    "D": {
+      "pass": 9,
+      "total": 9
+    },
+    "E": {
+      "pass": 9,
+      "total": 9
+    },
+    "F": {
+      "pass": 11,
+      "total": 11
+    },
+    "G": {
+      "pass": 7,
+      "total": 7
+    }
+  },
+  "atomic_cases": 10,
+  "atomic_avoided_synthesis_llm": 10,
+  "atomic_llm_avoidance_rate": 100.0,
+  "atomic_planner_llm_used": 10,
+  "investigation_cases": 7,
+  "investigation_synthesis_llm_called": 7,
+  "investigation_llm_invocation_rate": 100.0,
+  "clarification_cases": 4,
+  "ambiguous_wrong_device_selection_count": 0,
+  "no_match_cases": 3,
+  "no_match_fabricated_device_count": 0,
+  "execution_cases": 23,
+  "exact_backend_tool_call_accuracy": 23,
+  "exact_backend_tool_call_accuracy_rate": 100.0,
+  "exact_tool_call_failures": [],
+  "backend_tool_argument_accuracy": 23,
+  "backend_tool_argument_accuracy_rate": 100.0,
+  "external_judge_pending": 7,
+  "planner_failures": 0,
+  "llm_usage": {
+    "planner_llm_called_total": 40,
+    "synthesis_llm_called_total": 7
+  }
+}

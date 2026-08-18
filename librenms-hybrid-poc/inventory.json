@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "source": "device_controller_brand_model_only.xlsx",
+  "record_count": 50,
+  "unique_device_models": 8,
+  "models": [
+    {
+      "brand": "HP ProCurve",
+      "sku": "J4850A",
+      "model": "5304XL",
+      "canonical_name": "J4850A 5304XL",
+      "search_text": "hp procurve j4850a 5304xl",
+      "aliases": [
+        "J4850A 5304XL",
+        "J4850A",
+        "5304XL",
+        "HP ProCurve J4850A 5304XL",
+        "HP ProCurve 5304XL"
+      ],
+      "source_occurrences": 1
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "J9772A",
+      "model": "2530-48G-PoEP",
+      "canonical_name": "J9772A 2530-48G-PoEP",
+      "search_text": "hp procurve j9772a 2530 48g poep",
+      "aliases": [
+        "J9772A 2530-48G-PoEP",
+        "J9772A",
+        "2530-48G-PoEP",
+        "HP ProCurve J9772A 2530-48G-PoEP",
+        "HP ProCurve 2530-48G-PoEP"
+      ],
+      "source_occurrences": 23
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "J9774A",
+      "model": "2530-8G-PoEP",
+      "canonical_name": "J9774A 2530-8G-PoEP",
+      "search_text": "hp procurve j9774a 2530 8g poep",
+      "aliases": [
+        "J9774A 2530-8G-PoEP",
+        "J9774A",
+        "2530-8G-PoEP",
+        "HP ProCurve J9774A 2530-8G-PoEP",
+        "HP ProCurve 2530-8G-PoEP"
+      ],
+      "source_occurrences": 4
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "J9775A",
+      "model": "2530-48G",
+      "canonical_name": "J9775A 2530-48G",
+      "search_text": "hp procurve j9775a 2530 48g",
+      "aliases": [
+        "J9775A 2530-48G",
+        "J9775A",
+        "2530-48G",
+        "HP ProCurve J9775A 2530-48G",
+        "HP ProCurve 2530-48G"
+      ],
+      "source_occurrences": 6
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "J9776A",
+      "model": "2530-24G",
+      "canonical_name": "J9776A 2530-24G",
+      "search_text": "hp procurve j9776a 2530 24g",
+      "aliases": [
+        "J9776A 2530-24G",
+        "J9776A",
+        "2530-24G",
+        "HP ProCurve J9776A 2530-24G",
+        "HP ProCurve 2530-24G"
+      ],
+      "source_occurrences": 2
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "J9780A",
+      "model": "2530-8-PoEP",
+      "canonical_name": "J9780A 2530-8-PoEP",
+      "search_text": "hp procurve j9780a 2530 8 poep",
+      "aliases": [
+        "J9780A 2530-8-PoEP",
+        "J9780A",
+        "2530-8-PoEP",
+        "HP ProCurve J9780A 2530-8-PoEP",
+        "HP ProCurve 2530-8-PoEP"
+      ],
+      "source_occurrences": 2
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "J9783A",
+      "model": "2530-8",
+      "canonical_name": "J9783A 2530-8",
+      "search_text": "hp procurve j9783a 2530 8",
+      "aliases": [
+        "J9783A 2530-8",
+        "J9783A",
+        "2530-8",
+        "HP ProCurve J9783A 2530-8",
+        "HP ProCurve 2530-8"
+      ],
+      "source_occurrences": 6
+    },
+    {
+      "brand": "HP ProCurve",
+      "sku": "JL357A",
+      "model": "2540-48G-PoE+-4SFP+",
+      "canonical_name": "JL357A 2540-48G-PoE+-4SFP+",
+      "search_text": "hp procurve jl357a 2540 48g poe plus 4sfp plus",
+      "aliases": [
+        "JL357A 2540-48G-PoE+-4SFP+",
+        "JL357A",
+        "2540-48G-PoE+-4SFP+",
+        "HP ProCurve JL357A 2540-48G-PoE+-4SFP+",
+        "HP ProCurve 2540-48G-PoE+-4SFP+"
+      ],
+      "source_occurrences": 6
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "46",
+      "hostname": "sw-46",
+      "brand": "HP ProCurve",
+      "sku": "J9772A",
+      "model": "2530-48G-PoEP",
+      "status": "up",
+      "aliases": [
+        "sw46",
+        "46"
+      ]
+    },
+    {
+      "device_id": "47",
+      "hostname": "sw-47",
+      "brand": "HP ProCurve",
+      "sku": "J9772A",
+      "model": "2530-48G-PoEP",
+      "status": "down",
+      "aliases": [
+        "sw47",
+        "47"
+      ]
+    },
+    {
+      "device_id": "48",
+      "hostname": "sw-48",
+      "brand": "HP ProCurve",
+      "sku": "J9772A",
+      "model": "2530-48G-PoEP",
+      "status": "unknown",
+      "aliases": [
+        "sw48",
+        "48"
+      ]
+    },
+    {
+      "device_id": "460",
+      "hostname": "sw-460",
+      "brand": "HP ProCurve",
+      "sku": "J9772A",
+      "model": "2530-48G-PoEP",
+      "status": "up",
+      "aliases": [
+        "sw460",
+        "460"
+      ]
+    },
+    {
+      "device_id": "101",
+      "hostname": "core-sw-01",
+      "brand": "HP ProCurve",
+      "sku": "J4850A",
+      "model": "5304XL",
+      "status": "up",
+      "aliases": [
+        "core1",
+        "core-1"
+      ]
+    },
+    {
+      "device_id": "102",
+      "hostname": "core-sw-02",
+      "brand": "HP ProCurve",
+      "sku": "J4850A",
+      "model": "5304XL",
+      "status": "down",
+      "aliases": [
+        "core2",
+        "core-2"
+      ]
+    },
+    {
+      "device_id": "2530-48",
+      "hostname": "sw-2530-48",
+      "brand": "HP ProCurve",
+      "sku": "J9775A",
+      "model": "2530-48G",
+      "status": "up",
+      "aliases": []
+    },
+    {
+      "device_id": "2530-24",
+      "hostname": "sw-2530-24",
+      "brand": "HP ProCurve",
+      "sku": "J9776A",
+      "model": "2530-24G",
+      "status": "down",
+      "aliases": []
+    },
+    {
+      "device_id": "2530-8p",
+      "hostname": "sw-2530-8p",
+      "brand": "HP ProCurve",
+      "sku": "J9780A",
+      "model": "2530-8-PoEP",
+      "status": "up",
+      "aliases": []
+    },
+    {
+      "device_id": "2530-8",
+      "hostname": "sw-2530-8",
+      "brand": "HP ProCurve",
+      "sku": "J9783A",
+      "model": "2530-8",
+      "status": "unknown",
+      "aliases": []
+    },
+    {
+      "device_id": "2540-48",
+      "hostname": "sw-2540-48",
+      "brand": "HP ProCurve",
+      "sku": "JL357A",
+      "model": "2540-48G-PoE+-4SFP+",
+      "status": "up",
+      "aliases": []
+    }
+  ]
+}

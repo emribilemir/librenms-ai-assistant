@@ -1,0 +1,237 @@
+{
+  "meta": {
+    "round": "probe-compact",
+    "model": "librenms-qwen",
+    "judge_model": "qwen3.5:4b",
+    "think": false,
+    "temperature": 0,
+    "seed": 42,
+    "system_sha": "d320cbd8e984",
+    "timestamp": "2026-08-17T11:39:03+0300"
+  },
+  "summary": {
+    "round": "probe-compact",
+    "model": "librenms-qwen",
+    "think": false,
+    "system_sha": "d320cbd8e984",
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "pass_rate": 100.0,
+    "judge_pass_rate": 100.0,
+    "judge_decided": 4,
+    "think_leaks": 0,
+    "avg_words": 5.0,
+    "by_category": {
+      "formatting-conciseness": {
+        "total": 4,
+        "passed": 4,
+        "rate": 100.0
+      }
+    },
+    "by_dimension": {
+      "conciseness": {
+        "total": 4,
+        "passed": 4,
+        "rate": 100.0
+      },
+      "turkish": {
+        "total": 4,
+        "passed": 4,
+        "rate": 100.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "PV1",
+      "name": "T46 variant: single-field pretty JSON (original fixture)",
+      "category": "formatting-conciseness",
+      "categories": [
+        "formatting-conciseness"
+      ],
+      "dimensions": [
+        "conciseness",
+        "turkish"
+      ],
+      "question": "sw-46 çalışıyor mu?",
+      "tool_results": {
+        "get_device_info": {
+          "hostname": "sw-46",
+          "status": "up"
+        }
+      },
+      "pass_criteria": "Short Turkish answer (≤20 words) stating the device is up.",
+      "response": "Evet, sw-46 cihazı \"up\" durumundadır.",
+      "thinking_returned": false,
+      "think_leak": false,
+      "elapsed_s": 1.26,
+      "checks": {
+        "must_contain_any": {
+          "pass": true,
+          "items": [
+            "@UP"
+          ]
+        },
+        "max_words": {
+          "pass": true,
+          "count": 5,
+          "limit": 20
+        },
+        "require_turkish": {
+          "pass": true,
+          "turkish_marker": true,
+          "english_stopword_ratio": 0.0
+        }
+      },
+      "deterministic_pass": true,
+      "judge": {
+        "pass": true,
+        "reason": "{\"pass\": true, \"reason\": \"The response correctly confirms the device status based on the provided tool results.\"}"
+      }
+    },
+    {
+      "id": "PV2",
+      "name": "T46 variant: multi-field pretty JSON with collected_at",
+      "category": "formatting-conciseness",
+      "categories": [
+        "formatting-conciseness"
+      ],
+      "dimensions": [
+        "conciseness",
+        "turkish"
+      ],
+      "question": "sw-46 çalışıyor mu?",
+      "tool_results": {
+        "get_device_info": {
+          "hostname": "sw-46",
+          "status": "up",
+          "collected_at": "2025-06-12T10:00:00Z"
+        }
+      },
+      "pass_criteria": "Short Turkish answer (≤20 words) stating the device is up.",
+      "response": "Evet, sw-46 cihazı \"up\" durumundadır.",
+      "thinking_returned": false,
+      "think_leak": false,
+      "elapsed_s": 1.26,
+      "checks": {
+        "must_contain_any": {
+          "pass": true,
+          "items": [
+            "@UP"
+          ]
+        },
+        "max_words": {
+          "pass": true,
+          "count": 5,
+          "limit": 20
+        },
+        "require_turkish": {
+          "pass": true,
+          "turkish_marker": true,
+          "english_stopword_ratio": 0.0
+        }
+      },
+      "deterministic_pass": true,
+      "judge": {
+        "pass": true,
+        "reason": "{\"pass\": true, \"reason\": \"The response correctly confirms the device status based on the provided data.\"}"
+      }
+    },
+    {
+      "id": "PV3",
+      "name": "T46 variant: single-field compact JSON",
+      "category": "formatting-conciseness",
+      "categories": [
+        "formatting-conciseness"
+      ],
+      "dimensions": [
+        "conciseness",
+        "turkish"
+      ],
+      "question": "sw-46 çalışıyor mu?",
+      "tool_results": {
+        "get_device_info": {
+          "hostname": "sw-46",
+          "status": "up"
+        }
+      },
+      "pass_criteria": "Short Turkish answer (≤20 words) stating the device is up.",
+      "response": "Evet, sw-46 cihazı \"up\" durumundadır.",
+      "thinking_returned": false,
+      "think_leak": false,
+      "elapsed_s": 1.33,
+      "checks": {
+        "must_contain_any": {
+          "pass": true,
+          "items": [
+            "@UP"
+          ]
+        },
+        "max_words": {
+          "pass": true,
+          "count": 5,
+          "limit": 20
+        },
+        "require_turkish": {
+          "pass": true,
+          "turkish_marker": true,
+          "english_stopword_ratio": 0.0
+        }
+      },
+      "deterministic_pass": true,
+      "judge": {
+        "pass": true,
+        "reason": "{\"pass\": true, \"reason\": \"The response correctly confirms the device status based on the provided tool results.\"}"
+      }
+    },
+    {
+      "id": "PV4",
+      "name": "T46 variant: multi-field compact JSON",
+      "category": "formatting-conciseness",
+      "categories": [
+        "formatting-conciseness"
+      ],
+      "dimensions": [
+        "conciseness",
+        "turkish"
+      ],
+      "question": "sw-46 çalışıyor mu?",
+      "tool_results": {
+        "get_device_info": {
+          "hostname": "sw-46",
+          "status": "up",
+          "collected_at": "2025-06-12T10:00:00Z"
+        }
+      },
+      "pass_criteria": "Short Turkish answer (≤20 words) stating the device is up.",
+      "response": "Evet, sw-46 cihazı \"up\" durumundadır.",
+      "thinking_returned": false,
+      "think_leak": false,
+      "elapsed_s": 1.46,
+      "checks": {
+        "must_contain_any": {
+          "pass": true,
+          "items": [
+            "@UP"
+          ]
+        },
+        "max_words": {
+          "pass": true,
+          "count": 5,
+          "limit": 20
+        },
+        "require_turkish": {
+          "pass": true,
+          "turkish_marker": true,
+          "english_stopword_ratio": 0.0
+        }
+      },
+      "deterministic_pass": true,
+      "judge": {
+        "pass": true,
+        "reason": "{\"pass\": true, \"reason\": \"The response correctly confirms the device status based on the provided data.\"}"
+      }
+    }
+  ]
+}

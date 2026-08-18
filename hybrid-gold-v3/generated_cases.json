@@ -1,0 +1,531 @@
+{
+  "schema_version": 3,
+  "suite_name": "hybrid-generated-v3",
+  "cases": [
+    {
+      "id": "GEN-001",
+      "query": "j9774a açık mı?",
+      "derived_from": "GOLD-001",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "atomic",
+        "resolver_mode": "single",
+        "intent": "device_status",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-002",
+      "query": "J9774A çalışıyor mu?",
+      "derived_from": "GOLD-001",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "atomic",
+        "resolver_mode": "single",
+        "intent": "device_status",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-003",
+      "query": "2530-8G-PoEP ayakta mı?",
+      "derived_from": "GOLD-002",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "atomic",
+        "resolver_mode": "single",
+        "intent": "device_status",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-004",
+      "query": "HP ProCurve 2530-8G-PoEP aktif mi?",
+      "derived_from": "GOLD-003",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "atomic",
+        "resolver_mode": "single",
+        "intent": "device_status",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-005",
+      "query": "J9774A portları ne durumda?",
+      "derived_from": "GOLD-017",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "ports",
+        "resolver_mode": "single",
+        "intent": "device_ports",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device",
+            "get_ports"
+          ],
+          "forbidden_calls": [
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-006",
+      "query": "J9774A aktif alarmı var mı?",
+      "derived_from": "GOLD-018",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "alerts",
+        "resolver_mode": "single",
+        "intent": "device_alerts",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device",
+            "get_alerts"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-007",
+      "query": "J9774A loglarını göster",
+      "derived_from": "GOLD-019",
+      "covers": [
+        "A",
+        "B",
+        "C"
+      ],
+      "expected": {
+        "route": "events",
+        "resolver_mode": "single",
+        "intent": "device_events",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device",
+            "get_events"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_alerts"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-008",
+      "query": "J9774A up diyor ama erişemiyorum",
+      "derived_from": "GOLD-021",
+      "covers": [
+        "A",
+        "B",
+        "E",
+        "G"
+      ],
+      "expected": {
+        "route": "investigation",
+        "resolver_mode": "single",
+        "intent": "investigation",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "forbidden_calls": [],
+          "llm_called": true
+        }
+      },
+      "external_judge_required": true,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-009",
+      "query": "J9774A neden kopuyor?",
+      "derived_from": "GOLD-022",
+      "covers": [
+        "A",
+        "B",
+        "E",
+        "G"
+      ],
+      "expected": {
+        "route": "investigation",
+        "resolver_mode": "single",
+        "intent": "investigation",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "forbidden_calls": [],
+          "llm_called": true
+        }
+      },
+      "external_judge_required": true,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-010",
+      "query": "J9772A cihazları listele",
+      "derived_from": "GOLD-011",
+      "covers": [
+        "A",
+        "B",
+        "D"
+      ],
+      "expected": {
+        "route": "device_set",
+        "resolver_mode": "set",
+        "intent": "device_set",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "model_skus": [
+            "J9772A"
+          ]
+        },
+        "execution": {
+          "required_calls": [],
+          "forbidden_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-011",
+      "query": "2530 48G cihazları",
+      "derived_from": "GOLD-012",
+      "covers": [
+        "A",
+        "B",
+        "D"
+      ],
+      "expected": {
+        "route": "device_set",
+        "resolver_mode": "set",
+        "intent": "device_set",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "model_skus": [
+            "J9772A",
+            "J9775A"
+          ]
+        },
+        "execution": {
+          "required_calls": [],
+          "forbidden_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-012",
+      "query": "48 port PoE ProCurve cihazları",
+      "derived_from": "GOLD-013",
+      "covers": [
+        "A",
+        "B",
+        "D"
+      ],
+      "expected": {
+        "route": "device_set",
+        "resolver_mode": "set",
+        "intent": "device_set",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "model_skus": [
+            "J9772A",
+            "JL357A"
+          ]
+        },
+        "execution": {
+          "required_calls": [],
+          "forbidden_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-013",
+      "query": "J4850A hangisi?",
+      "derived_from": "GOLD-007",
+      "covers": [
+        "A",
+        "B",
+        "F"
+      ],
+      "expected": {
+        "route": "clarification",
+        "resolver_mode": "single",
+        "resolution": {
+          "outcome": "ambiguous",
+          "reason": "ambiguous",
+          "candidates_include": [
+            "lab-j4850a-01",
+            "lab-j4850a-02"
+          ]
+        },
+        "execution": {
+          "required_calls": [],
+          "forbidden_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-014",
+      "query": "J9774A dün ne durumdaydı?",
+      "derived_from": "GOLD-025",
+      "covers": [
+        "A",
+        "B",
+        "E",
+        "G"
+      ],
+      "expected": {
+        "route": "historical_investigation",
+        "resolver_mode": "single",
+        "intent": "historical_status",
+        "resolution": {
+          "outcome": "resolved",
+          "reason": "metadata",
+          "hostname": "lab-j9774a-01"
+        },
+        "execution": {
+          "required_calls": [
+            "get_device",
+            "get_events"
+          ],
+          "forbidden_calls": [
+            "get_ports",
+            "get_alerts"
+          ],
+          "llm_called": true
+        }
+      },
+      "external_judge_required": true,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-015",
+      "query": "J9774A restart et",
+      "derived_from": "GOLD-034",
+      "covers": [
+        "B",
+        "F"
+      ],
+      "expected": {
+        "route": "unsupported",
+        "resolver_mode": "none",
+        "intent": "unsupported",
+        "execution": {
+          "required_calls": [],
+          "forbidden_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    },
+    {
+      "id": "GEN-016",
+      "query": "ZZ999 açık mı?",
+      "derived_from": "GOLD-008",
+      "covers": [
+        "A",
+        "B",
+        "F"
+      ],
+      "expected": {
+        "route": "no_match",
+        "resolver_mode": "single",
+        "resolution": {
+          "outcome": "no_match",
+          "reason": "no_match"
+        },
+        "execution": {
+          "required_calls": [],
+          "forbidden_calls": [
+            "get_device",
+            "get_ports",
+            "get_alerts",
+            "get_events"
+          ],
+          "llm_called": false
+        }
+      },
+      "external_judge_required": false,
+      "notes": "Generated wording robustness variant; expected architecture copied from gold base case."
+    }
+  ]
+}

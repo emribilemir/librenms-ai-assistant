@@ -1,0 +1,152 @@
+{
+  "inventory": [
+    {"hostname": "sw-46", "status": "up"},
+    {"hostname": "sw-47", "status": "down"},
+    {"hostname": "sw-48", "status": "unknown"},
+    {"hostname": "sw-460", "status": "up"},
+    {"hostname": "core-sw-01", "status": "up"},
+    {"hostname": "core-sw-02", "status": "down"}
+  ],
+  "cases": [
+    {
+      "id": "T46-original",
+      "category": "A",
+      "question": "sw-46 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-var-Sw46",
+      "category": "B",
+      "question": "Sw46 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-var-SW46-ayakta",
+      "category": "B",
+      "question": "SW46 ayakta mı?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-var-sw46-space",
+      "category": "B",
+      "question": "sw 46 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-var-SW46-erisilebilir",
+      "category": "B",
+      "question": "SW-46 erişilebilir mi?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-var-durumu",
+      "category": "B",
+      "question": "sw-46'nın durumu ne?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-down-sw47",
+      "category": "C",
+      "question": "sw47 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-47", "status": "down"},
+      "reps": 5
+    },
+    {
+      "id": "T46-unknown-sw48",
+      "category": "C",
+      "question": "sw48 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-48", "status": "unknown"},
+      "reps": 5
+    },
+    {
+      "id": "T46-similar-sw46",
+      "category": "D",
+      "question": "sw46 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-46", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-similar-sw460",
+      "category": "D",
+      "question": "sw460 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-460", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-similar-sw460-hyphen",
+      "category": "D",
+      "question": "sw-460 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-460", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-SW47-upper",
+      "category": "B",
+      "question": "SW-47 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "sw-47", "status": "down"},
+      "reps": 5
+    },
+    {
+      "id": "T46-core01",
+      "category": "B",
+      "question": "core-sw-01 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "core-sw-01", "status": "up"},
+      "reps": 5
+    },
+    {
+      "id": "T46-core02",
+      "category": "C",
+      "question": "core-sw-02 çalışıyor mu?",
+      "expected": {"route": "atomic", "hostname": "core-sw-02", "status": "down"},
+      "reps": 5
+    },
+    {
+      "id": "T46-ambiguous-core",
+      "category": "E",
+      "question": "core switch çalışıyor mu?",
+      "expected": {"route": "clarification", "clarification_kind": "ambiguous", "hostname": null, "status": null},
+      "reps": 3
+    },
+    {
+      "id": "T46-unknown-depo",
+      "category": "F",
+      "question": "depo switch çalışıyor mu?",
+      "expected": {"route": "clarification", "clarification_kind": "no_match", "hostname": null, "status": null},
+      "reps": 3
+    },
+    {
+      "id": "T46-investigation-problem",
+      "category": "G",
+      "question": "Sw46 çalışıyor ama ağda problem var mı?",
+      "expected": {"route": "investigation", "hostname": null, "status": null},
+      "reps": 3
+    },
+    {
+      "id": "T46-investigation-users",
+      "category": "G",
+      "question": "sw46 ayakta görünüyor ama kullanıcılar bağlantı problemi yaşıyor, dikkat çeken bir şey var mı?",
+      "expected": {"route": "investigation", "hostname": null, "status": null},
+      "reps": 3
+    },
+    {
+      "id": "T46-historical-dun",
+      "category": "H",
+      "question": "sw46 dün çalışıyor muydu?",
+      "expected": {"route": "unsupported", "hostname": null, "status": null},
+      "reps": 3
+    },
+    {
+      "id": "T46-historical-week",
+      "category": "H",
+      "question": "sw47 geçen hafta kapalı mıydı?",
+      "expected": {"route": "unsupported", "hostname": null, "status": null},
+      "reps": 3
+    }
+  ]
+}

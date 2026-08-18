@@ -1,0 +1,66 @@
+{
+  "schema_version": 3,
+  "purpose": "Machine-readable expected execution policy for hybrid-gold-v3. This is a test contract, not a system prompt.",
+  "source_provenance": "User-facing examples use real SKU/model identities from the uploaded Excel. Operational hostnames/state remain explicit synthetic fixtures.",
+  "principles": [
+    "Resolve device/model identity deterministically before backend execution.",
+    "Use the minimum read-only backend evidence required for direct factual retrieval.",
+    "Escalate to Level-1 investigation when the user asks for cause, synthesis, or reports behavior that conflicts with a simple status field.",
+    "Do not let the LLM choose among ambiguous device identities.",
+    "Do not call the LLM for simple facts already explicit in backend data.",
+    "Do not expose write operations."
+  ],
+  "routes": {
+    "atomic": {
+      "example": "J9774A up mı?",
+      "required_tools": ["get_device"],
+      "forbidden_tools": ["get_ports", "get_alerts", "get_events"],
+      "llm_called": false
+    },
+    "ports": {
+      "example": "J9774A portlarını göster",
+      "required_tools": ["get_device", "get_ports"],
+      "forbidden_tools": ["get_alerts", "get_events"],
+      "llm_called": false
+    },
+    "alerts": {
+      "example": "J9774A üzerinde aktif alarm var mı?",
+      "required_tools": ["get_device", "get_alerts"],
+      "forbidden_tools": ["get_ports", "get_events"],
+      "llm_called": false
+    },
+    "events": {
+      "example": "J9774A son eventlerini göster",
+      "required_tools": ["get_device", "get_events"],
+      "forbidden_tools": ["get_ports", "get_alerts"],
+      "llm_called": false
+    },
+    "investigation": {
+      "example": "J9774A up gözüküyor ama ben tepki alamıyorum",
+      "required_tools": ["get_device", "get_ports", "get_alerts", "get_events"],
+      "llm_called": true,
+      "reason": "The user asks for investigation or reports a contradiction that cannot be answered by the current status bit alone."
+    },
+    "historical_investigation": {
+      "example": "J9774A dün çalışıyor muydu?",
+      "required_tools": ["get_device", "get_events"],
+      "forbidden_tools": ["get_ports", "get_alerts"],
+      "llm_called": true,
+      "reason": "Current status must not be reused as historical truth."
+    },
+    "clarification": {
+      "required_tools": [],
+      "llm_called": false,
+      "reason": "Ambiguous identity must be resolved before evidence collection."
+    },
+    "no_match": {
+      "required_tools": [],
+      "llm_called": false
+    },
+    "unsupported": {
+      "required_tools": [],
+      "llm_called": false,
+      "reason": "PoC is read-only."
+    }
+  }
+}
