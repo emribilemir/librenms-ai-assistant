@@ -1,0 +1,44 @@
+13/28
+FAIL RID-001 4850a
+  {'name': 'outcome', 'pass': False, 'expected': 'ambiguous', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J4850A'], 'observed': []}
+  {'name': 'candidate_skus', 'pass': False, 'expected': ['J4850A', 'J4850A'], 'observed': []}
+FAIL RID-003 9772a
+  {'name': 'outcome', 'pass': False, 'expected': 'ambiguous', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9772A'], 'observed': []}
+  {'name': 'candidate_skus', 'pass': False, 'expected': ['J9772A', 'J9772A'], 'observed': []}
+FAIL RID-004 9774a
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'device_sku', 'pass': False, 'expected': 'J9774A', 'observed': None}
+FAIL RID-005 l357a
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'device_sku', 'pass': False, 'expected': 'JL357A', 'observed': None}
+FAIL RID-006 9780a
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'device_sku', 'pass': False, 'expected': 'J9780A', 'observed': None}
+FAIL RID-011 8
+  {'name': 'outcome', 'pass': False, 'expected': 'no_match', 'observed': 'ambiguous'}
+FAIL SET-001 poeli 48 port procurve
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9772A', 'JL357A'], 'observed': ['JL357A']}
+FAIL SET-004 48 port poe olmayan procurve
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9775A'], 'observed': []}
+FAIL SET-005 48 port non-poe procurve
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9775A'], 'observed': []}
+FAIL SET-008 8 port poesiz procurve
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9783A'], 'observed': []}
+FAIL SET-011 48 tane portu olan procurve
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9772A', 'J9775A', 'JL357A'], 'observed': []}
+FAIL SET-012 poe destekli 48 port procurve
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9772A', 'JL357A'], 'observed': []}
+FAIL SET-013 poe'siz 48 port procurve
+  {'name': 'outcome', 'pass': False, 'expected': 'resolved', 'observed': 'no_match'}
+  {'name': 'model_skus', 'pass': False, 'expected': ['J9775A'], 'observed': []}
+FAIL SET-014 48
+  {'name': 'outcome', 'pass': False, 'expected': 'no_match', 'observed': 'resolved'}
+FAIL SET-015 port 48
+  {'name': 'outcome', 'pass': False, 'expected': 'no_match', 'observed': 'resolved'}

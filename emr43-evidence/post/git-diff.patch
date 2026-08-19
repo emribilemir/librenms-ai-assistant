@@ -1,0 +1,344 @@
+diff --git a/holdout-evidence/pre/freeze-tag-sha.txt b/holdout-evidence/pre/freeze-tag-sha.txt
+index 2ffb006..bb527ec 100644
+--- a/holdout-evidence/pre/freeze-tag-sha.txt
++++ b/holdout-evidence/pre/freeze-tag-sha.txt
+@@ -1 +1 @@
+-UNAVAILABLE: holdout-v1-freeze could not be created because no Git repository exists.
++99cb6670176897ebf04f5ecb8fdd457caa49aec7
+diff --git a/holdout-evidence/pre/git-diff-cached.patch b/holdout-evidence/pre/git-diff-cached.patch
+index a051983..a28d7de 100644
+--- a/holdout-evidence/pre/git-diff-cached.patch
++++ b/holdout-evidence/pre/git-diff-cached.patch
+@@ -1 +1 @@
+-UNAVAILABLE: no Git repository exists for the supplied workspace.
++<empty: git diff --cached produced no output>
+diff --git a/holdout-evidence/pre/git-diff.patch b/holdout-evidence/pre/git-diff.patch
+index a051983..84defa4 100644
+--- a/holdout-evidence/pre/git-diff.patch
++++ b/holdout-evidence/pre/git-diff.patch
+@@ -1 +1 @@
+-UNAVAILABLE: no Git repository exists for the supplied workspace.
++<empty: git diff produced no output>
+diff --git a/holdout-evidence/pre/git-head.txt b/holdout-evidence/pre/git-head.txt
+index a051983..bb527ec 100644
+--- a/holdout-evidence/pre/git-head.txt
++++ b/holdout-evidence/pre/git-head.txt
+@@ -1 +1 @@
+-UNAVAILABLE: no Git repository exists for the supplied workspace.
++99cb6670176897ebf04f5ecb8fdd457caa49aec7
+diff --git a/holdout-evidence/pre/git-log-1.txt b/holdout-evidence/pre/git-log-1.txt
+index a051983..04aa8bf 100644
+--- a/holdout-evidence/pre/git-log-1.txt
++++ b/holdout-evidence/pre/git-log-1.txt
+@@ -1 +1 @@
+-UNAVAILABLE: no Git repository exists for the supplied workspace.
++99cb667 Freeze current LibreNMS SUT snapshot
+diff --git a/holdout-evidence/pre/git-status.txt b/holdout-evidence/pre/git-status.txt
+index da12e9e..8a4da8d 100644
+--- a/holdout-evidence/pre/git-status.txt
++++ b/holdout-evidence/pre/git-status.txt
+@@ -1 +1 @@
+-UNAVAILABLE: /Users/emirbilici/Desktop/jrWorkworkwork/programming/isbaklibrenms is not a Git repository.
++?? .DS_Store
+diff --git a/holdout-results/HOLDOUT_RUN_REPORT.md b/holdout-results/HOLDOUT_RUN_REPORT.md
+index 45e76e7..9701415 100644
+--- a/holdout-results/HOLDOUT_RUN_REPORT.md
++++ b/holdout-results/HOLDOUT_RUN_REPORT.md
+@@ -2,12 +2,11 @@
+ 
+ ## Status
+ 
+-Not executed. The required preconditions were unavailable, so no hidden query was opened and no evaluation result was produced.
++Completed as a frozen model run. All 42 queries were sent exactly as provided through the real pipeline. No accuracy score or PASS/FAIL judgment is reported.
+ 
+-## Blockers
++## Run outcome
+ 
+-- `holdout_queries_v1.json` was not found in the supplied attachment directory or workspace.
+-- `/Users/emirbilici/Desktop/jrWorkworkwork/programming/isbaklibrenms` is not a Git repository, nor are the visible SUT directories. Therefore commit SHA, Git status/diffs, freeze tag, and PRE/POST Git comparisons cannot be captured honestly.
++The first attempt was blocked by sandbox access to Ollama and is preserved as `holdout_v1_initial_permission_failure_*`. After the user-authorized local Ollama check confirmed `librenms-qwen:latest`, the same frozen SUT was run with Ollama access. The valid run completed all 42 cases with no exceptions.
+ 
+ ## Identified SUT files and SHA-256
+ 
+@@ -15,25 +14,29 @@ See [pre/key-file-sha256.txt](../holdout-evidence/pre/key-file-sha256.txt). The
+ 
+ ## Required evaluation fields
+ 
+-- Frozen commit SHA: unavailable
+-- Freeze tag SHA: unavailable
+-- PRE working tree clean: unverifiable
++- Frozen commit SHA: `99cb6670176897ebf04f5ecb8fdd457caa49aec7`
++- Freeze tag SHA: `99cb6670176897ebf04f5ecb8fdd457caa49aec7`
++- PRE working tree clean: implementation diff/index clean; unrelated untracked `.DS_Store` remains
+ - Model: `librenms-qwen` default in the adapter
+ - Think setting: `false` in the orchestration planner and synthesis calls
+-- Hidden queries executed: 0
+-- Planner failures: not applicable
+-- Synthesis invocations: not applicable
+-- Backend-tool cases: none
+-- Clarification / no-match / unsupported counts: not applicable
+-- Missing observability fields: none assessed; no run occurred
+-- SpyBackend used: identified, but not invoked
+-- SUT changed after holdout exposure: no holdout exposure occurred; no SUT files were changed
+-- PRE and POST HEAD match: not applicable
+-- PRE and POST implementation hashes match: not applicable
++- Hidden queries executed: 42
++- Planner failure count: 0
++- Synthesis invocation count: 8
++- Queries that executed backend tools: HID-006, HID-007, HID-022, HID-023, HID-025, HID-026, HID-027, HID-028, HID-029, HID-042
++- Backend call totals: `get_device` 10, `get_ports` 8, `get_alerts` 8, `get_events` 8
++- Route counts: `atomic` 2, `device_set` 23, `investigation` 8, `no_match` 4, `unsupported` 5
++- Clarification count: 0; no-match count: 4; unsupported count: 5
++- Missing observability fields: none in the valid run; complete planner, resolver, tool, synthesis, final-answer, and timing fields are preserved
++- SpyBackend used: yes; actual runtime tool calls and returned evidence are preserved in each trace
++- SUT changed after holdout exposure: no; only result, log, backup, report, and Git evidence artifacts were written
++- PRE and POST HEAD match: yes (`99cb6670176897ebf04f5ecb8fdd457caa49aec7`)
++- PRE and POST implementation hashes match: yes
+ 
+ ## Artifacts
+ 
+ - [holdout_v1_console.log](holdout_v1_console.log)
++- [holdout_v1_raw_results.json](holdout_v1_raw_results.json)
++- [initial sandbox-failure raw backup](holdout_v1_initial_permission_failure_raw.json)
++- [initial sandbox-failure console backup](holdout_v1_initial_permission_failure_console.log)
+ - [pre Git evidence](../holdout-evidence/pre/)
+-- No raw result file was created because there were no supplied queries to execute.
+-- No post-run evidence was created because no first raw run occurred.
++- [post Git evidence](../holdout-evidence/post/)
+diff --git a/holdout-results/holdout_v1_console.log b/holdout-results/holdout_v1_console.log
+index 5cfe425..3bc49c0 100644
+--- a/holdout-results/holdout_v1_console.log
++++ b/holdout-results/holdout_v1_console.log
+@@ -1,5 +1,44 @@
+-Evaluation not started.
+-Blockers discovered before holdout exposure:
+-- holdout_queries_v1.json is absent from the supplied attachments and workspace.
+-- the workspace and all visible SUT directories are not Git repositories.
+-No hidden query was opened or executed. No SUT behavior was changed.
++{"event": "run_start", "suite": "librenms-hidden-holdout-v1", "case_count": 42, "model": "librenms-qwen", "planner_schema": "poc", "queries_verbatim": true}
++{"event": "case_complete", "index": 1, "id": "HID-001", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 2, "id": "HID-002", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 3, "id": "HID-003", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 4, "id": "HID-004", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 5, "id": "HID-005", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 6, "id": "HID-006", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 7, "id": "HID-007", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 8, "id": "HID-008", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 9, "id": "HID-009", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 10, "id": "HID-010", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 11, "id": "HID-011", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 12, "id": "HID-012", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 13, "id": "HID-013", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 14, "id": "HID-014", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 15, "id": "HID-015", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 16, "id": "HID-016", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 17, "id": "HID-017", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 18, "id": "HID-018", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 19, "id": "HID-019", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 20, "id": "HID-020", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 21, "id": "HID-021", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 22, "id": "HID-022", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 23, "id": "HID-023", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 24, "id": "HID-024", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 25, "id": "HID-025", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 26, "id": "HID-026", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 27, "id": "HID-027", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 28, "id": "HID-028", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 29, "id": "HID-029", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "case_complete", "index": 30, "id": "HID-030", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 31, "id": "HID-031", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 32, "id": "HID-032", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 33, "id": "HID-033", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 34, "id": "HID-034", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 35, "id": "HID-035", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 36, "id": "HID-036", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 37, "id": "HID-037", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 38, "id": "HID-038", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 39, "id": "HID-039", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 40, "id": "HID-040", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 41, "id": "HID-041", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
++{"event": "case_complete", "index": 42, "id": "HID-042", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
++{"event": "run_saved", "path": "holdout-results/holdout_v1_raw_results.json", "query_count": 42}
+diff --git a/hybrid-gold-v3/__pycache__/resolver_candidate_v4.cpython-314.pyc b/hybrid-gold-v3/__pycache__/resolver_candidate_v4.cpython-314.pyc
+index 5457932..497c08f 100644
+Binary files a/hybrid-gold-v3/__pycache__/resolver_candidate_v4.cpython-314.pyc and b/hybrid-gold-v3/__pycache__/resolver_candidate_v4.cpython-314.pyc differ
+diff --git a/hybrid-gold-v3/resolver_candidate_v4.py b/hybrid-gold-v3/resolver_candidate_v4.py
+index 79b4377..3864a7d 100644
+--- a/hybrid-gold-v3/resolver_candidate_v4.py
++++ b/hybrid-gold-v3/resolver_candidate_v4.py
+@@ -376,12 +376,94 @@ def _exact_metadata_models(q_raw, idx):
+     return matched
+ 
+ 
++def _fuzzy_catalog_models(q_raw, idx):
++    """Find conservative near-identities in the catalog.
++
++    Catalog references may omit one leading SKU character or contain one
++    character typo.  Only structured identifiers of at least four characters
++    are eligible; short numeric fragments never become catalog identities.
++    """
++    q = normalize(q_raw)
++    if len(q) < 4 or q.isdigit():
++        return []
++    matches = []
++    for model in idx["models"]:
++        identifiers = {normalize(model.get("sku", ""))}
++        identifiers |= {normalize(a) for a in (model.get("aliases", []) or [])}
++        identifiers.discard("")
++        for ident in identifiers:
++            omitted_leading = len(ident) == len(q) + 1 and ident.endswith(q)
++            one_edit = len(ident) == len(q) and _damerau_levenshtein(q, ident) <= 1
++            if omitted_leading or one_edit:
++                matches.append(model)
++                break
++    return _dedupe_models(matches)
++
++
+ def _devices_for_models(models, devices):
+     skus = {normalize(m.get("sku", "")) for m in models}
+     skus.discard("")
+     return _dedupe([d for d in devices if normalize(d.get("sku", "")) in skus])
+ 
+ 
++def _dedupe_models(models):
++    seen = set()
++    out = []
++    for model in models:
++        key = normalize(model.get("sku", "")) or normalize(model.get("canonical_name", ""))
++        if key and key not in seen:
++            seen.add(key)
++            out.append(model)
++    return out
++
++
++def _model_port_count(model):
++    text = str(model.get("model", "")).lower()
++    matches = re.findall(r"-(\d+)(?:g)?(?:-|$)", text)
++    return int(matches[-1]) if matches else None
++
++
++def _facet_filtered_models(q_raw, idx):
++    """Apply explicit natural-language catalog facets.
++
++    Returns None when the query contains no supported facet, allowing the
++    existing metadata matcher to handle ordinary model-name queries.
++    """
++    text = str(q_raw or "").lower().replace("ı", "i")
++    negative_poe = bool(re.search(
++        r"(?:non\s*-?\s*poe|poe\s*(?:olmayan|siz|suz|yok)|poe['’]?siz)", text
++    ))
++    has_poe = "poe" in text
++    positive_poe = has_poe and not negative_poe
++    port_match = re.search(
++        r"\b(\d+)\s*[-]?\s*(?:tane\s+)?port(?:u|lu|lar[ıi]?|\s+olan)?\b", text
++    )
++    if not port_match:
++        port_match = re.search(r"\b(\d+)\s*g\b", text)
++    port_count = int(port_match.group(1)) if port_match else None
++    brand = "procurve" in text or "hp" in text
++    family_tokens = [token for token in _TOKEN_RE.findall(text) if token.isdigit() and len(token) >= 3]
++    if not (negative_poe or positive_poe or port_count is not None or brand):
++        return None
++
++    models = []
++    for model in idx["models"]:
++        model_text = " ".join(str(model.get(k, "")) for k in ("brand", "model", "canonical_name", "search_text", "aliases")).lower()
++        model_is_poe = "poe" in model_text
++        if brand and "procurve" not in model_text and "hp" not in model_text:
++            continue
++        if family_tokens and not all(token in model_text for token in family_tokens):
++            continue
++        if port_count is not None and _model_port_count(model) != port_count:
++            continue
++        if negative_poe and model_is_poe:
++            continue
++        if positive_poe and not model_is_poe:
++            continue
++        models.append(model)
++    return _dedupe_models(models)
++
++
+ def _metadata_match_models(q_raw, idx):
+     toks = _metadata_significant_tokens(q_raw)
+     if not toks:
+@@ -451,6 +533,8 @@ def resolve_device(query, inventory=None):
+     q = _compact_query(q_raw)
+     if not q:
+         return _no_match()
++    if q.isdigit() and len(q) < 2:
++        return _no_match()
+ 
+     # 1) exact hostname (case-insensitive literal)
+     exact = [d for d in devices if str(d.get("hostname", "")).lower() == q_raw.lower()]
+@@ -489,6 +573,14 @@ def resolve_device(query, inventory=None):
+             return _ambiguous(devs, "ambiguous", models=exact_models)
+         return _no_match({"models": exact_models})
+ 
++    fuzzy_models = _fuzzy_catalog_models(q_raw, idx)
++    if fuzzy_models:
++        devs = _devices_for_models(fuzzy_models, devices)
++        if len(devs) == 1:
++            return _resolved(devs[0], "typo", query=q_raw, models=fuzzy_models)
++        if len(devs) > 1:
++            return _ambiguous(devs, "ambiguous", models=fuzzy_models)
++
+     # 5) typo candidates (never blind-pick)
+     cands = _generate_typo_candidates(q, idx)
+     if cands:
+@@ -541,12 +633,18 @@ def resolve_device_set(query, inventory=None):
+         return {"outcome": "no_match", "reason": "no_match", "models": [], "devices": []}
+     q_raw = str(query).strip()
+ 
++    # A bare number or an explicit port index is not a device-set facet.
++    if re.fullmatch(r"\d+", q_raw) or re.fullmatch(r"(?i)port\s+\d+", q_raw):
++        return {"outcome": "no_match", "reason": "no_match", "models": [], "devices": []}
++
+     # Exact authoritative catalog identifiers outrank broader metadata prefix
+     # matching on the set path as well. Example: exact model 2530-8-PoEP
+     # must not also absorb sibling 2530-8G-PoEP solely through token prefixes.
+     matched_models = _literal_exact_metadata_models(q_raw, idx)
+     if not matched_models:
+-        matched_models = _metadata_match_models(q_raw, idx)
++        matched_models = _facet_filtered_models(q_raw, idx)
++        if matched_models is None:
++            matched_models = _metadata_match_models(q_raw, idx)
+     toks = _metadata_significant_tokens(q_raw)
+     q_compact = _compact_query(q_raw)
+     direct_devices = [d for d in devices if q_compact and normalize(d.get("hostname", "")) == q_compact]
+diff --git a/librenms-hybrid-poc/__pycache__/hybrid_poc.cpython-314.pyc b/librenms-hybrid-poc/__pycache__/hybrid_poc.cpython-314.pyc
+index 231240f..c7442b5 100644
+Binary files a/librenms-hybrid-poc/__pycache__/hybrid_poc.cpython-314.pyc and b/librenms-hybrid-poc/__pycache__/hybrid_poc.cpython-314.pyc differ
+diff --git a/librenms-hybrid-poc/hybrid_poc.py b/librenms-hybrid-poc/hybrid_poc.py
+index 7344383..02e9cda 100644
+--- a/librenms-hybrid-poc/hybrid_poc.py
++++ b/librenms-hybrid-poc/hybrid_poc.py
+@@ -505,11 +505,21 @@ def _format_events_text(hostname, events):
+ 
+ def _synthesize(query, evidence, model, synthesis_system):
+     """REAL Qwen grounded-synthesis step (Level-1 investigation path)."""
++    universe = ["device", "ports", "alerts", "events"]
++    retrieved_sources = [key for key in universe if key in evidence]
++    not_retrieved_sources = [key for key in universe if key not in evidence]
+     tool_json = json.dumps(
+         {k: v for k, v in evidence.items()}, ensure_ascii=False, indent=2
+     )
++    coverage = {
++        "retrieved_sources": retrieved_sources,
++        "not_retrieved_sources": not_retrieved_sources,
++    }
+     user = (
+         "Aşağıdaki veriler salt-okunur onaylı araçlardan geldi:\n"
++        "Kapsam manifestosu (alınan ve alınmayan kaynaklar):\n"
++        + json.dumps(coverage, ensure_ascii=False)
++        + "\n"
+         + tool_json
+         + f'\n\nKullanıcı sordu: "{query}"\n'
+     )
+@@ -526,6 +536,7 @@ def _synthesize(query, evidence, model, synthesis_system):
+     return content, {
+         "query": query,
+         "evidence": {k: v for k, v in evidence.items()},
++        "coverage": coverage,
+         "system_prompt": synthesis_system,
+     }, ms
+ 

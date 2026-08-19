@@ -1,0 +1,15 @@
+ M holdout-evidence/pre/freeze-tag-sha.txt
+ M holdout-evidence/pre/git-diff-cached.patch
+ M holdout-evidence/pre/git-diff.patch
+ M holdout-evidence/pre/git-head.txt
+ M holdout-evidence/pre/git-log-1.txt
+ M holdout-evidence/pre/git-status.txt
+ M holdout-results/HOLDOUT_RUN_REPORT.md
+ M holdout-results/holdout_v1_console.log
+?? .DS_Store
+?? holdout-evidence/.DS_Store
+?? holdout-evidence/post/
+?? holdout-results/holdout_v1_initial_permission_failure_console.log
+?? holdout-results/holdout_v1_initial_permission_failure_raw.json
+?? holdout-results/holdout_v1_raw_results.json
+?? holdout_queries_v1.json

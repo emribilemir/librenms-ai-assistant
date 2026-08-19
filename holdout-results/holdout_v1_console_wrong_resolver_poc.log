@@ -1,0 +1,44 @@
+{"event": "run_start", "suite": "librenms-hidden-holdout-v1", "case_count": 42, "model": "librenms-qwen", "planner_schema": "gold", "think": false, "queries_verbatim": true}
+{"event": "case_complete", "index": 1, "id": "HID-001", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 2, "id": "HID-002", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 3, "id": "HID-003", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 4, "id": "HID-004", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 5, "id": "HID-005", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 6, "id": "HID-006", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 7, "id": "HID-007", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 8, "id": "HID-008", "route": "clarification", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 9, "id": "HID-009", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 10, "id": "HID-010", "route": "atomic", "tool_names": ["get_device"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 11, "id": "HID-011", "route": "ports", "tool_names": ["get_device", "get_ports"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 12, "id": "HID-012", "route": "ports", "tool_names": ["get_device", "get_ports"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 13, "id": "HID-013", "route": "alerts", "tool_names": ["get_device", "get_alerts"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 14, "id": "HID-014", "route": "events", "tool_names": ["get_device", "get_events"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 15, "id": "HID-015", "route": "ports", "tool_names": ["get_device", "get_ports"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 16, "id": "HID-016", "route": "alerts", "tool_names": ["get_device", "get_alerts"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 17, "id": "HID-017", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 18, "id": "HID-018", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 19, "id": "HID-019", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 20, "id": "HID-020", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 21, "id": "HID-021", "route": "device_set", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 22, "id": "HID-022", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 23, "id": "HID-023", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 24, "id": "HID-024", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 25, "id": "HID-025", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 26, "id": "HID-026", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 27, "id": "HID-027", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 28, "id": "HID-028", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 29, "id": "HID-029", "route": "investigation", "tool_names": ["get_device", "get_ports", "get_alerts", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 30, "id": "HID-030", "route": "historical_investigation", "tool_names": ["get_device", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 31, "id": "HID-031", "route": "historical_investigation", "tool_names": ["get_device", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 32, "id": "HID-032", "route": "historical_investigation", "tool_names": ["get_device", "get_events"], "planner_failure": false, "synthesis_llm_called": true, "status": "ok"}
+{"event": "case_complete", "index": 33, "id": "HID-033", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 34, "id": "HID-034", "route": "clarification", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 35, "id": "HID-035", "route": "clarification", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 36, "id": "HID-036", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 37, "id": "HID-037", "route": "no_match", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 38, "id": "HID-038", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 39, "id": "HID-039", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 40, "id": "HID-040", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 41, "id": "HID-041", "route": "unsupported", "tool_names": [], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "case_complete", "index": 42, "id": "HID-042", "route": "events", "tool_names": ["get_device", "get_events"], "planner_failure": false, "synthesis_llm_called": false, "status": "ok"}
+{"event": "run_saved", "path": "holdout-results/holdout_v1_raw_results_gold.json", "query_count": 42}

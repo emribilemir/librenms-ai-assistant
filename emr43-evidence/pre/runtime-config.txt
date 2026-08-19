@@ -1,0 +1,5 @@
+SUT_MODEL=librenms-qwen for synthesis/E2E; legacy model=librenms-qwen
+SUT_PLANNER_SCHEMA=gold for E2E; resolver/synthesis direct runners do not consume this variable
+OLLAMA_URL=http://localhost:11434 (code default)
+python=Python 3.14.7
+head=99cb6670176897ebf04f5ecb8fdd457caa49aec7

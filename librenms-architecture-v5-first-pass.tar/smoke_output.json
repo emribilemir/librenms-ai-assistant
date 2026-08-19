@@ -1,0 +1,54 @@
+{
+  "ingest_report": {
+    "complete": 7,
+    "partial": 1,
+    "failed": 0,
+    "flagged": [
+      {
+        "index": 0,
+        "sku": "J4850A",
+        "model": "5304XL",
+        "status": "partial",
+        "unknown_fields": [
+          "port_count",
+          "poe"
+        ]
+      }
+    ]
+  },
+  "plan_1": {
+    "request_type": "device_set",
+    "intent": "device_set",
+    "device_query": null,
+    "device_filters": {
+      "brand": "HP ProCurve",
+      "family": null,
+      "port_count": 48,
+      "poe": true
+    }
+  },
+  "result_1_models": [
+    "J9772A",
+    "JL357A"
+  ],
+  "unevaluated_devices": [
+    "lab-j4850a-01",
+    "lab-j4850a-02"
+  ],
+  "plan_2": {
+    "request_type": "device_set",
+    "intent": "device_set",
+    "device_query": null,
+    "device_filters": {
+      "brand": null,
+      "family": "2530",
+      "port_count": 48,
+      "poe": false
+    }
+  },
+  "result_2_models": [
+    "J9775A"
+  ],
+  "missing_prefix_resolution": "ambiguous",
+  "numeric_core_resolution": "ambiguous"
+}

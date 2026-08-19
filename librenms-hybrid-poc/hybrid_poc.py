@@ -35,6 +35,7 @@ import time
 import urllib.request
 
 import resolver
+import planner_v2
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -405,8 +406,9 @@ PLANNING_SCHEMA_GOLD = {
             ],
         },
         "device_query": {"type": ["string", "null"]},
+        "device_filters": planner_v2.DEVICE_FILTER_SCHEMA,
     },
-    "required": ["request_type", "intent", "device_query"],
+    "required": ["request_type", "intent", "device_query", "device_filters"],
 }
 
 def _gold_planning_base():
@@ -453,7 +455,31 @@ User: "J9780A dun calisiyor muydu?" -> {"request_type":"historical_investigation
 User: "J9774A cihazini reboot et" -> {"request_type":"unsupported","intent":"unsupported","device_query":"J9774A"}
 User: "2530-8-PoEP cihazlarini goster" -> {"request_type":"device_set","intent":"device_set","device_query":"2530-8-PoEP"}"""
 
-PLANNING_SYSTEM_GOLD = _gold_planning_base() + GOLD_PLANNING_RULES
+PLANNING_SYSTEM_GOLD = _gold_planning_base() + GOLD_PLANNING_RULES + """
+
+Structured device filter contract:
+- EVERY output must include device_filters with exactly these semantic fields:
+  brand, family, port_count, poe.
+- null means the user did not constrain that property. null is NOT false.
+- poe=false means the user explicitly requested non-PoE devices.
+- For non-device_set routes, all device_filters fields must be null.
+- For device_set, put property constraints in device_filters. device_query is
+  only an explicit hostname/SKU/model reference and may be null for a
+  feature-only search.
+- Do not copy the whole natural-language query into device_query just so the
+  resolver can parse it again.
+
+Examples:
+User: "48 port PoE ProCurve switchleri göster"
+-> {"request_type":"device_set","intent":"device_set","device_query":null,
+    "device_filters":{"brand":"ProCurve","family":null,"port_count":48,"poe":true}}
+User: "poesiz 48 port 2530ları göster"
+-> {"request_type":"device_set","intent":"device_set","device_query":null,
+    "device_filters":{"brand":null,"family":"2530","port_count":48,"poe":false}}
+User: "J9774A up mı?"
+-> {"request_type":"atomic_fact","intent":"device_status","device_query":"J9774A",
+    "device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+"""
 
 _ORCH_ROUTE = {
     "atomic_fact": "atomic",
@@ -505,11 +531,21 @@ def _format_events_text(hostname, events):
 
 def _synthesize(query, evidence, model, synthesis_system):
     """REAL Qwen grounded-synthesis step (Level-1 investigation path)."""
+    universe = ["device", "ports", "alerts", "events"]
+    retrieved_sources = [key for key in universe if key in evidence]
+    not_retrieved_sources = [key for key in universe if key not in evidence]
     tool_json = json.dumps(
         {k: v for k, v in evidence.items()}, ensure_ascii=False, indent=2
     )
+    coverage = {
+        "retrieved_sources": retrieved_sources,
+        "not_retrieved_sources": not_retrieved_sources,
+    }
     user = (
         "Aşağıdaki veriler salt-okunur onaylı araçlardan geldi:\n"
+        "Kapsam manifestosu (alınan ve alınmayan kaynaklar):\n"
+        + json.dumps(coverage, ensure_ascii=False)
+        + "\n"
         + tool_json
         + f'\n\nKullanıcı sordu: "{query}"\n'
     )
@@ -526,6 +562,7 @@ def _synthesize(query, evidence, model, synthesis_system):
     return content, {
         "query": query,
         "evidence": {k: v for k, v in evidence.items()},
+        "coverage": coverage,
         "system_prompt": synthesis_system,
     }, ms
 
@@ -565,25 +602,44 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     else:
         schema, system = PLANNING_SCHEMA, PLANNING_SYSTEM
 
-    # 1) planner: REAL Qwen structured output
+    # 1) planner: deterministic-first for catalog/device-set constraints.
+    # All other requests fall back to the REAL Qwen structured planner.
     t0 = time.time()
-    content, reason, ms = ollama_chat(
-        model,
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": query},
-        ],
-        schema=schema,
-        temperature=0.0,
-        think=False,
-    )
-    llm["planner"] = True
+    deterministic_plan = None
+    if planner_schema == "gold":
+        deterministic_plan = planner_v2.try_deterministic_device_set_plan(
+            query, resolver_module, inventory
+        )
+
+    if deterministic_plan is not None:
+        plan = planner_v2.normalize_plan_filters(deterministic_plan)
+        content = json.dumps(plan, ensure_ascii=False)
+        reason = "deterministic"
+        ms = 0.0
+    else:
+        content, reason, ms = ollama_chat(
+            model,
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": query},
+            ],
+            schema=schema,
+            temperature=0.0,
+            think=False,
+        )
+        llm["planner"] = True
+        plan = parse_json_obj(content)
+        if planner_schema == "gold" and isinstance(plan, dict):
+            plan = planner_v2.normalize_plan_filters(plan)
     timing["planner_ms"] = round(ms, 1)
-    plan = parse_json_obj(content)
     planner_output = {
         "planner_schema": planner_schema,
         "plan": plan,
-        "raw": {"content": content, "done_reason": reason},
+        "raw": {
+            "content": content,
+            "done_reason": reason,
+            "method": "deterministic" if deterministic_plan is not None else "llm",
+        },
     }
 
     if not isinstance(plan, dict):
@@ -610,8 +666,11 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     rt = plan.get("request_type")
     intent = plan.get("intent")
     dq = plan.get("device_query")
+    device_filters = plan.get("device_filters") if planner_schema == "gold" else None
     route = _ORCH_ROUTE.get(rt, "unknown")
-    if not dq and route != "unsupported":
+    # A feature-only device_set is intentionally allowed to have no identity
+    # reference. Do not feed its raw natural-language query back to the resolver.
+    if not dq and route not in ("unsupported", "device_set"):
         dq = query
 
     # 2) deterministic resolution
@@ -620,7 +679,13 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     if route == "unsupported":
         res = None
     elif route == "device_set":
-        res = resolver_module.resolve_device_set(dq, inventory)
+        if hasattr(resolver_module, "planner_catalog_context"):
+            res = resolver_module.resolve_device_set(
+                dq, inventory, filters=device_filters
+            )
+        else:
+            # Compatibility only for frozen pre-v5 resolver runs.
+            res = resolver_module.resolve_device_set(dq, inventory)
         if res.get("outcome") == "no_match":
             route = "no_match"
     else:

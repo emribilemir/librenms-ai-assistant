@@ -1,0 +1,29 @@
+{
+  "suite": "emr43-e2e-adversarial-v1",
+  "resolver": "resolver_candidate_v4.py",
+  "adapter": "sut_adapter.py",
+  "mode": "system_under_test",
+  "deterministic_pass": 18,
+  "deterministic_total": 18,
+  "dimensions": {
+    "D": {
+      "pass": 6,
+      "total": 6
+    },
+    "F": {
+      "pass": 4,
+      "total": 4
+    },
+    "G": {
+      "pass": 6,
+      "total": 6
+    },
+    "R": {
+      "pass": 6,
+      "total": 6
+    }
+  },
+  "external_judge_pending": 6,
+  "local_semantic_judge_used": false,
+  "note": ""
+}
