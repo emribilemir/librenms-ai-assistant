@@ -24,17 +24,25 @@ DEVICE_FILTER_SCHEMA = {
 EMPTY_FILTERS = {"brand": None, "family": None, "port_count": None, "poe": None}
 
 _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
-_PORT_COUNT_RE = re.compile(r"(?<!\w)(\d{1,3})\s*(?:[- ]\s*)?(?:port|ports)(?!\w)", re.I)
+# "48 port", "48 portlu", "48-port": explicit port-count phrase. The trailing
+# \w* keeps ordinary Turkish suffixes from hiding the facet.
+_PORT_COUNT_RE = re.compile(r"(?<!\w)(\d{1,3})\s*[- ]?\s*ports?\w*", re.I)
+# Catalog shorthand "48G"/"24G"/"8G": <port count> at <link speed>. The speed
+# itself has no field in the current filter schema, so only the count is taken.
+_PORT_SPEED_RE = re.compile(r"(?<!\w)(\d{1,3})\s*G(?!\w)", re.I)
+# A device-set request is signalled by a COLLECTION noun, not by a retrieval
+# verb. "göster"/"getir"/"listele" only say that something should be returned;
+# they say nothing about whether the subject is a set of devices or one
+# device's ports. Treating them as set cues is what made
+# "J9774A portlarını göster" look like a device-set request.
 _SET_CUES = {
-    "getir", "getirin", "goster", "göster", "listele", "listeleyin",
-    "hangileri", "olanlar", "olanları", "olanlari", "switchler", "switchleri",
-    "cihazlar", "cihazları", "cihazlari", "modeller", "modelleri",
+    "hangileri", "olanlar", "olanları", "olanlari",
+    "switchler", "switchleri", "switchlerini",
+    "cihazlar", "cihazları", "cihazlari", "cihazlarını", "cihazlarini",
+    "modeller", "modelleri", "modellerini",
 }
 _POE_FALSE_RE = re.compile(r"\b(?:poe\s*(?:olmayan|degil|değil)|poesiz)\b", re.I)
 _POE_TRUE_RE = re.compile(r"\b(?:poe(?:['’]?li)?|poeli)\b", re.I)
-_RETRIEVAL_STEMS = ("port", "alarm", "event", "log")
-_SET_NOUN_STEMS = ("cihaz", "switch", "model", "procurve", "olan")
-_ACTION_STEMS = ("goster", "göster", "getir", "listele")
 
 
 def _words(text: str) -> List[str]:
@@ -50,22 +58,11 @@ def _has_set_cue(query: str) -> bool:
     return bool(words & _SET_CUES)
 
 
-def _has_direct_retrieval_cue(query: str) -> bool:
-    """Keep direct source retrieval out of deterministic device-set planning.
-
-    A source noun plus a retrieval action is a request for ports, alerts,
-    events, or logs unless the same utterance explicitly names a device/model
-    collection. The Gold planner then owns the final route classification.
-    """
-    words = [_compact(word) for word in _words(query)]
-    has_source = any(any(word.startswith(stem) for stem in _RETRIEVAL_STEMS) for word in words)
-    has_action = any(any(word.startswith(stem) for stem in _ACTION_STEMS) for word in words)
-    has_set_noun = any(any(word.startswith(stem) for stem in _SET_NOUN_STEMS) for word in words)
-    return has_source and has_action and not has_set_noun
-
-
 def _extract_port_count(query: str) -> Optional[int]:
     m = _PORT_COUNT_RE.search(query or "")
+    if m:
+        return int(m.group(1))
+    m = _PORT_SPEED_RE.search(query or "")
     return int(m.group(1)) if m else None
 
 
@@ -93,16 +90,46 @@ def _family_in_query(query: str, families: List[str]) -> Optional[str]:
     return None
 
 
+def _literal_occurrence(needle: str, haystack: str) -> bool:
+    """Substring match on token boundaries, with separators preserved."""
+    start = 0
+    while True:
+        i = haystack.find(needle, start)
+        if i < 0:
+            return False
+        before = haystack[i - 1] if i > 0 else ""
+        end = i + len(needle)
+        after = haystack[end] if end < len(haystack) else ""
+        if not before.isalnum() and not after.isalnum():
+            return True
+        start = i + 1
+
+
 def _catalog_reference(query: str, context: Dict[str, Any]) -> Optional[str]:
-    q = _compact(query)
-    if not q:
+    """Return an explicit catalog identity only when the user wrote one.
+
+    A SKU is a single token, so it is matched on the compacted form. A model
+    name carries its own separator structure, and that structure is exactly
+    what separates an exact model identity from a facet phrase: "2530 48G"
+    means family 2530 with 48 ports and must keep matching both the PoE and the
+    non-PoE model, while "2530-48G" names one model. Compacting the query
+    erased that difference and silently narrowed the set.
+    """
+    if not str(query or "").strip():
         return None
-    refs = []
-    for kind in ("skus", "models"):
-        for raw in context.get(kind, []) or []:
-            norm = _compact(raw)
-            if norm and norm in q:
-                refs.append((len(norm), raw))
+    compact_q = _compact(query)
+    lowered = " ".join(str(query).lower().split())
+
+    refs: List[Any] = []
+    for raw in context.get("skus", []) or []:
+        norm = _compact(raw)
+        if norm and norm in compact_q:
+            refs.append((len(norm), raw))
+    for raw in context.get("models", []) or []:
+        literal = " ".join(str(raw).lower().split())
+        if literal and _literal_occurrence(literal, lowered):
+            refs.append((len(literal), raw))
+
     if not refs:
         return None
     refs.sort(reverse=True, key=lambda x: x[0])
@@ -140,7 +167,7 @@ def try_deterministic_device_set_plan(query: str, resolver_module, inventory) ->
 
     Other intents intentionally fall through to the Qwen planner.
     """
-    if _has_direct_retrieval_cue(query) or not _has_set_cue(query):
+    if not _has_set_cue(query):
         return None
     if not hasattr(resolver_module, "planner_catalog_context"):
         return None
