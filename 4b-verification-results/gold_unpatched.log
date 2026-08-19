@@ -1,0 +1,41 @@
+{
+  "suite": "hybrid-gold-v3",
+  "resolver": "resolver_candidate_v5.py",
+  "adapter": "sut_adapter.py",
+  "mode": "system_under_test",
+  "deterministic_pass": 37,
+  "deterministic_total": 40,
+  "dimensions": {
+    "A": {
+      "pass": 36,
+      "total": 38
+    },
+    "B": {
+      "pass": 36,
+      "total": 39
+    },
+    "C": {
+      "pass": 16,
+      "total": 16
+    },
+    "D": {
+      "pass": 8,
+      "total": 9
+    },
+    "E": {
+      "pass": 8,
+      "total": 9
+    },
+    "F": {
+      "pass": 10,
+      "total": 11
+    },
+    "G": {
+      "pass": 6,
+      "total": 7
+    }
+  },
+  "external_judge_pending": 7,
+  "local_semantic_judge_used": false,
+  "note": ""
+}
