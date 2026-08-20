@@ -128,8 +128,23 @@ uydurma taramasıdır.
 
 ## 5. Açık kalan kararlar (Emir'e)
 
-1. **4b'de doğrulama koşusu.** Tek eksik ölçüm. `planner_v2_fix.patch` +
-   `KOSMA_TALIMATI.md` hazır.
+1. **4b'de doğrulama koşusu — KISMEN YAPILDI.** Ayrıntı:
+   `4b-verification-results/`. Production model (`librenms-qwen`, base blob
+   SHA'sı Emir'inkiyle aynı) kuruldu ve kontrollü A/B koşuldu:
+
+   | Suite | Yamasız | Yamalı | Düzelen | Bozulan |
+   |---|---|---|---|---|
+   | Gold | 37/40 | 38/40 | GOLD-012 | yok |
+   | Generated | 14/16 | 15/16 | GEN-011 | yok |
+
+   Yamanın hedeflediği 7 vakanın 7'si de geçiyor, sıfır regresyon.
+
+   AMA bu koşu 40/40 sorusunu kapatmıyor: bu ortam Emir'in kayıtlı
+   baseline'ını üretemiyor (yamasız kod 35/40 değil 37/40 veriyor).
+   Kalan GOLD-031 / GOLD-034 / GEN-015 hataları yamalı ve yamasız kodda
+   aynen mevcut. Fark ortam kaynaklı; en olası sebep ollama sürümü
+   (bu makinede server 0.32.7, client 0.32.13 uyarısı). Emir'in sürümü
+   öğrenilip eşitlenmeli.
 
 2. **Filtre şemasında hız alanı yok.** `2530 8G` üç model döndürüyor, oysa
    "8 port 1G" tam okunsa tek model olmalı. `DEVICE_FILTER_SCHEMA`'da
