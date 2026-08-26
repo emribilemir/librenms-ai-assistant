@@ -1,0 +1,41 @@
+{
+  "suite": "hybrid-generated-v3",
+  "resolver": "resolver_candidate_v5.py",
+  "adapter": "sut_adapter.py",
+  "mode": "system_under_test",
+  "deterministic_pass": 15,
+  "deterministic_total": 16,
+  "dimensions": {
+    "A": {
+      "pass": 15,
+      "total": 15
+    },
+    "B": {
+      "pass": 15,
+      "total": 16
+    },
+    "C": {
+      "pass": 7,
+      "total": 7
+    },
+    "D": {
+      "pass": 3,
+      "total": 3
+    },
+    "E": {
+      "pass": 3,
+      "total": 3
+    },
+    "F": {
+      "pass": 2,
+      "total": 3
+    },
+    "G": {
+      "pass": 3,
+      "total": 3
+    }
+  },
+  "external_judge_pending": 3,
+  "local_semantic_judge_used": false,
+  "note": ""
+}
