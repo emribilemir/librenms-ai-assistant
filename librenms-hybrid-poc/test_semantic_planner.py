@@ -104,6 +104,17 @@ class SemanticPlanContractTests(unittest.TestCase):
             errors,
         )
 
+    def test_rejects_device_route_without_explicit_reference(self):
+        plan = {
+            "request_type": "atomic_fact",
+            "intent": "device_status",
+            "device_query": None,
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        valid, errors = planner_v2.validate_plan(plan)
+        self.assertFalse(valid)
+        self.assertIn("atomic_fact requires a non-empty device_query", errors)
+
 
 class OrchestratorSemanticPlannerTests(unittest.TestCase):
     def test_qwen_plan_filters_device_set_through_resolver_v5(self):
@@ -168,6 +179,22 @@ class OrchestratorSemanticPlannerTests(unittest.TestCase):
         )
         self.assertEqual(trace["tool_calls"], [])
 
+
+class DeviceSetFormattingTests(unittest.TestCase):
+    def test_device_set_formatter_does_not_claim_inventory_status(self):
+        result = {
+            "outcome": "resolved",
+            "models": [
+                {"sku": "J9775A", "canonical_name": "J9775A 2530-48G"}
+            ],
+            "devices": [{"hostname": "lab-j9775a-01", "status": "up"}],
+            "unevaluated_count": 0,
+            "unevaluated_fields": [],
+        }
+        text = resolver_v5.format_device_set(result)
+        self.assertIn("J9775A 2530-48G", text)
+        self.assertIn("lab-j9775a-01", text)
+        self.assertNotIn("(up)", text)
 
 if __name__ == "__main__":
     unittest.main()

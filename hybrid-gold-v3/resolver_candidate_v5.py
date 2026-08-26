@@ -346,7 +346,17 @@ def format_device_set(result: Dict[str, Any]) -> str:
     if not models and not devices and count:
         text = "Kesin eşleşme belirlenemedi."
     else:
-        text = _v4.format_device_set(result)
+        parts = []
+        if models:
+            names = ", ".join(
+                model.get("canonical_name", model.get("sku", ""))
+                for model in models
+            )
+            parts.append("Model(ler): " + names)
+        if devices:
+            hostnames = ", ".join(device["hostname"] for device in devices)
+            parts.append("Cihazlar: " + hostnames)
+        text = " ".join(parts) + "." if parts else "Eşleşen model/cihaz bulunamadı."
     if count:
         human = ", ".join(fields) if fields else "istenen özellik"
         text += f" {count} cihaz {human} bilgisi katalogda bilinmediği için değerlendirilemedi."

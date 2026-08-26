@@ -660,10 +660,6 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     dq = plan.get("device_query")
     device_filters = plan.get("device_filters") if planner_schema == "gold" else None
     route = _ORCH_ROUTE.get(rt, "unknown")
-    # A feature-only device_set is intentionally allowed to have no identity
-    # reference. Do not feed its raw natural-language query back to the resolver.
-    if not dq and route not in ("unsupported", "device_set"):
-        dq = query
 
     # 2) deterministic resolution
     t0 = time.time()

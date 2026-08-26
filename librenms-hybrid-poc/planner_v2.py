@@ -135,4 +135,9 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
         if not has_query and not any(value is not None for value in filters.values()):
             errors.append("device_set must contain a device_query or at least one filter")
 
+    if request_type not in ("device_set", "unsupported"):
+        has_query = isinstance(device_query, str) and bool(device_query.strip())
+        if request_type in REQUEST_TYPES and not has_query:
+            errors.append(f"{request_type} requires a non-empty device_query")
+
     return not errors, errors
