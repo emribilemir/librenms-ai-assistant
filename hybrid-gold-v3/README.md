@@ -1,64 +1,107 @@
-# LibreNMS hybrid-gold-v3
+# LibreNMS Hybrid Gold v3
 
-`hybrid-gold-v3` is the corrected architecture acceptance suite for the LibreNMS natural-language hybrid PoC.
+`hybrid-gold-v3`, LibreNMS doğal dil hybrid PoC'sinin kaynak doğruluğu
+düzeltilmiş acceptance varlıklarını, synthetic backend'ini ve resolver
+adaylarını içerir.
 
-## Source truth
+## Veri kaynağı
 
-The uploaded Excel contains only `Brand` and `Model` columns. It has 50 rows and 8 unique HP ProCurve model identities. It does **not** contain real hostnames, device IDs, status, ports, alerts, or events.
+Kaynak Excel yalnızca `Brand` ve `Model` sütunlarını içerir. Elli satırdan
+sekiz benzersiz HP ProCurve model kimliği çıkarılmıştır. Kaynakta gerçek
+hostname, device ID, status, port, alarm veya event verisi yoktur.
 
-Therefore:
+Kaynak-destekli kimlikler:
 
-- Real source-backed identifiers in tests: `J4850A`, `J9772A`, `J9774A`, `J9775A`, `J9776A`, `J9780A`, `J9783A`, `JL357A` and their model names.
-- Synthetic operational fields are explicitly marked as fixtures.
-- Synthetic hostnames use `lab-<sku>-NN`, for example `lab-j9774a-01`. They must never be described as production/real device names.
+```text
+J4850A, J9772A, J9774A, J9775A,
+J9776A, J9780A, J9783A, JL357A
+```
 
-The previous v2 used synthetic fixture names that looked too much like production hostnames. v3 removes that naming style entirely to avoid provenance confusion.
+`lab-<sku>-NN` hostname'leri ve bütün operasyonel değerler açıkça synthetic
+fixture'dır; production/gerçek cihaz olarak anlatılmamalıdır.
 
-## What is tested
+## Acceptance akışı
 
 ```text
 user query
-  -> planner / intent
-  -> deterministic resolver
+  -> semantic planner / intent
+  -> structured plan validation
+  -> resolver
   -> route selection
   -> SpyBackend tool calls
   -> optional Qwen investigation
   -> answer
 ```
 
-The harness asserts resolution, route, actual backend calls, arguments, and whether the LLM was invoked. Open-ended investigation semantics are exported for external judging. Local Qwen never judges itself.
+Harness; resolution, route, gerçek backend çağrıları, argümanlar ve LLM
+invocation davranışını deterministik olarak kontrol eder. Investigation
+semantiği external judging için dışa aktarılır; yerel Qwen kendisini puanlamaz.
 
-## Central proof pair
+## Resolver sürümleri
 
-Direct fact:
+- [`resolver_candidate_v4.py`](resolver_candidate_v4.py): dondurulmuş,
+  doğrulanmış compatibility resolver'ı.
+- [`catalog_ingest.py`](catalog_ingest.py): model adlarından structured katalog
+  facet'leri ve identity variant'ları üretir.
+- [`resolver_candidate_v5.py`](resolver_candidate_v5.py): v4'ün güvenli kimlik
+  davranışını korur; structured `brand`, `family`, `port_count`, `poe`
+  filtrelerini uygular; UNKNOWN ve ambiguity bilgisini kaybetmez.
 
-`J9774A up mı?`
+Resolver v5 serbest Türkçe intent çözmez. Doğal dil planner'a, structured
+filtreleme resolver'a aittir.
 
-Expected: resolve exact SKU -> `get_device` -> deterministic answer -> no LLM.
+## Merkezi kanıt çifti
 
-Investigation escalation:
+Doğrudan gerçek:
 
-`J9774A up gözüküyor ama ben tepki alamıyorum.`
+```text
+J9774A up mı?
+```
 
-Expected: resolve same device -> `get_device + get_ports + get_alerts + get_events` -> Qwen grounded investigation.
+Beklenen yol: kimlik çözümü → `get_device` → deterministik cevap → synthesis
+LLM yok.
 
-The backend fixture deliberately reports device status `up` while port 8 is admin-up/oper-down with an active alert and matching state-change events.
+Investigation:
 
-## Files
+```text
+J9774A up gözüküyor ama ben tepki alamıyorum.
+```
 
-- `source_catalog.json`: source-backed model vocabulary derived from the Excel
-- `dummy_inventory.json`: explicit synthetic lab instances mapped to real SKU/model identities
-- `dummy_backend_data.json`: synthetic operational fixtures
-- `backend_capabilities.json`: read-only backend capability contract
-- `orchestration_policy.json`: expected route-to-tool policy
-- `gold_cases.json`: 40 hand-authored architecture acceptance cases
-- `generated_cases.json`: 16 wording robustness variants
-- `dummy_backend.py`: SpyBackend that records actual calls and args
-- `run_gold.py`: deterministic harness
-- `reference_adapter.py`: harness self-test adapter only
-- `sut_adapter_template.py`: adapter contract for the real local PoC
-- `resolver_candidate_v3.py`: current resolver candidate
+Beklenen yol: aynı kimlik → `get_device + get_ports + get_alerts + get_events`
+→ grounded Qwen synthesis.
 
-## Judging
+Fixture kasıtlı olarak overall status `up`, port 8 admin-up/oper-down, aktif
+alarm ve uyumlu event kayıtları içerir.
 
-Deterministic properties are graded in code. Investigation answer quality is written to `external_judge_cases.jsonl` for DeepSeek or ChatGPT. The local model under test is never a judge.
+## Önemli dosyalar
+
+| Dosya | Amaç |
+|---|---|
+| [`source_catalog.json`](source_catalog.json) | Excel'den türetilmiş kaynak-destekli model vocabulary |
+| [`dummy_inventory.json`](dummy_inventory.json) | Gerçek SKU/model kimliklerine bağlı synthetic lab örnekleri |
+| [`dummy_backend_data.json`](dummy_backend_data.json) | Synthetic operasyonel fixture'lar |
+| [`backend_capabilities.json`](backend_capabilities.json) | Read-only backend capability sözleşmesi |
+| [`orchestration_policy.json`](orchestration_policy.json) | Route-to-tool acceptance politikası |
+| [`gold_cases.json`](gold_cases.json) | 40 elle hazırlanmış architecture acceptance vakası |
+| [`generated_cases.json`](generated_cases.json) | 16 wording robustness varyantı |
+| [`dummy_backend.py`](dummy_backend.py) | Araç çağrılarını ve argümanlarını kaydeden SpyBackend |
+| [`run_gold.py`](run_gold.py) | Deterministik acceptance harness |
+| [`reference_adapter.py`](reference_adapter.py) | Harness self-test adapter'ı; gerçek SUT değildir |
+| [`sut_adapter_template.py`](sut_adapter_template.py) | Gerçek local PoC adapter sözleşmesi |
+
+## Harness kullanımı
+
+```bash
+python3 hybrid-gold-v3/run_gold.py --help
+```
+
+`--resolver`, `--adapter`, `--cases`, `--inventory`, `--out` ve
+`--external-out` seçenekleriyle çalışır. Resolver veya adapter seçmeden önce
+hangi mimari snapshot'ın ölçüldüğü açıkça kaydedilmelidir.
+
+## Sonuçların yorumlanması
+
+Depodaki Gold/Generated sonuç dosyaları üretildikleri resolver, planner, model
+ve runtime snapshot'ına aittir. Güncel semantic-planner sahiplik değişikliğinden
+sonra full LLM/regression suite yeniden çalıştırılmadığı için eski skorlar yeni
+mimarinin sonucu gibi sunulmamalıdır.

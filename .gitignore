@@ -1,0 +1,24 @@
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Python bytecode and local caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local virtual environments and secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Editor and temporary files
+.idea/
+.vscode/
+*.swp
+*.tmp
