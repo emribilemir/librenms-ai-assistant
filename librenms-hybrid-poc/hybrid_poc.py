@@ -602,35 +602,26 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     else:
         schema, system = PLANNING_SCHEMA, PLANNING_SYSTEM
 
-    # 1) planner: deterministic-first for catalog/device-set constraints.
-    # All other requests fall back to the REAL Qwen structured planner.
+    # 1) planner: Qwen owns all natural-language interpretation. Python only
+    # validates the resulting structured plan before any resolver/tool action.
     t0 = time.time()
-    deterministic_plan = None
+    content, reason, ms = ollama_chat(
+        model,
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": query},
+        ],
+        schema=schema,
+        temperature=0.0,
+        think=False,
+    )
+    llm["planner"] = True
+    plan = parse_json_obj(content)
+    planner_errors = []
     if planner_schema == "gold":
-        deterministic_plan = planner_v2.try_deterministic_device_set_plan(
-            query, resolver_module, inventory
-        )
-
-    if deterministic_plan is not None:
-        plan = planner_v2.normalize_plan_filters(deterministic_plan)
-        content = json.dumps(plan, ensure_ascii=False)
-        reason = "deterministic"
-        ms = 0.0
-    else:
-        content, reason, ms = ollama_chat(
-            model,
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": query},
-            ],
-            schema=schema,
-            temperature=0.0,
-            think=False,
-        )
-        llm["planner"] = True
-        plan = parse_json_obj(content)
-        if planner_schema == "gold" and isinstance(plan, dict):
-            plan = planner_v2.normalize_plan_filters(plan)
+        valid, planner_errors = planner_v2.validate_plan(plan)
+        if not valid:
+            plan = None
     timing["planner_ms"] = round(ms, 1)
     planner_output = {
         "planner_schema": planner_schema,
@@ -638,7 +629,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         "raw": {
             "content": content,
             "done_reason": reason,
-            "method": "deterministic" if deterministic_plan is not None else "llm",
+            "method": "llm",
         },
     }
 
@@ -661,6 +652,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
                 "total_ms": round((time.time() - wall0) * 1000.0, 1),
             },
             "planner_failure": True,
+            "planner_errors": planner_errors,
         }
 
     rt = plan.get("request_type")
@@ -785,6 +777,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         "final_answer": final_answer,
         "timing_ms": timing,
         "planner_failure": False,
+        "planner_errors": planner_errors,
     }
 
 
