@@ -83,7 +83,11 @@ class _ApiHandler(BaseHTTPRequestHandler):
                 {"status": "error", "message": "backend unavailable"},
             )
 
-        if self.path == "/api/v0/devices/3/ports":
+        if self.path == (
+            "/api/v0/devices/3/ports?columns="
+            "port_id%2Cdevice_id%2CifIndex%2CifName%2CifDescr%2C"
+            "ifAdminStatus%2CifOperStatus%2CifAlias%2CifSpeed"
+        ):
             return self._json(
                 200,
                 {

@@ -121,7 +121,15 @@ class LibreNMSBackend:
 
     def get_ports(self, *, device_id):
         ref = urllib.parse.quote(str(device_id), safe="")
-        payload = self._get(f"/devices/{ref}/ports")
+        payload = self._get(
+            f"/devices/{ref}/ports",
+            {
+                "columns": (
+                    "port_id,device_id,ifIndex,ifName,ifDescr,"
+                    "ifAdminStatus,ifOperStatus,ifAlias,ifSpeed"
+                )
+            },
+        )
         result = (payload or {}).get("ports") or []
         return self._record("get_ports", {"device_id": device_id}, result)
 
