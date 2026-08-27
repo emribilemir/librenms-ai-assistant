@@ -32,6 +32,43 @@ with open(os.path.join(GOLD, "dummy_inventory.json"), encoding="utf-8") as strea
 
 
 class SemanticPlanContractTests(unittest.TestCase):
+    def test_accepts_valid_device_set_status_plan_with_reference(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": "J4850A",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        self.assertEqual(planner_v2.validate_plan(plan), (True, []))
+
+    def test_accepts_valid_device_set_status_plan_with_filters(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": None,
+            "device_filters": {
+                "brand": None,
+                "family": "2530",
+                "port_count": 48,
+                "poe": False,
+            },
+        }
+        self.assertEqual(planner_v2.validate_plan(plan), (True, []))
+
+    def test_rejects_empty_device_set_status_plan(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": None,
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        valid, errors = planner_v2.validate_plan(plan)
+        self.assertFalse(valid)
+        self.assertIn(
+            "device_set_status must contain a device_query or at least one filter",
+            errors,
+        )
+
     def test_accepts_valid_device_set_plan(self):
         plan = {
             "request_type": "device_set",
