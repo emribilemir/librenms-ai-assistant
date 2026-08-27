@@ -692,8 +692,6 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     llm_output = None
     device = res.get("device") if isinstance(res, dict) else None
     hostname = device.get("hostname") if device else None
-    did = device.get("device_id") if device else None
-
     def bk(fn, **kw):
         if backend is None:
             return None
@@ -723,19 +721,31 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         final_answer = resolver_module.format_atomic(hostname, status)
     elif route == "ports":
         evidence["device"] = bk("get_device", hostname=hostname)
-        evidence["ports"] = bk("get_ports", device_id=did)
+        backend_did = (evidence["device"] or {}).get("device_id")
+        evidence["ports"] = (
+            bk("get_ports", device_id=backend_did) if backend_did is not None else []
+        )
         final_answer = _format_ports_text(hostname, evidence["ports"])
     elif route == "alerts":
         evidence["device"] = bk("get_device", hostname=hostname)
-        evidence["alerts"] = bk("get_alerts", device_id=did)
+        backend_did = (evidence["device"] or {}).get("device_id")
+        evidence["alerts"] = (
+            bk("get_alerts", device_id=backend_did) if backend_did is not None else []
+        )
         final_answer = _format_alerts_text(hostname, evidence["alerts"])
     elif route == "events":
         evidence["device"] = bk("get_device", hostname=hostname)
-        evidence["events"] = bk("get_events", device_id=did)
+        backend_did = (evidence["device"] or {}).get("device_id")
+        evidence["events"] = (
+            bk("get_events", device_id=backend_did) if backend_did is not None else []
+        )
         final_answer = _format_events_text(hostname, evidence["events"])
     elif route == "historical_investigation":
         evidence["device"] = bk("get_device", hostname=hostname)
-        evidence["events"] = bk("get_events", device_id=did)
+        backend_did = (evidence["device"] or {}).get("device_id")
+        evidence["events"] = (
+            bk("get_events", device_id=backend_did) if backend_did is not None else []
+        )
         final_answer, llm_input, synth_ms = _synthesize(
             query, evidence, model, synthesis_system
         )
@@ -744,9 +754,15 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         timing["synthesis_ms"] = round(synth_ms, 1)
     elif route == "investigation":
         evidence["device"] = bk("get_device", hostname=hostname)
-        evidence["ports"] = bk("get_ports", device_id=did)
-        evidence["alerts"] = bk("get_alerts", device_id=did)
-        evidence["events"] = bk("get_events", device_id=did)
+        backend_did = (evidence["device"] or {}).get("device_id")
+        if backend_did is None:
+            evidence["ports"] = []
+            evidence["alerts"] = []
+            evidence["events"] = []
+        else:
+            evidence["ports"] = bk("get_ports", device_id=backend_did)
+            evidence["alerts"] = bk("get_alerts", device_id=backend_did)
+            evidence["events"] = bk("get_events", device_id=backend_did)
         final_answer, llm_input, synth_ms = _synthesize(
             query, evidence, model, synthesis_system
         )

@@ -61,11 +61,14 @@ Atomik durum cevapları deterministik üretilir. Investigation rotası sabit
 | Dosya | Amaç |
 |---|---|
 | [`hybrid_poc.py`](hybrid_poc.py) | Planner, resolver, backend ve synthesis orchestration |
+| [`librenms_backend.py`](librenms_backend.py) | Gerçek read-only LibreNMS `/api/v0` backend adapter'ı |
+| [`live_query.py`](live_query.py) | Gold planner + resolver v5 + gerçek LibreNMS backend canlı giriş noktası |
 | [`planner_v2.py`](planner_v2.py) | Structured plan schema ve strict validation |
 | [`resolver.py`](resolver.py) | Eski PoC inventory resolver'ı; compatibility ve tarihsel karşılaştırma |
 | [`inventory.json`](inventory.json) | PoC inventory fixture'ı |
 | [`production_baseline_system.txt`](production_baseline_system.txt) | Tarihsel direct-LLM baseline prompt'u |
 | [`test_semantic_planner.py`](test_semantic_planner.py) | Güncel sahiplik sınırı için küçük offline testler |
+| [`test_live_backend.py`](test_live_backend.py) | API adapter ve gerçek backend `device_id` handoff regression testleri |
 | [`test_resolver.py`](test_resolver.py) | Eski resolver'ın offline testleri |
 | `comparison*.md`, `results*.json` | Daha önceki deney snapshot'ları |
 
@@ -92,9 +95,37 @@ python3 librenms-hybrid-poc/hybrid_poc.py \
 Varsayılan Ollama endpoint'i `http://localhost:11434`, planner ve synthesis için
 `think=false` kullanılır.
 
+## Gerçek LibreNMS API ile canlı sorgu
+
+Mac Terminal'de legacy `/api/v0` token'ını process environment'a aktar:
+
+```bash
+export LIBRENMS_TOKEN
+export LIBRENMS_BASE_URL="http://192.168.64.3/api/v0"
+```
+
+Ardından:
+
+```bash
+python3 librenms-hybrid-poc/live_query.py "lab-j9775a-01 açık mı?"
+```
+
+`live_query.py` explicit olarak `planner_schema="gold"`,
+`resolver_candidate_v5.py` ve `LibreNMSBackend` kullanır. Resolver yalnızca
+kimlik/katalog çözümü yapar. İlk `get_device(hostname=...)` çağrısından dönen
+gerçek LibreNMS `device_id`, sonraki ports/alerts/events çağrılarının kimliği
+olur; fixture `device_id` backend truth olarak kullanılmaz.
+
+Offline adapter testi:
+
+```bash
+cd librenms-hybrid-poc
+python3 -m unittest -v test_semantic_planner.py test_live_backend.py
+```
+
 ## Sınırlar
 
-- Bu klasör gerçek LibreNMS API entegrasyonu yapmaz.
+- Gerçek LibreNMS entegrasyonu read-only `/api/v0` adapter ile vardır; write endpointleri kullanılmaz.
 - Device-set cevapları backend çağrısı olmadan canlı durum yazmaz.
 - RAG uygulanmadı; B planı olarak ertelendi.
 - Son semantic-planner değişikliğinden sonra pahalı LLM/regression suite'leri
