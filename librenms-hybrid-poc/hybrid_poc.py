@@ -795,7 +795,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     elif route == "atomic":
         ev = bk("get_device", hostname=hostname)
         evidence["device"] = ev
-        status = (ev or {}).get("status") if ev else device.get("status")
+        status = ev.get("status") if isinstance(ev, dict) else None
         final_answer = resolver_module.format_atomic(hostname, status)
     elif route == "ports":
         evidence["device"] = bk("get_device", hostname=hostname)

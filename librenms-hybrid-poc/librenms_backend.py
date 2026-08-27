@@ -54,7 +54,8 @@ class LibreNMSBackend:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
+            with exc:
+                body = exc.read().decode("utf-8", errors="replace")
             if exc.code == 404:
                 return None
             raise RuntimeError(
@@ -109,7 +110,11 @@ class LibreNMSBackend:
         else:
             ref = str(device_id)
             args = {"device_id": device_id}
-        payload = self._get("/devices/" + urllib.parse.quote(ref, safe=""))
+        try:
+            payload = self._get("/devices/" + urllib.parse.quote(ref, safe=""))
+        except Exception:
+            self._record("get_device", args, None)
+            raise
         devices = (payload or {}).get("devices") or []
         result = self._normalize_device(devices[0]) if len(devices) == 1 else None
         return self._record("get_device", args, result)

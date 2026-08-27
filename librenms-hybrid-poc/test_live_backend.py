@@ -77,6 +77,12 @@ class _ApiHandler(BaseHTTPRequestHandler):
                 },
             )
 
+        if self.path == "/api/v0/devices/failing-device":
+            return self._json(
+                500,
+                {"status": "error", "message": "backend unavailable"},
+            )
+
         if self.path == "/api/v0/devices/3/ports":
             return self._json(
                 200,
@@ -183,6 +189,29 @@ class LibreNMSBackendContractTests(unittest.TestCase):
         )
         self.assertTrue(all(r["token"] == "test-token" for r in _ApiHandler.requests))
         self.assertTrue(all(r["accept"] == "application/json" for r in _ApiHandler.requests))
+
+    def test_failed_get_device_attempt_is_preserved_in_sanitized_trace(self):
+        backend_mod = load_live_backend_module()
+
+        with LocalApiServer() as api:
+            backend = backend_mod.LibreNMSBackend(
+                base_url=api.base_url,
+                token="test-token",
+                timeout=2,
+            )
+            with self.assertRaises(RuntimeError):
+                backend.get_device(hostname="failing-device")
+
+        self.assertEqual(
+            backend.trace(),
+            [
+                {
+                    "tool": "get_device",
+                    "args": {"hostname": "failing-device"},
+                    "result": None,
+                }
+            ],
+        )
 
 
 class BackendIdentityRegressionTests(unittest.TestCase):
@@ -472,9 +501,86 @@ class DeviceSetStatusRegressionTests(unittest.TestCase):
             "Çalışmıyor/DOWN (1): lab-j9775a-01.",
         )
 
+    def test_structured_facets_fan_out_to_each_matching_hostname(self):
+        filters = dict(planner_v2.EMPTY_FILTERS)
+        filters.update({"port_count": 48, "poe": False})
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": None,
+            "device_filters": filters,
+        }
+        backend = self.BackendWithSetStatuses(
+            {
+                "lab-j9775a-01": {
+                    "device_id": 903,
+                    "hostname": "lab-j9775a-01",
+                    "status": 1,
+                },
+                "lab-j9775a-02": {
+                    "device_id": 904,
+                    "hostname": "lab-j9775a-02",
+                    "status": 0,
+                },
+            }
+        )
 
-if __name__ == "__main__":
-    unittest.main()
+        trace = self._run(
+            plan,
+            backend,
+            query="48 port PoE'siz cihazlar açık mı?",
+        )
+
+        self.assertEqual(trace["route"], "device_set_status")
+        self.assertEqual(
+            [call["args"] for call in trace["tool_calls"]],
+            [
+                {"hostname": "lab-j9775a-01"},
+                {"hostname": "lab-j9775a-02"},
+            ],
+        )
+
+    def test_singular_ambiguous_status_requires_clarification_without_backend_calls(self):
+        plan = {
+            "request_type": "atomic_fact",
+            "intent": "device_status",
+            "device_query": "J4850A",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        backend = self.BackendWithSetStatuses({})
+
+        trace = self._run(plan, backend, query="J4850A cihazı açık mı?")
+
+        self.assertEqual(trace["route"], "clarification")
+        self.assertEqual(trace["tool_calls"], [])
+        self.assertEqual(
+            trace["final_answer"],
+            "Hangi cihazı kastettiğinizi netleştirir misiniz? Adaylar: "
+            "lab-j4850a-01, lab-j4850a-02.",
+        )
+
+    def test_atomic_status_never_falls_back_to_fixture_when_backend_returns_none(self):
+        plan = {
+            "request_type": "atomic_fact",
+            "intent": "device_status",
+            "device_query": "lab-j9775a-01",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        backend = self.BackendWithSetStatuses({})
+
+        trace = self._run(
+            plan,
+            backend,
+            query="lab-j9775a-01 açık mı?",
+        )
+
+        self.assertEqual(trace["route"], "atomic")
+        self.assertIsNone(trace["tool_results"]["device"])
+        self.assertEqual(
+            trace["final_answer"],
+            "lab-j9775a-01 durumu bilinmiyor.",
+        )
+
 
 class LiveQueryEntrypointTests(unittest.TestCase):
     def test_live_query_runs_gold_pipeline_with_real_backend_contract(self):
@@ -503,3 +609,7 @@ class LiveQueryEntrypointTests(unittest.TestCase):
         self.assertEqual(trace["route"], "atomic")
         self.assertEqual(trace["tool_calls"][0]["result"]["device_id"], 3)
         self.assertIn("çalışmıyor", trace["final_answer"])
+
+
+if __name__ == "__main__":
+    unittest.main()
