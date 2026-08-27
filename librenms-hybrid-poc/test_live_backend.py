@@ -265,6 +265,214 @@ class BackendIdentityRegressionTests(unittest.TestCase):
                 self.assertEqual(observed, {tool: 3 for tool in downstream_tools})
 
 
+class DeviceSetStatusRegressionTests(unittest.TestCase):
+    class BackendWithSetStatuses:
+        def __init__(self, results):
+            self.results = dict(results)
+            self.calls = []
+
+        def reset_trace(self):
+            self.calls = []
+
+        def get_device(self, *, hostname=None, device_id=None):
+            result = self.results.get(hostname)
+            if isinstance(result, Exception):
+                self.calls.append(
+                    {
+                        "tool": "get_device",
+                        "args": {"hostname": hostname},
+                        "result": None,
+                    }
+                )
+                raise result
+            self.calls.append(
+                {
+                    "tool": "get_device",
+                    "args": {"hostname": hostname},
+                    "result": result,
+                }
+            )
+            return result
+
+        def trace(self):
+            return list(self.calls)
+
+    @staticmethod
+    def _run(plan, backend, query="J4850A cihazları açık mı?"):
+        with patch.object(
+            hybrid_poc,
+            "ollama_chat",
+            return_value=(json.dumps(plan), "stop", 1.0),
+        ):
+            return hybrid_poc.orchestrate(
+                query,
+                inventory=INVENTORY,
+                backend=backend,
+                planner_schema="gold",
+                resolver_module=resolver_v5,
+            )
+
+    def test_plural_model_status_uses_live_status_and_real_ids_for_every_hostname(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": "J4850A",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        backend = self.BackendWithSetStatuses(
+            {
+                "lab-j4850a-01": {
+                    "device_id": 501,
+                    "hostname": "lab-j4850a-01",
+                    "status": 0,
+                },
+                "lab-j4850a-02": {
+                    "device_id": 502,
+                    "hostname": "lab-j4850a-02",
+                    "status": 1,
+                },
+            }
+        )
+
+        trace = self._run(plan, backend)
+
+        self.assertEqual(trace["route"], "device_set_status")
+        self.assertEqual(
+            [call["args"] for call in trace["tool_calls"]],
+            [
+                {"hostname": "lab-j4850a-01"},
+                {"hostname": "lab-j4850a-02"},
+            ],
+        )
+        self.assertEqual(
+            trace["tool_results"]["devices"],
+            [
+                {
+                    "hostname": "lab-j4850a-01",
+                    "device_id": 501,
+                    "status": 0,
+                    "outcome": "down",
+                },
+                {
+                    "hostname": "lab-j4850a-02",
+                    "device_id": 502,
+                    "status": 1,
+                    "outcome": "up",
+                },
+            ],
+        )
+        self.assertEqual(
+            trace["final_answer"],
+            "Toplam 2 cihaz. Çalışıyor/UP (1): lab-j4850a-02. "
+            "Çalışmıyor/DOWN (1): lab-j4850a-01.",
+        )
+        self.assertFalse(trace["synthesis_llm_called"])
+
+    def test_partial_backend_failure_keeps_other_live_results(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": "J4850A",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        backend = self.BackendWithSetStatuses(
+            {
+                "lab-j4850a-01": {
+                    "device_id": 601,
+                    "hostname": "lab-j4850a-01",
+                    "status": 1,
+                },
+                "lab-j4850a-02": RuntimeError("LibreNMS unavailable"),
+            }
+        )
+
+        trace = self._run(plan, backend)
+
+        self.assertEqual(
+            trace["tool_results"]["devices"],
+            [
+                {
+                    "hostname": "lab-j4850a-01",
+                    "device_id": 601,
+                    "status": 1,
+                    "outcome": "up",
+                },
+                {
+                    "hostname": "lab-j4850a-02",
+                    "device_id": None,
+                    "status": None,
+                    "outcome": "unavailable",
+                },
+            ],
+        )
+        self.assertEqual(
+            trace["final_answer"],
+            "Toplam 2 cihaz. Çalışıyor/UP (1): lab-j4850a-01. "
+            "Durumu alınamadı (1): lab-j4850a-02.",
+        )
+
+    def test_all_missing_or_unknown_statuses_are_reported_as_unavailable(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": "J4850A",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        backend = self.BackendWithSetStatuses(
+            {
+                "lab-j4850a-01": None,
+                "lab-j4850a-02": {
+                    "device_id": 702,
+                    "hostname": "lab-j4850a-02",
+                    "status": "unknown",
+                },
+            }
+        )
+
+        trace = self._run(plan, backend)
+
+        self.assertEqual(
+            trace["final_answer"],
+            "Toplam 2 cihaz. Durumu alınamadı (2): "
+            "lab-j4850a-01, lab-j4850a-02.",
+        )
+        self.assertEqual(
+            [item["outcome"] for item in trace["tool_results"]["devices"]],
+            ["unavailable", "unavailable"],
+        )
+
+    def test_plural_reference_stays_on_set_status_route(self):
+        plan = {
+            "request_type": "device_set_status",
+            "intent": "device_set_status",
+            "device_query": "J9775A",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+        }
+        backend = self.BackendWithSetStatuses(
+            {
+                "lab-j9775a-01": {
+                    "device_id": 803,
+                    "hostname": "lab-j9775a-01",
+                    "status": 0,
+                },
+                "lab-j9775a-02": {
+                    "device_id": 804,
+                    "hostname": "lab-j9775a-02",
+                    "status": 1,
+                },
+            }
+        )
+
+        trace = self._run(plan, backend, query="J9775A'lar çalışıyor mu?")
+
+        self.assertEqual(trace["route"], "device_set_status")
+        self.assertEqual(
+            trace["final_answer"],
+            "Toplam 2 cihaz. Çalışıyor/UP (1): lab-j9775a-02. "
+            "Çalışmıyor/DOWN (1): lab-j9775a-01.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 

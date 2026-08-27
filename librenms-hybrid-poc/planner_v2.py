@@ -28,6 +28,7 @@ REQUEST_TYPES = (
     "alerts",
     "events",
     "device_set",
+    "device_set_status",
     "investigation",
     "historical_investigation",
     "unsupported",
@@ -39,6 +40,7 @@ INTENTS = (
     "device_alerts",
     "device_events",
     "device_set",
+    "device_set_status",
     "investigation",
     "historical_status",
     "unsupported",
@@ -51,6 +53,7 @@ ROUTE_TO_INTENT = {
     "alerts": "device_alerts",
     "events": "device_events",
     "device_set": "device_set",
+    "device_set_status": "device_set_status",
     "investigation": "investigation",
     "historical_investigation": "historical_status",
 }
@@ -122,7 +125,8 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
             f"request_type {request_type!r} requires intent {expected_intent!r}"
         )
 
-    if request_type != "device_set" and isinstance(filters, dict):
+    set_routes = ("device_set", "device_set_status")
+    if request_type not in set_routes and isinstance(filters, dict):
         non_null = [key for key, value in filters.items() if value is not None]
         if non_null:
             errors.append(
@@ -130,12 +134,14 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
                 + ", ".join(non_null)
             )
 
-    if request_type == "device_set" and isinstance(filters, dict):
+    if request_type in set_routes and isinstance(filters, dict):
         has_query = isinstance(device_query, str) and bool(device_query.strip())
         if not has_query and not any(value is not None for value in filters.values()):
-            errors.append("device_set must contain a device_query or at least one filter")
+            errors.append(
+                f"{request_type} must contain a device_query or at least one filter"
+            )
 
-    if request_type not in ("device_set", "unsupported"):
+    if request_type not in (*set_routes, "unsupported"):
         has_query = isinstance(device_query, str) and bool(device_query.strip())
         if request_type in REQUEST_TYPES and not has_query:
             errors.append(f"{request_type} requires a non-empty device_query")

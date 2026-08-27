@@ -21,8 +21,8 @@ Qwen doğal dili aşağıdaki alanlara dönüştürür:
 
 ```json
 {
-  "request_type": "atomic_fact | ports | alerts | events | device_set | investigation | historical_investigation | unsupported",
-  "intent": "device_status | device_ports | device_alerts | device_events | device_set | investigation | historical_status | unsupported | unknown",
+  "request_type": "atomic_fact | ports | alerts | events | device_set | device_set_status | investigation | historical_investigation | unsupported",
+  "intent": "device_status | device_ports | device_alerts | device_events | device_set | device_set_status | investigation | historical_status | unsupported | unknown",
   "device_query": "ham hostname/SKU/model referansı veya null",
   "device_filters": {
     "brand": "string veya null",
@@ -55,6 +55,12 @@ port, alarm ve event gerçeklerinin tek kaynağıdır.
 
 Atomik durum cevapları deterministik üretilir. Investigation rotası sabit
 `get_device + get_ports + get_alerts + get_events` kanıt kümesini Qwen'e verir.
+
+`device_set_status` rotasında resolver yalnız hostname setini üretir.
+Orchestrator her hostname için ayrı `get_device(hostname=...)` çağrısı yapar;
+gerçek backend `device_id` ve `status` değerlerini kullanarak UP/DOWN gruplarını
+deterministik özetler. Fixture status ve synthetic device ID backend gerçeği
+olarak kullanılmaz.
 
 ## Dosyalar
 
@@ -108,6 +114,7 @@ Ardından:
 
 ```bash
 python3 librenms-hybrid-poc/live_query.py "lab-j9775a-01 açık mı?"
+python3 librenms-hybrid-poc/live_query.py "J4850A cihazları açık mı?"
 ```
 
 `live_query.py` explicit olarak `planner_schema="gold"`,
@@ -128,5 +135,7 @@ python3 -m unittest -v test_semantic_planner.py test_live_backend.py
 - Gerçek LibreNMS entegrasyonu read-only `/api/v0` adapter ile vardır; write endpointleri kullanılmaz.
 - Device-set cevapları backend çağrısı olmadan canlı durum yazmaz.
 - RAG uygulanmadı; B planı olarak ertelendi.
-- Son semantic-planner değişikliğinden sonra pahalı LLM/regression suite'leri
-  yeniden çalıştırılmadı. Eski result dosyaları güncel sonuç sayılmamalıdır.
+- EMR-45 doğrulamasında Gold 40/40, Generated 16/16 ve Legacy 55/56 baseline
+  korundu. Legacy'deki tek hata önceden bilinen T46 conciseness vakasıdır.
+- Canlı LibreNMS acceptance koşusu için `LIBRENMS_TOKEN` ve erişilebilir VM
+  gerekir; token yoksa offline backend sözleşme testleri kullanılmalıdır.
