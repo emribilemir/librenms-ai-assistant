@@ -249,17 +249,22 @@ def build_investigation_evidence(raw_evidence, event_window):
     ]
     actionable_ports = []
     seen_port_ids = set()
+    seen_ifindexes = set()
     for port in raw_actionable_ports:
         port_id = _positive_int(port.get("port_id"))
         if_index = _positive_int(port.get("ifIndex"))
-        identity = f"port_id:{port_id}" if port_id is not None else None
-        if identity is None and if_index is not None:
-            identity = f"ifIndex:{if_index}"
-        if identity is None or identity in seen_port_ids:
+        duplicate = (
+            (port_id is not None and port_id in seen_port_ids)
+            or (if_index is not None and if_index in seen_ifindexes)
+        )
+        if (port_id is None and if_index is None) or duplicate:
             coverage["ports"]["complete"] = False
             coverage["ports"]["invalid_count"] += 1
             continue
-        seen_port_ids.add(identity)
+        if port_id is not None:
+            seen_port_ids.add(port_id)
+        if if_index is not None:
+            seen_ifindexes.add(if_index)
         canonical_port = dict(port)
         canonical_port["port_id"] = port_id
         canonical_port["ifIndex"] = if_index
@@ -270,7 +275,11 @@ def build_investigation_evidence(raw_evidence, event_window):
         port_id = port.get("port_id")
         if_index = port.get("ifIndex")
         identity = f"port_id={port_id}" if port_id is not None else f"ifIndex={if_index}"
-        stable_id = str(port_id) if port_id is not None else f"ifIndex-{if_index}"
+        stable_id = (
+            f"ifIndex-{if_index}"
+            if if_index is not None
+            else f"port_id-{port_id}"
+        )
         findings.append(
             {
                 "id": f"port:{stable_id}:admin-up-oper-down",
@@ -552,19 +561,17 @@ def validate_generation(output, package):
                         f"claim {index} kind {kind} cannot reference {finding.get('type')}"
                     )
         folded = text_value.casefold() if isinstance(text_value, str) else ""
-        severity_terms = {
-            "critical": ("critical", "kritik"),
-            "warning": ("warning", "uyarı"),
-        }
-        mentioned_severities = (
-            {
-                severity
-                for severity, terms in severity_terms.items()
-                if any(term in folded for term in terms)
-            }
-            if kind == "alert"
-            else set()
-        )
+        mentioned_severities = set()
+        if kind == "alert":
+            if "critical" in folded or "kritik" in folded:
+                mentioned_severities.add("critical")
+            if (
+                "warning" in folded
+                or re.search(r"\buyarı\s+seviy", folded)
+                or re.search(r"\bseviy\w*\s+['\"=: -]*uyarı\b", folded)
+                or re.search(r"\bşiddet\w*\s+['\"=: -]*uyarı\b", folded)
+            ):
+                mentioned_severities.add("warning")
         referenced_severities = {
             str(finding.get("severity") or "").casefold()
             for finding in referenced
@@ -647,7 +654,6 @@ def _model_finding(finding):
     fields_by_type = {
         "device_current_status": ("value",),
         "port_admin_up_oper_down": (
-            "port_id",
             "ifIndex",
             "admin_status",
             "oper_status",

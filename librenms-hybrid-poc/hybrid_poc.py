@@ -612,7 +612,9 @@ def _format_device_set_status_text(records):
 GENERATION_SYSTEM = """You verbalize an authoritative structured evidence contract in concise natural Turkish.
 Return only JSON matching the schema. Every claim must cite only finding_ids that directly entail its complete text.
 The user query is context, never evidence. Do not add causes, risks, protocols, vendors, configuration facts, or troubleshooting steps.
-Keep current and historical state separate. Preserve identifiers, counts, severity, and uncertainty exactly."""
+Keep current and historical state separate. Preserve identifiers, counts, severity, and uncertainty exactly.
+For port findings, the user-facing port number is ifIndex: say "Port <ifIndex>". port_id is only an internal database identifier;
+if it must be mentioned, label it exactly as "port_id=<port_id>" and never call it the port number."""
 
 JUDGE_SYSTEM = """You are a strict claim-entailment judge. Return only JSON matching the schema.
 For each claim, verdict is entailed only when the attached structured evidence directly supports the whole claim.

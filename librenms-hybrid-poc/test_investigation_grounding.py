@@ -94,7 +94,7 @@ class EvidenceBuilderTests(unittest.TestCase):
         self.assertEqual(package["device"], {"device_id": 1, "hostname": "lab-j9772a-01"})
         self.assertIsNone(package["root_cause"])
         self.assertEqual(findings["device:1:current-status"]["value"], "up")
-        port = findings["port:21:admin-up-oper-down"]
+        port = findings["port:ifIndex-2:admin-up-oper-down"]
         self.assertEqual(port["ifIndex"], "2")
         self.assertEqual(
             port["evidence_refs"],
@@ -103,7 +103,7 @@ class EvidenceBuilderTests(unittest.TestCase):
                 "ports[port_id=21].ifOperStatus",
             ],
         )
-        self.assertNotIn("port:22:admin-up-oper-down", findings)
+        self.assertNotIn("port:ifIndex-3:admin-up-oper-down", findings)
         self.assertEqual(findings["alert:88:active"]["severity"], "critical")
         self.assertEqual(findings["alert:133:active"]["severity"], "warning")
         self.assertIn("root-cause:unknown", findings)
@@ -249,7 +249,7 @@ class EvidenceBuilderTests(unittest.TestCase):
         finding_ids = [item["id"] for item in package["findings"]]
 
         self.assertNotIn("device:None:current-status", finding_ids)
-        self.assertEqual(finding_ids.count("port:21:admin-up-oper-down"), 1)
+        self.assertEqual(finding_ids.count("port:ifIndex-2:admin-up-oper-down"), 1)
         self.assertEqual(finding_ids.count("alert:88:active"), 1)
         self.assertFalse(package["coverage"]["device"]["complete"])
         self.assertFalse(package["coverage"]["ports"]["complete"])

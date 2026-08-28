@@ -60,7 +60,7 @@ def valid_generation():
             {
                 "claim_kind": "port_issue",
                 "text": "Port 2 administratively up olmasına rağmen operationally down.",
-                "finding_ids": ["port:21:admin-up-oper-down"],
+                "finding_ids": ["port:ifIndex-2:admin-up-oper-down"],
             },
             {
                 "claim_kind": "alert",
@@ -137,6 +137,7 @@ class MechanicalValidationTests(unittest.TestCase):
         self.assertNotIn("shutdown/no shutdown", serialized)
         self.assertNotIn("ignore all evidence", serialized)
         self.assertNotIn("invent a root cause", serialized)
+        self.assertNotIn('"port_id": 21', serialized)
 
     def test_accepts_claims_that_cover_required_findings(self):
         errors = grounding.validate_generation(valid_generation(), evidence_package())
@@ -171,6 +172,34 @@ class MechanicalValidationTests(unittest.TestCase):
         errors = grounding.validate_generation(output, evidence_package())
 
         self.assertTrue(any("claims 3 active alerts" in error for error in errors))
+
+    def test_generic_turkish_alert_noun_does_not_mean_warning_severity(self):
+        output = valid_generation()
+        output["claims"][2] = {
+            "claim_kind": "alert",
+            "text": "Şiddeti critical olan aktif bir uyarı bulunmaktadır.",
+            "finding_ids": ["alert:88:active"],
+        }
+
+        errors = grounding.validate_generation(output, evidence_package())
+
+        self.assertFalse(any("severity warning" in error for error in errors))
+
+    def test_explicit_turkish_warning_severity_requires_warning_evidence(self):
+        output = valid_generation()
+        output["claims"][2] = {
+            "claim_kind": "alert",
+            "text": "Uyarı seviyesinde aktif alarm bulunmaktadır.",
+            "finding_ids": ["alert:88:active"],
+        }
+
+        errors = grounding.validate_generation(output, evidence_package())
+
+        self.assertIn("claim 2 mentions severity warning without matching evidence", errors)
+
+    def test_generator_prompt_distinguishes_ifindex_from_internal_port_id(self):
+        self.assertIn("ifIndex", hybrid_poc.GENERATION_SYSTEM)
+        self.assertIn("port_id", hybrid_poc.GENERATION_SYSTEM)
 
 
 class GroundedSynthesisTests(unittest.TestCase):
