@@ -29,7 +29,8 @@ Qwen doğal dili aşağıdaki alanlara dönüştürür:
     "family": "string veya null",
     "port_count": "integer veya null",
     "poe": "boolean veya null"
-  }
+  },
+  "event_window": "investigation rotalarında default_24h | relative | absolute"
 }
 ```
 
@@ -53,8 +54,17 @@ Resolver v5 açık hostname/SKU/model referanslarını ve structured katalog
 filtrelerini çözer. Ambiguous sonuçlarda tek cihaz seçmez. Backend status,
 port, alarm ve event gerçeklerinin tek kaynağıdır.
 
-Atomik durum cevapları deterministik üretilir. Investigation rotası sabit
-`get_device + get_ports + get_alerts + get_events` kanıt kümesini Qwen'e verir.
+Atomik durum cevapları deterministik üretilir. Investigation rotası raw backend
+JSON'unu Qwen'e vermez. Backend verisi önce `investigation_grounding.py`
+tarafından stable evidence ref'leri taşıyan typed findings'e çevrilir. Qwen bu
+paketten doğal Türkçe claim'ler üretir; ayrı bir Qwen judge bütün claim'leri
+bağlı findings karşısında doğrular. Mekanik veya semantic doğrulama geçmezse
+reddedilen metin gösterilmez ve doğrulanmış bulgu listesine dönülür.
+
+Current investigation varsayılan olarak son 24 saatin eventlerini alır.
+Relative veya absolute zaman ifadelerinde doğrulanmış `from/to` değerleri
+LibreNMS eventlog API'sine gönderilir. Direct `status/ports/alerts/events`
+rotaları synthesis ve judge çağırmaz.
 
 `device_set_status` rotasında resolver yalnız hostname setini üretir.
 Orchestrator her hostname için ayrı `get_device(hostname=...)` çağrısı yapar;
@@ -70,11 +80,14 @@ olarak kullanılmaz.
 | [`librenms_backend.py`](librenms_backend.py) | Gerçek read-only LibreNMS `/api/v0` backend adapter'ı |
 | [`live_query.py`](live_query.py) | Gold planner + resolver v5 + gerçek LibreNMS backend canlı giriş noktası |
 | [`planner_v2.py`](planner_v2.py) | Structured plan schema ve strict validation |
+| [`investigation_grounding.py`](investigation_grounding.py) | Deterministic finding builder, claim/judge kontratları ve güvenli fallback |
 | [`resolver.py`](resolver.py) | Eski PoC inventory resolver'ı; compatibility ve tarihsel karşılaştırma |
 | [`inventory.json`](inventory.json) | PoC inventory fixture'ı |
 | [`production_baseline_system.txt`](production_baseline_system.txt) | Tarihsel direct-LLM baseline prompt'u |
 | [`test_semantic_planner.py`](test_semantic_planner.py) | Güncel sahiplik sınırı için küçük offline testler |
 | [`test_live_backend.py`](test_live_backend.py) | API adapter ve gerçek backend `device_id` handoff regression testleri |
+| [`test_investigation_grounding.py`](test_investigation_grounding.py) | Finding, zaman penceresi, event parser ve truncation testleri |
+| [`test_grounded_synthesis.py`](test_grounded_synthesis.py) | Generator, judge, fallback ve route isolation testleri |
 | [`test_resolver.py`](test_resolver.py) | Eski resolver'ın offline testleri |
 | `comparison*.md`, `results*.json` | Daha önceki deney snapshot'ları |
 
@@ -83,7 +96,7 @@ olarak kullanılmaz.
 Repo kökünden:
 
 ```bash
-python3 librenms-hybrid-poc/test_semantic_planner.py -v
+python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
 ```
 
 Bu testler Ollama veya ağ kullanmaz.

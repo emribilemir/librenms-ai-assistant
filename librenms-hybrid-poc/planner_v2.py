@@ -7,7 +7,9 @@ and validates the planner's structured output; it never parses user language.
 
 from __future__ import annotations
 
+from datetime import date, datetime, time
 from typing import Any, Dict, Tuple
+from zoneinfo import ZoneInfo
 
 DEVICE_FILTER_SCHEMA = {
     "type": "object",
@@ -21,6 +23,20 @@ DEVICE_FILTER_SCHEMA = {
 }
 
 EMPTY_FILTERS = {"brand": None, "family": None, "port_count": None, "poe": None}
+
+EVENT_WINDOW_SCHEMA = {
+    "type": ["object", "null"],
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["default_24h", "relative", "absolute"],
+        },
+        "amount": {"type": "integer", "minimum": 1},
+        "unit": {"type": "string", "enum": ["hour", "day", "week"]},
+        "from": {"type": "string"},
+        "to": {"type": "string"},
+    },
+}
 
 REQUEST_TYPES = (
     "atomic_fact",
@@ -59,6 +75,27 @@ ROUTE_TO_INTENT = {
 }
 
 
+def _parse_absolute_boundary(value: Any, *, end_of_day: bool = False):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    local_zone = ZoneInfo("Europe/Istanbul")
+    try:
+        if "T" not in raw and " " not in raw:
+            parsed_date = date.fromisoformat(raw)
+            return datetime.combine(
+                parsed_date,
+                time(23, 59, 59) if end_of_day else time.min,
+                tzinfo=local_zone,
+            )
+        parsed = datetime.fromisoformat(raw)
+        if parsed.tzinfo is None:
+            return None
+        return parsed.astimezone(local_zone)
+    except ValueError:
+        return None
+
+
 def normalize_plan_filters(plan: Dict[str, Any]) -> Dict[str, Any]:
     """Return a copy with a complete filter object for compatibility callers."""
     out = dict(plan)
@@ -69,6 +106,7 @@ def normalize_plan_filters(plan: Dict[str, Any]) -> Dict[str, Any]:
             if key in supplied:
                 filters[key] = supplied[key]
     out["device_filters"] = filters
+    out.setdefault("event_window", None)
     return out
 
 
@@ -87,6 +125,7 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
     intent = plan.get("intent")
     device_query = plan.get("device_query")
     filters = plan.get("device_filters")
+    event_window = plan.get("event_window")
 
     if request_type not in REQUEST_TYPES:
         errors.append(f"invalid request_type: {request_type!r}")
@@ -145,5 +184,63 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
         has_query = isinstance(device_query, str) and bool(device_query.strip())
         if request_type in REQUEST_TYPES and not has_query:
             errors.append(f"{request_type} requires a non-empty device_query")
+
+    investigation_routes = ("investigation", "historical_investigation")
+    if event_window is not None and request_type not in investigation_routes:
+        errors.append("event_window is only valid for investigation routes")
+    if event_window is not None:
+        if not isinstance(event_window, dict):
+            errors.append("event_window must be an object or null")
+        else:
+            mode = event_window.get("mode")
+            expected_keys = {
+                "default_24h": {"mode"},
+                "relative": {"mode", "amount", "unit"},
+                "absolute": {"mode", "from", "to"},
+            }
+            if mode not in expected_keys:
+                errors.append(
+                    "event_window.mode must be default_24h, relative, or absolute"
+                )
+            elif set(event_window) != expected_keys[mode]:
+                field_order = ("mode", "from", "to", "amount", "unit")
+                fields = ", ".join(
+                    sorted(expected_keys[mode], key=field_order.index)
+                )
+                errors.append(
+                    f"{mode} event_window must contain exactly: {fields}"
+                )
+            if mode == "relative":
+                amount = event_window.get("amount")
+                if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
+                    errors.append(
+                        "relative event_window.amount must be a positive integer"
+                    )
+                if event_window.get("unit") not in ("hour", "day", "week"):
+                    errors.append("relative event_window.unit must be hour, day, or week")
+            if mode == "absolute":
+                parsed_boundaries = {}
+                for key in ("from", "to"):
+                    value = event_window.get(key)
+                    if not isinstance(value, str) or not value.strip():
+                        errors.append(
+                            f"absolute event_window.{key} must be a non-empty string"
+                        )
+                        continue
+                    parsed = _parse_absolute_boundary(
+                        value, end_of_day=(key == "to")
+                    )
+                    if parsed is None:
+                        errors.append(
+                            f"absolute event_window.{key} must be an ISO date "
+                            "or timezone-aware datetime"
+                        )
+                    else:
+                        parsed_boundaries[key] = parsed
+                if (
+                    set(parsed_boundaries) == {"from", "to"}
+                    and parsed_boundaries["from"] > parsed_boundaries["to"]
+                ):
+                    errors.append("absolute event_window.from must not be after to")
 
     return not errors, errors

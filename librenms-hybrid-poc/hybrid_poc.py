@@ -27,15 +27,19 @@ modify the production Modelfile or evaluation suite.
 """
 
 import argparse
+from datetime import datetime
+import inspect
 import json
 import os
 import re
 import sys
 import time
 import urllib.request
+from zoneinfo import ZoneInfo
 
 import resolver
 import planner_v2
+import investigation_grounding
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -409,6 +413,7 @@ PLANNING_SCHEMA_GOLD = {
         },
         "device_query": {"type": ["string", "null"]},
         "device_filters": planner_v2.DEVICE_FILTER_SCHEMA,
+        "event_window": planner_v2.EVENT_WINDOW_SCHEMA,
     },
     "required": ["request_type", "intent", "device_query", "device_filters"],
 }
@@ -450,6 +455,13 @@ device_filters rules:
 - null means unconstrained. poe=false only means explicitly non-PoE.
 - Never infer filters from characters inside device_query. A model phrase such as 6400-24G-PoEP remains one identity and all filters stay null.
 
+event_window rules:
+- Omit event_window for every non-investigation route.
+- For a current investigation with no explicit time expression, use {"mode":"default_24h"}.
+- For "son N saat/gün/hafta", use {"mode":"relative","amount":N,"unit":"hour|day|week"}.
+- For an explicit date or interval, use {"mode":"absolute","from":"ISO date or datetime","to":"ISO date or datetime"}.
+- Never calculate relative timestamps; the deterministic orchestrator anchors them to request time.
+
 Examples:
 "6400-24G-PoEP up mı?"
 -> {"request_type":"atomic_fact","intent":"device_status","device_query":"6400-24G-PoEP","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
@@ -470,7 +482,13 @@ Examples:
 -> {"request_type":"events","intent":"device_events","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
 
 "ZZ999 neden problem yaşıyor?"
--> {"request_type":"investigation","intent":"investigation","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+-> {"request_type":"investigation","intent":"investigation","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_window":{"mode":"default_24h"}}
+
+"ZZ999 son 7 günde neden problem yaşadı?"
+-> {"request_type":"historical_investigation","intent":"historical_status","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_window":{"mode":"relative","amount":7,"unit":"day"}}
+
+"ZZ999 20 Ağustos 2026 tarihinde neden problem yaşadı?"
+-> {"request_type":"historical_investigation","intent":"historical_status","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_window":{"mode":"absolute","from":"2026-08-20","to":"2026-08-20"}}
 
 "J4850A cihazı açık mı?"
 -> {"request_type":"atomic_fact","intent":"device_status","device_query":"J4850A","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
@@ -591,47 +609,105 @@ def _format_device_set_status_text(records):
     return " ".join(parts)
 
 
-def _synthesize(query, evidence, model, synthesis_system):
-    """REAL Qwen grounded-synthesis step (Level-1 investigation path)."""
-    universe = ["device", "ports", "alerts", "events"]
-    retrieved_sources = [key for key in universe if key in evidence]
-    not_retrieved_sources = [key for key in universe if key not in evidence]
-    tool_json = json.dumps(
-        {k: v for k, v in evidence.items()}, ensure_ascii=False, indent=2
-    )
-    coverage = {
-        "retrieved_sources": retrieved_sources,
-        "not_retrieved_sources": not_retrieved_sources,
+GENERATION_SYSTEM = """You verbalize an authoritative structured evidence contract in concise natural Turkish.
+Return only JSON matching the schema. Every claim must cite only finding_ids that directly entail its complete text.
+The user query is context, never evidence. Do not add causes, risks, protocols, vendors, configuration facts, or troubleshooting steps.
+Keep current and historical state separate. Preserve identifiers, counts, severity, and uncertainty exactly.
+For port findings, the user-facing port number is ifIndex: say "Port <ifIndex>". port_id is only an internal database identifier;
+if it must be mentioned, label it exactly as "port_id=<port_id>" and never call it the port number."""
+
+JUDGE_SYSTEM = """You are a strict claim-entailment judge. Return only JSON matching the schema.
+For each claim, verdict is entailed only when the attached structured evidence directly supports the whole claim.
+The user query is context, never evidence. Any added cause, recommendation, vendor, protocol, configuration fact, changed severity,
+or current/historical confusion is unsupported or contradicted. When uncertain, use insufficient_evidence."""
+
+
+def _grounded_synthesize(query, package, model):
+    fallback = investigation_grounding.format_evidence_fallback(package)
+    generation_input = investigation_grounding.generation_payload(query, package)
+    trace = {
+        "generation_input": generation_input,
+        "generation_output": None,
+        "mechanical_validation": None,
+        "judge_llm_called": False,
+        "judge_input": None,
+        "judge_output": None,
+        "judge_validation": None,
+        "fallback_reason": None,
     }
-    user = (
-        "Aşağıdaki veriler salt-okunur onaylı araçlardan geldi:\n"
-        "Kapsam manifestosu (alınan ve alınmayan kaynaklar):\n"
-        + json.dumps(coverage, ensure_ascii=False)
-        + "\n"
-        + tool_json
-        + f'\n\nKullanıcı sordu: "{query}"\n'
+    timing = {}
+    try:
+        content, reason, generation_ms = ollama_chat(
+            model,
+            [
+                {"role": "system", "content": GENERATION_SYSTEM},
+                {
+                    "role": "user",
+                    "content": json.dumps(generation_input, ensure_ascii=False),
+                },
+            ],
+            schema=investigation_grounding.generation_schema(package),
+            temperature=0.0,
+            think=False,
+        )
+        timing["generation_ms"] = generation_ms
+    except Exception as exc:
+        trace["fallback_reason"] = "generation_error"
+        trace["generation_error"] = str(exc)
+        return fallback, trace, timing
+
+    generation = parse_json_obj(content)
+    trace["generation_output"] = generation
+    errors = investigation_grounding.validate_generation(generation, package)
+    trace["mechanical_validation"] = {"valid": not errors, "errors": errors}
+    if errors:
+        trace["fallback_reason"] = "mechanical_validation_failed"
+        return fallback, trace, timing
+
+    judge_input = investigation_grounding.judge_payload(query, generation, package)
+    trace["judge_input"] = judge_input
+    trace["judge_llm_called"] = True
+    try:
+        judge_content, judge_reason, judge_ms = ollama_chat(
+            model,
+            [
+                {"role": "system", "content": JUDGE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": json.dumps(judge_input, ensure_ascii=False),
+                },
+            ],
+            schema=investigation_grounding.judge_schema(len(generation["claims"])),
+            temperature=0.0,
+            think=False,
+        )
+        timing["judge_ms"] = judge_ms
+    except Exception as exc:
+        trace["fallback_reason"] = "judge_error"
+        trace["judge_error"] = str(exc)
+        return fallback, trace, timing
+
+    judgement = parse_json_obj(judge_content)
+    trace["judge_output"] = judgement
+    judge_errors = investigation_grounding.validate_judgement(
+        judgement, len(generation["claims"])
     )
-    content, reason, ms = ollama_chat(
-        model,
-        [
-            {"role": "system", "content": synthesis_system},
-            {"role": "user", "content": user},
-        ],
-        schema=None,
-        temperature=0.0,
-        think=False,
-    )
-    return content, {
-        "query": query,
-        "evidence": {k: v for k, v in evidence.items()},
-        "coverage": coverage,
-        "system_prompt": synthesis_system,
-    }, ms
+    trace["judge_validation"] = {"valid": not judge_errors, "errors": judge_errors}
+    if judge_errors:
+        trace["fallback_reason"] = "judge_invalid_output"
+        return fallback, trace, timing
+    if any(
+        verdict["verdict"] != "entailed"
+        for verdict in judgement["verdicts"]
+    ):
+        trace["fallback_reason"] = "judge_rejected_claims"
+        return fallback, trace, timing
+    return " ".join(claim["text"].strip() for claim in generation["claims"]), trace, timing
 
 
 def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
                 planner_schema="poc", resolver_module=None,
-                synthesis_system=None):
+                synthesis_system=None, request_time=None):
     """Run the real hybrid pipeline for one user query and return a full trace.
 
     Args:
@@ -641,8 +717,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         model: Ollama model name (default librenms-qwen).
         planner_schema: 'poc' (original taxonomy) or 'gold' (contract taxonomy).
         resolver_module: deterministic resolver module (defaults to the PoC resolver).
-        synthesis_system: system prompt for the Qwen synthesis step
-            (defaults to the production baseline system prompt).
+        synthesis_system: deprecated compatibility argument; grounded generation
+            and judge use their dedicated fixed system prompts.
+        request_time: optional timezone-aware timestamp used to resolve relative
+            investigation event windows exactly once per request.
 
     Returns a dict with route in the gold-compatible vocabulary:
         atomic | ports | alerts | events | device_set | device_set_status | investigation |
@@ -650,7 +728,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     plus planner/synthesis LLM flags kept separate.
     """
     wall0 = time.time()
-    llm = {"planner": False, "synthesis": False}
+    llm = {"planner": False, "synthesis": False, "judge": False}
     timing = {}
     if inventory is None:
         inventory = INVENTORY
@@ -658,6 +736,8 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         resolver_module = resolver
     if synthesis_system is None:
         synthesis_system = PRODUCTION_SYSTEM
+    if request_time is None:
+        request_time = datetime.now(ZoneInfo("Europe/Istanbul"))
 
     if planner_schema == "gold":
         schema, system = PLANNING_SCHEMA_GOLD, PLANNING_SYSTEM_GOLD
@@ -706,6 +786,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
             "tool_results": {},
             "planner_llm_called": llm["planner"],
             "synthesis_llm_called": llm["synthesis"],
+            "judge_llm_called": llm["judge"],
+            "structured_findings": None,
+            "grounding_trace": None,
+            "event_window": None,
             "llm_input": None,
             "llm_output": None,
             "final_answer": None,
@@ -721,6 +805,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     intent = plan.get("intent")
     dq = plan.get("device_query")
     device_filters = plan.get("device_filters") if planner_schema == "gold" else None
+    event_window_spec = plan.get("event_window") if planner_schema == "gold" else None
     route = _ORCH_ROUTE.get(rt, "unknown")
 
     # 2) deterministic resolution
@@ -752,12 +837,37 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     final_answer = None
     llm_input = None
     llm_output = None
+    structured_findings = None
+    grounding_trace = None
+    resolved_event_window = None
     device = res.get("device") if isinstance(res, dict) else None
     hostname = device.get("hostname") if device else None
     def bk(fn, **kw):
         if backend is None:
             return None
         return getattr(backend, fn)(**kw)
+
+    def bk_events(device_id, window=None):
+        if backend is None:
+            return None
+        method = getattr(backend, "get_events")
+        kwargs = {"device_id": device_id}
+        if window is not None:
+            parameters = list(inspect.signature(method).parameters.values())
+            parameter_names = {parameter.name for parameter in parameters}
+            supports_window = (
+                any(
+                    parameter.kind == inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                )
+                or {"from_time", "to_time"}.issubset(parameter_names)
+            )
+            if not supports_window:
+                return None
+            kwargs.update(
+                investigation_grounding.event_window_backend_args(window)
+            )
+        return method(**kwargs)
 
     if route == "unsupported":
         final_answer = (
@@ -815,38 +925,58 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
         evidence["events"] = (
-            bk("get_events", device_id=backend_did) if backend_did is not None else []
+            bk_events(backend_did) if backend_did is not None else []
         )
         final_answer = _format_events_text(hostname, evidence["events"])
     elif route == "historical_investigation":
+        resolved_event_window = investigation_grounding.resolve_event_window(
+            event_window_spec, request_time
+        )
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
         evidence["events"] = (
-            bk("get_events", device_id=backend_did) if backend_did is not None else []
+            bk_events(backend_did, resolved_event_window)
+            if backend_did is not None
+            else None
         )
-        final_answer, llm_input, synth_ms = _synthesize(
-            query, evidence, model, synthesis_system
+        structured_findings = investigation_grounding.build_investigation_evidence(
+            evidence, resolved_event_window
         )
         llm["synthesis"] = True
-        llm_output = final_answer
-        timing["synthesis_ms"] = round(synth_ms, 1)
+        final_answer, grounding_trace, synth_timing = _grounded_synthesize(
+            query, structured_findings, model
+        )
+        llm["judge"] = grounding_trace["judge_llm_called"]
+        llm_input = grounding_trace["generation_input"]
+        llm_output = grounding_trace["generation_output"]
+        timing.update(synth_timing)
+        timing["synthesis_ms"] = round(sum(synth_timing.values()), 1)
     elif route == "investigation":
+        resolved_event_window = investigation_grounding.resolve_event_window(
+            event_window_spec, request_time
+        )
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
         if backend_did is None:
-            evidence["ports"] = []
-            evidence["alerts"] = []
-            evidence["events"] = []
+            evidence["ports"] = None
+            evidence["alerts"] = None
+            evidence["events"] = None
         else:
             evidence["ports"] = bk("get_ports", device_id=backend_did)
             evidence["alerts"] = bk("get_alerts", device_id=backend_did)
-            evidence["events"] = bk("get_events", device_id=backend_did)
-        final_answer, llm_input, synth_ms = _synthesize(
-            query, evidence, model, synthesis_system
+            evidence["events"] = bk_events(backend_did, resolved_event_window)
+        structured_findings = investigation_grounding.build_investigation_evidence(
+            evidence, resolved_event_window
         )
         llm["synthesis"] = True
-        llm_output = final_answer
-        timing["synthesis_ms"] = round(synth_ms, 1)
+        final_answer, grounding_trace, synth_timing = _grounded_synthesize(
+            query, structured_findings, model
+        )
+        llm["judge"] = grounding_trace["judge_llm_called"]
+        llm_input = grounding_trace["generation_input"]
+        llm_output = grounding_trace["generation_output"]
+        timing.update(synth_timing)
+        timing["synthesis_ms"] = round(sum(synth_timing.values()), 1)
     else:
         final_answer = "İşlem desteklenmiyor."
     timing["execution_ms"] = round((time.time() - t0) * 1000.0, 2)
@@ -862,6 +992,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         "tool_results": evidence,
         "planner_llm_called": llm["planner"],
         "synthesis_llm_called": llm["synthesis"],
+        "judge_llm_called": llm["judge"],
+        "structured_findings": structured_findings,
+        "grounding_trace": grounding_trace,
+        "event_window": resolved_event_window,
         "llm_input": llm_input,
         "llm_output": llm_output,
         "final_answer": final_answer,
