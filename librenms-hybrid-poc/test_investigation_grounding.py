@@ -108,7 +108,7 @@ class EvidenceBuilderTests(unittest.TestCase):
         self.assertEqual(findings["alert:133:active"]["severity"], "warning")
         self.assertIn("root-cause:unknown", findings)
 
-    def test_parses_only_allowlisted_status_messages_and_builds_chronological_transition(self):
+    def test_builds_chronological_transition_from_allowlisted_api_types(self):
         raw = {
             "device": {"device_id": 1, "hostname": "lab-j9772a-01", "status": 1},
             "ports": [],
@@ -116,16 +116,19 @@ class EvidenceBuilderTests(unittest.TestCase):
             "events": [
                 {
                     "event_id": 107,
+                    "type": "up",
                     "timestamp": "2026-08-28 10:30:00",
                     "message": "Device status changed to Up from check.",
                 },
                 {
                     "event_id": 105,
+                    "type": "alert",
                     "timestamp": "2026-08-28 10:00:00",
-                    "message": "SNMP may be broken; probably Down.",
+                    "message": "Device status changed to Up from check.",
                 },
                 {
                     "event_id": 104,
+                    "type": "down",
                     "timestamp": "2026-08-28 09:00:00",
                     "message": "Device status changed to Down from check.",
                 },
@@ -135,13 +138,116 @@ class EvidenceBuilderTests(unittest.TestCase):
         package = grounding.build_investigation_evidence(raw, self.window)
         findings = {item["id"]: item for item in package["findings"]}
 
+        self.assertIn("event-transition:104:107", findings)
         transition = findings["event-transition:104:107"]
         self.assertEqual((transition["from"], transition["to"]), ("down", "up"))
         self.assertEqual(
             transition["evidence_refs"],
-            ["events[event_id=104].message", "events[event_id=107].message"],
+            ["events[event_id=104].type", "events[event_id=107].type"],
         )
         self.assertFalse(any("105" in key for key in findings))
+
+    def test_single_api_down_event_suppresses_no_transition(self):
+        class CompleteEvents(list):
+            complete = True
+
+        raw = {
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01", "status": 0},
+            "ports": [],
+            "alerts": [],
+            "events": CompleteEvents(
+                [
+                    {
+                        "event_id": 131,
+                        "type": "down",
+                        "timestamp": "2026-08-28 10:10:09",
+                        "message": "Device status changed to Down from snmp check.",
+                    }
+                ]
+            ),
+        }
+
+        package = grounding.build_investigation_evidence(raw, self.window)
+        findings = {item["id"]: item for item in package["findings"]}
+
+        self.assertIn("event:131:device-status", findings)
+        self.assertEqual(findings["event:131:device-status"]["value"], "down")
+        self.assertEqual(
+            findings["event:131:device-status"]["evidence_refs"],
+            ["events[event_id=131].type"],
+        )
+        self.assertNotIn("events:no-recent-transition", findings)
+
+    def test_status_words_in_message_are_ignored_without_status_type(self):
+        class CompleteEvents(list):
+            complete = True
+
+        raw = {
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01", "status": 1},
+            "ports": [],
+            "alerts": [],
+            "events": CompleteEvents(
+                [
+                    {
+                        "event_id": 132,
+                        "type": "alert",
+                        "timestamp": "2026-08-28 10:15:00",
+                        "message": "Device status changed to Down from check.",
+                    }
+                ]
+            ),
+        }
+
+        package = grounding.build_investigation_evidence(raw, self.window)
+        finding_ids = {item["id"] for item in package["findings"]}
+
+        self.assertNotIn("event:132:device-status", finding_ids)
+        self.assertIn("events:no-recent-transition", finding_ids)
+
+    def test_latest_single_status_is_required_when_no_pair_exists(self):
+        raw = {
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01", "status": 0},
+            "ports": [],
+            "alerts": [],
+            "events": [
+                {
+                    "event_id": 131,
+                    "type": "down",
+                    "timestamp": "2026-08-28 10:10:09",
+                    "message": "Device status changed to Down from snmp check.",
+                }
+            ],
+        }
+
+        package = grounding.build_investigation_evidence(raw, self.window)
+
+        self.assertIn(
+            "event:131:device-status",
+            grounding.required_finding_ids(package),
+        )
+
+    def test_single_status_is_rendered_by_deterministic_fallback(self):
+        raw = {
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01", "status": 0},
+            "ports": [],
+            "alerts": [],
+            "events": [
+                {
+                    "event_id": 131,
+                    "type": "down",
+                    "timestamp": "2026-08-28 10:10:09",
+                    "message": "Device status changed to Down from snmp check.",
+                }
+            ],
+        }
+
+        package = grounding.build_investigation_evidence(raw, self.window)
+
+        self.assertIn(
+            "- historical_device_status | event_id=131 | status=down | "
+            "timestamp=2026-08-28T10:10:09+03:00",
+            grounding.format_evidence_fallback(package),
+        )
 
     def test_empty_retrieved_sources_produce_absence_findings(self):
         class CompleteEvents(list):
@@ -239,9 +345,9 @@ class EvidenceBuilderTests(unittest.TestCase):
                 {"severity": "warning"},
             ],
             "events": [
-                {"event_id": 104, "timestamp": "2026-08-28 09:00:00", "message": "Device status changed to Down from check."},
-                {"event_id": "104", "timestamp": "2026-08-28 09:30:00", "message": "Device status changed to Up from check."},
-                {"timestamp": "2026-08-28 10:00:00", "message": "Device status changed to Up from check."},
+                {"event_id": 104, "type": "down", "timestamp": "2026-08-28 09:00:00", "message": "Device status changed to Down from check."},
+                {"event_id": "104", "type": "up", "timestamp": "2026-08-28 09:30:00", "message": "Device status changed to Up from check."},
+                {"type": "up", "timestamp": "2026-08-28 10:00:00", "message": "Device status changed to Up from check."},
             ],
         }
 

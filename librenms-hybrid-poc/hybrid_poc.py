@@ -413,6 +413,8 @@ PLANNING_SCHEMA_GOLD = {
         },
         "device_query": {"type": ["string", "null"]},
         "device_filters": planner_v2.DEVICE_FILTER_SCHEMA,
+        "port_query": {"type": ["string", "null"]},
+        "port_filters": planner_v2.PORT_FILTER_SCHEMA,
         "event_window": planner_v2.EVENT_WINDOW_SCHEMA,
     },
     "required": ["request_type", "intent", "device_query", "device_filters"],
@@ -455,6 +457,17 @@ device_filters rules:
 - null means unconstrained. poe=false only means explicitly non-PoE.
 - Never infer filters from characters inside device_query. A model phrase such as 6400-24G-PoEP remains one identity and all filters stay null.
 
+Port selection rules:
+- port_query and port_filters are only for ports / device_ports.
+- On a ports request, always output port_query plus port_filters with exactly admin_status and oper_status.
+- port_query is the explicit port/interface identifier only, without words such as port or interface. Use null when no single port is named.
+- port_filters.admin_status and port_filters.oper_status are each null, "up", or "down".
+- "down ports" means operationally down: oper_status="down". This includes both administratively-up/link-down and administratively-down ports.
+- A port that is enabled/administratively up but has lost its link means admin_status="up" AND oper_status="down".
+- Disabled/administratively down ports mean admin_status="down".
+- Do not put raw natural-language phrases into port_filters. Translate meaning into these fields.
+- For non-ports routes, omit port_query and port_filters.
+
 event_window rules:
 - Omit event_window for every non-investigation route.
 - For a current investigation with no explicit time expression, use {"mode":"default_24h"}.
@@ -467,10 +480,19 @@ Examples:
 -> {"request_type":"atomic_fact","intent":"device_status","device_query":"6400-24G-PoEP","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
 
 "core switch port 8 ne durumda?"
--> {"request_type":"ports","intent":"device_ports","device_query":"core switch","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+-> {"request_type":"ports","intent":"device_ports","device_query":"core switch","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":"8","port_filters":{"admin_status":null,"oper_status":null}}
 
 "X100 portlarını göster"
--> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":null,"oper_status":null}}
+
+"X100 down portları hangileri?"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":null,"oper_status":"down"}}
+
+"X100 aktif ama bağlantısı düşmüş portları göster"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":"up","oper_status":"down"}}
+
+"X100 disabled portları göster"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":"down","oper_status":null}}
 
 "X100 üzerinde aktif alarm var mı?"
 -> {"request_type":"alerts","intent":"device_alerts","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
@@ -515,7 +537,8 @@ Before output, verify mechanically:
 1. request_type and intent are the matching pair above.
 2. Explicit identity present means device_query is not null.
 3. Non-set route means all four filters are null.
-4. Output only the JSON object."""
+4. Ports route includes structured port_query / port_filters; do not encode port semantics in device_query.
+5. Output only the JSON object."""
 
 _ORCH_ROUTE = {
     "atomic_fact": "atomic",
@@ -541,6 +564,42 @@ def _format_ports_text(hostname, ports):
             f"{(' (' + p['ifAlias'] + ')') if p.get('ifAlias') else ''}"
         )
     return f"{hostname} portları:\n" + "\n".join(lines)
+
+
+def _select_ports(ports, port_query=None, port_filters=None):
+    """Apply planner-produced port constraints without parsing user language."""
+    selected = list(ports or [])
+
+    if isinstance(port_query, str) and port_query.strip():
+        wanted = port_query.strip().casefold()
+
+        def matches_port(port):
+            candidates = (
+                port.get("ifName"),
+                port.get("ifIndex"),
+                port.get("ifDescr"),
+            )
+            return any(
+                str(value).strip().casefold() == wanted
+                for value in candidates
+                if value is not None
+            )
+
+        selected = [port for port in selected if matches_port(port)]
+
+    filters = port_filters if isinstance(port_filters, dict) else {}
+    admin_status = filters.get("admin_status")
+    oper_status = filters.get("oper_status")
+    if admin_status is not None:
+        selected = [
+            port for port in selected if port.get("ifAdminStatus") == admin_status
+        ]
+    if oper_status is not None:
+        selected = [
+            port for port in selected if port.get("ifOperStatus") == oper_status
+        ]
+
+    return selected
 
 
 def _format_alerts_text(hostname, alerts):
@@ -805,6 +864,8 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     intent = plan.get("intent")
     dq = plan.get("device_query")
     device_filters = plan.get("device_filters") if planner_schema == "gold" else None
+    port_query = plan.get("port_query") if planner_schema == "gold" else None
+    port_filters = plan.get("port_filters") if planner_schema == "gold" else None
     event_window_spec = plan.get("event_window") if planner_schema == "gold" else None
     route = _ORCH_ROUTE.get(rt, "unknown")
 
@@ -913,7 +974,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         evidence["ports"] = (
             bk("get_ports", device_id=backend_did) if backend_did is not None else []
         )
-        final_answer = _format_ports_text(hostname, evidence["ports"])
+        selected_ports = _select_ports(
+            evidence["ports"], port_query=port_query, port_filters=port_filters
+        )
+        final_answer = _format_ports_text(hostname, selected_ports)
     elif route == "alerts":
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")

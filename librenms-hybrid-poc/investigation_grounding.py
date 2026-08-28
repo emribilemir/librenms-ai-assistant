@@ -25,10 +25,6 @@ CLAIM_KIND_TYPES = {
     },
 }
 
-_STATUS_EVENT = re.compile(
-    r"^Device status changed to (?P<status>Up|Down)(?: from check)?\.?$",
-    re.IGNORECASE,
-)
 _COUNT_VALUES = {
     "sıfır": 0,
     "bir": 1,
@@ -171,9 +167,9 @@ def _parse_status_events(events, window):
     invalid_count = 0
     seen_event_ids = set()
     for event in events or []:
-        match = _STATUS_EVENT.fullmatch(str(event.get("message") or "").strip())
+        status = str(event.get("type") or "").casefold()
         timestamp = _parse_event_timestamp(event.get("timestamp") or event.get("datetime"))
-        if match is None or timestamp is None or not (start <= timestamp <= end):
+        if status not in ("up", "down") or timestamp is None or not (start <= timestamp <= end):
             continue
         event_id = _positive_int(event.get("event_id"))
         if event_id is None or event_id in seen_event_ids:
@@ -183,7 +179,7 @@ def _parse_status_events(events, window):
         parsed.append(
             {
                 "event_id": event_id,
-                "status": match.group("status").casefold(),
+                "status": status,
                 "timestamp": timestamp,
             }
         )
@@ -380,7 +376,7 @@ def build_investigation_evidence(raw_evidence, event_window):
                 "event_id": event_id,
                 "value": event["status"],
                 "timestamp": event["timestamp"].isoformat(),
-                "evidence_refs": [f"events[event_id={event_id}].message"],
+                "evidence_refs": [f"events[event_id={event_id}].type"],
                 "_sort_timestamp": event["timestamp"],
             }
         )
@@ -398,8 +394,8 @@ def build_investigation_evidence(raw_evidence, event_window):
                     "to_event_id": event["event_id"],
                     "timestamp": event["timestamp"].isoformat(),
                     "evidence_refs": [
-                        f"events[event_id={previous['event_id']}].message",
-                        f"events[event_id={event['event_id']}].message",
+                        f"events[event_id={previous['event_id']}].type",
+                        f"events[event_id={event['event_id']}].type",
                     ],
                     "_sort_timestamp": event["timestamp"],
                 }
@@ -413,9 +409,7 @@ def build_investigation_evidence(raw_evidence, event_window):
     if (
         coverage["events"]["retrieved"]
         and coverage["events"]["complete"]
-        and not any(
-            item["type"] == "historical_status_transition" for item in historical
-        )
+        and not status_events
     ):
         findings.append(
             {
@@ -507,6 +501,10 @@ def required_finding_ids(package):
     transition_id = first_id("historical_status_transition")
     if transition_id is not None:
         required.append(transition_id)
+    else:
+        status_id = first_id("historical_device_status")
+        if status_id is not None:
+            required.append(status_id)
     if package.get("root_cause") is None:
         root_cause_id = first_id("root_cause_unknown")
         if root_cause_id is not None:
@@ -823,6 +821,12 @@ def format_evidence_fallback(package):
                 "- active_alert | "
                 f"alert_id={finding.get('alert_id')} | severity={finding.get('severity')} | "
                 f"name={finding.get('name')}"
+            )
+        elif finding_type == "historical_device_status":
+            lines.append(
+                "- historical_device_status | "
+                f"event_id={finding.get('event_id')} | status={finding.get('value')} | "
+                f"timestamp={finding.get('timestamp')}"
             )
         elif finding_type == "historical_status_transition":
             lines.append(

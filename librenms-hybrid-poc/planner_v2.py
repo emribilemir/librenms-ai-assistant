@@ -24,6 +24,17 @@ DEVICE_FILTER_SCHEMA = {
 
 EMPTY_FILTERS = {"brand": None, "family": None, "port_count": None, "poe": None}
 
+PORT_FILTER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "admin_status": {"type": ["string", "null"], "enum": ["up", "down", None]},
+        "oper_status": {"type": ["string", "null"], "enum": ["up", "down", None]},
+    },
+    "required": ["admin_status", "oper_status"],
+}
+
+EMPTY_PORT_FILTERS = {"admin_status": None, "oper_status": None}
+
 EVENT_WINDOW_SCHEMA = {
     "type": ["object", "null"],
     "properties": {
@@ -106,6 +117,14 @@ def normalize_plan_filters(plan: Dict[str, Any]) -> Dict[str, Any]:
             if key in supplied:
                 filters[key] = supplied[key]
     out["device_filters"] = filters
+    out.setdefault("port_query", None)
+    port_filters = dict(EMPTY_PORT_FILTERS)
+    supplied_port_filters = out.get("port_filters")
+    if isinstance(supplied_port_filters, dict):
+        for key in port_filters:
+            if key in supplied_port_filters:
+                port_filters[key] = supplied_port_filters[key]
+    out["port_filters"] = port_filters
     out.setdefault("event_window", None)
     return out
 
@@ -125,6 +144,8 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
     intent = plan.get("intent")
     device_query = plan.get("device_query")
     filters = plan.get("device_filters")
+    port_query = plan.get("port_query")
+    port_filters = plan.get("port_filters")
     event_window = plan.get("event_window")
 
     if request_type not in REQUEST_TYPES:
@@ -133,6 +154,29 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
         errors.append(f"invalid intent: {intent!r}")
     if device_query is not None and not isinstance(device_query, str):
         errors.append("device_query must be string or null")
+
+    if port_query is not None and not isinstance(port_query, str):
+        errors.append("port_query must be string or null")
+
+    if request_type == "ports":
+        if port_filters is not None and not isinstance(port_filters, dict):
+            errors.append("port_filters must be an object or null")
+        elif isinstance(port_filters, dict):
+            if set(port_filters) != set(EMPTY_PORT_FILTERS):
+                errors.append(
+                    "port_filters must contain exactly: admin_status, oper_status"
+                )
+            for key in EMPTY_PORT_FILTERS:
+                if port_filters.get(key) not in (None, "up", "down"):
+                    errors.append(f"port_filters.{key} must be up, down, or null")
+    elif port_query is not None:
+        errors.append("non-ports route must not contain port constraints: port_query")
+    elif isinstance(port_filters, dict) and any(
+        value is not None for value in port_filters.values()
+    ):
+        errors.append("non-ports route must not contain port constraints: port_filters")
+    elif port_filters is not None and not isinstance(port_filters, dict):
+        errors.append("port_filters must be an object or null")
 
     if not isinstance(filters, dict):
         errors.append("device_filters must be an object")

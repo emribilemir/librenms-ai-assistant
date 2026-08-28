@@ -128,6 +128,7 @@ class _ApiHandler(BaseHTTPRequestHandler):
                         {
                             "event_id": "100",
                             "device_id": "3",
+                            "type": "down",
                             "datetime": "2026-08-26 11:41:36",
                             "message": "Device status changed to Down from check.",
                             "severity": "5",
@@ -149,6 +150,7 @@ class _ApiHandler(BaseHTTPRequestHandler):
                         {
                             "event_id": "101",
                             "device_id": "3",
+                            "type": "up",
                             "datetime": "2026-08-20 12:00:00",
                             "message": "Device status changed to Up from check.",
                             "severity": "1",
@@ -170,6 +172,7 @@ class _ApiHandler(BaseHTTPRequestHandler):
                         {
                             "event_id": str(200 + index),
                             "device_id": "3",
+                            "type": "down",
                             "datetime": "2026-08-22 12:00:00",
                             "message": "Device status changed to Down from check.",
                         }
@@ -191,6 +194,7 @@ class _ApiHandler(BaseHTTPRequestHandler):
                         {
                             "event_id": "220",
                             "device_id": "3",
+                            "type": "up",
                             "datetime": "2026-08-22 11:00:00",
                             "message": "Device status changed to Up from check.",
                         }

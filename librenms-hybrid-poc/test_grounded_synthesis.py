@@ -29,11 +29,13 @@ def evidence_package():
         "events": [
             {
                 "event_id": 107,
+                "type": "up",
                 "timestamp": "2026-08-28 10:30:00",
                 "message": "Device status changed to Up from check.",
             },
             {
                 "event_id": 104,
+                "type": "down",
                 "timestamp": "2026-08-28 09:00:00",
                 "message": "Device status changed to Down from check.",
             },
@@ -329,11 +331,13 @@ class OrchestratorGroundingTests(unittest.TestCase):
                 [
                     {
                         "event_id": 107,
+                        "type": "up",
                         "timestamp": "2026-08-28 10:30:00",
                         "message": "Device status changed to Up from check.",
                     },
                     {
                         "event_id": 104,
+                        "type": "down",
                         "timestamp": "2026-08-28 09:00:00",
                         "message": "Device status changed to Down from check.",
                     },
