@@ -32,6 +32,78 @@ with open(os.path.join(GOLD, "dummy_inventory.json"), encoding="utf-8") as strea
 
 
 class SemanticPlanContractTests(unittest.TestCase):
+    def test_accepts_relative_event_window_on_investigation(self):
+        plan = {
+            "request_type": "investigation",
+            "intent": "investigation",
+            "device_query": "lab-j9772a-01",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+            "event_window": {"mode": "relative", "amount": 7, "unit": "day"},
+        }
+
+        self.assertEqual(planner_v2.validate_plan(plan), (True, []))
+
+    def test_rejects_event_window_on_direct_events_route(self):
+        plan = {
+            "request_type": "events",
+            "intent": "device_events",
+            "device_query": "lab-j9772a-01",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+            "event_window": {"mode": "relative", "amount": 7, "unit": "day"},
+        }
+
+        valid, errors = planner_v2.validate_plan(plan)
+
+        self.assertFalse(valid)
+        self.assertIn("event_window is only valid for investigation routes", errors)
+
+    def test_rejects_invalid_absolute_event_window_shape(self):
+        plan = {
+            "request_type": "historical_investigation",
+            "intent": "historical_status",
+            "device_query": "lab-j9772a-01",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+            "event_window": {"mode": "absolute", "from": "2026-08-20"},
+        }
+
+        valid, errors = planner_v2.validate_plan(plan)
+
+        self.assertFalse(valid)
+        self.assertIn("absolute event_window must contain exactly: mode, from, to", errors)
+
+    def test_rejects_non_iso_absolute_event_window_before_backend_execution(self):
+        plan = {
+            "request_type": "historical_investigation",
+            "intent": "historical_status",
+            "device_query": "lab-j9772a-01",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+            "event_window": {"mode": "absolute", "from": "dün", "to": "bugün"},
+        }
+
+        valid, errors = planner_v2.validate_plan(plan)
+
+        self.assertFalse(valid)
+        self.assertIn("absolute event_window.from must be an ISO date or timezone-aware datetime", errors)
+        self.assertIn("absolute event_window.to must be an ISO date or timezone-aware datetime", errors)
+
+    def test_rejects_absolute_event_window_with_reversed_boundaries(self):
+        plan = {
+            "request_type": "historical_investigation",
+            "intent": "historical_status",
+            "device_query": "lab-j9772a-01",
+            "device_filters": dict(planner_v2.EMPTY_FILTERS),
+            "event_window": {
+                "mode": "absolute",
+                "from": "2026-08-21T12:00:00+03:00",
+                "to": "2026-08-20T12:00:00+03:00",
+            },
+        }
+
+        valid, errors = planner_v2.validate_plan(plan)
+
+        self.assertFalse(valid)
+        self.assertIn("absolute event_window.from must not be after to", errors)
+
     def test_accepts_valid_device_set_status_plan_with_reference(self):
         plan = {
             "request_type": "device_set_status",
