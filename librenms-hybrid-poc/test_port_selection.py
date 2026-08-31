@@ -11,7 +11,7 @@ import hybrid_poc
 import planner_v2
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GOLD = os.path.join(ROOT, "hybrid-gold-v3")
+GOLD = os.path.join(ROOT, "librenms-hybrid-poc", "hybrid-gold-v3")
 
 
 def load_module(name, path):

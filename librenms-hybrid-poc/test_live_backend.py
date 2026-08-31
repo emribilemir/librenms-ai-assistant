@@ -19,7 +19,7 @@ import planner_v2
 
 ROOT = Path(__file__).resolve().parent.parent
 POC = ROOT / "librenms-hybrid-poc"
-GOLD = ROOT / "hybrid-gold-v3"
+GOLD = ROOT / "librenms-hybrid-poc" / "hybrid-gold-v3"
 BACKEND_PATH = POC / "librenms_backend.py"
 
 

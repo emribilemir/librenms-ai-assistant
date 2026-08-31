@@ -37,3 +37,7 @@ holdout-results/
 sut-results/
 v5-results/
 librenms-architecture-v5-first-pass.tar
+
+# Retired evaluation assets
+librenms-prompt-eval/
+holdout_queries_v1.json
