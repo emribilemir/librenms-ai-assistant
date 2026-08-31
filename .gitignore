@@ -22,3 +22,7 @@ venv/
 .vscode/
 *.swp
 *.tmp
+.superpowers/
+*.bak-*
+*.pre-*
+*.zip
