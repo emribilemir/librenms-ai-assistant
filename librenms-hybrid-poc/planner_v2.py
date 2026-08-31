@@ -35,6 +35,42 @@ PORT_FILTER_SCHEMA = {
 
 EMPTY_PORT_FILTERS = {"admin_status": None, "oper_status": None}
 
+DEVICE_FACTS = ("hostname", "model", "uptime", "location", "os")
+PORT_FACTS = ("state", "speed", "description")
+
+EMPTY_EVENT_FILTERS = {
+    "scope": None,
+    "status": None,
+    "port_query": None,
+    "window_minutes": None,
+    "mode": None,
+}
+
+EVENT_FILTER_SCHEMA = {
+    "type": ["object", "null"],
+    "properties": {
+        "scope": {
+            "type": ["string", "null"],
+            "enum": ["device_status", "port_status", None],
+        },
+        "status": {
+            "type": ["string", "null"],
+            "enum": ["up", "down", None],
+        },
+        "port_query": {"type": ["string", "null"]},
+        "window_minutes": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 10080,
+        },
+        "mode": {
+            "type": ["string", "null"],
+            "enum": ["latest", "any", None],
+        },
+    },
+    "required": ["scope", "status", "port_query", "window_minutes", "mode"],
+}
+
 EVENT_WINDOW_SCHEMA = {
     "type": ["object", "null"],
     "properties": {
@@ -51,6 +87,7 @@ EVENT_WINDOW_SCHEMA = {
 
 REQUEST_TYPES = (
     "atomic_fact",
+    "device_fact",
     "ports",
     "alerts",
     "events",
@@ -63,6 +100,7 @@ REQUEST_TYPES = (
 
 INTENTS = (
     "device_status",
+    "device_fact",
     "device_ports",
     "device_alerts",
     "device_events",
@@ -76,6 +114,7 @@ INTENTS = (
 
 ROUTE_TO_INTENT = {
     "atomic_fact": "device_status",
+    "device_fact": "device_fact",
     "ports": "device_ports",
     "alerts": "device_alerts",
     "events": "device_events",
@@ -117,6 +156,7 @@ def normalize_plan_filters(plan: Dict[str, Any]) -> Dict[str, Any]:
             if key in supplied:
                 filters[key] = supplied[key]
     out["device_filters"] = filters
+    out.setdefault("device_fact", None)
     out.setdefault("port_query", None)
     port_filters = dict(EMPTY_PORT_FILTERS)
     supplied_port_filters = out.get("port_filters")
@@ -125,6 +165,16 @@ def normalize_plan_filters(plan: Dict[str, Any]) -> Dict[str, Any]:
             if key in supplied_port_filters:
                 port_filters[key] = supplied_port_filters[key]
     out["port_filters"] = port_filters
+    out.setdefault("port_fact", None)
+
+    event_filters = dict(EMPTY_EVENT_FILTERS)
+    supplied_event_filters = out.get("event_filters")
+    if isinstance(supplied_event_filters, dict):
+        for key in event_filters:
+            if key in supplied_event_filters:
+                event_filters[key] = supplied_event_filters[key]
+    out["event_filters"] = event_filters
+
     out.setdefault("event_window", None)
     return out
 
@@ -144,8 +194,11 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
     intent = plan.get("intent")
     device_query = plan.get("device_query")
     filters = plan.get("device_filters")
+    device_fact = plan.get("device_fact")
     port_query = plan.get("port_query")
     port_filters = plan.get("port_filters")
+    port_fact = plan.get("port_fact")
+    event_filters = plan.get("event_filters")
     event_window = plan.get("event_window")
 
     if request_type not in REQUEST_TYPES:
@@ -154,6 +207,23 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
         errors.append(f"invalid intent: {intent!r}")
     if device_query is not None and not isinstance(device_query, str):
         errors.append("device_query must be string or null")
+
+    if request_type == "device_fact":
+        if device_fact not in DEVICE_FACTS:
+            errors.append(
+                "device_fact route requires one of: "
+                + ", ".join(DEVICE_FACTS)
+            )
+    elif device_fact is not None:
+        errors.append("non-device_fact route must not contain device_fact")
+
+    if request_type == "ports":
+        if port_fact not in (None, *PORT_FACTS):
+            errors.append(
+                "port_fact must be one of: " + ", ".join(PORT_FACTS)
+            )
+    elif port_fact is not None:
+        errors.append("non-ports route must not contain port_fact")
 
     if port_query is not None and not isinstance(port_query, str):
         errors.append("port_query must be string or null")
@@ -177,6 +247,78 @@ def validate_plan(plan: Any) -> Tuple[bool, list[str]]:
         errors.append("non-ports route must not contain port constraints: port_filters")
     elif port_filters is not None and not isinstance(port_filters, dict):
         errors.append("port_filters must be an object or null")
+
+    if event_filters is not None:
+        if not isinstance(event_filters, dict):
+            errors.append("event_filters must be an object or null")
+        else:
+            if set(event_filters) != set(EMPTY_EVENT_FILTERS):
+                errors.append(
+                    "event_filters must contain exactly: "
+                    "scope, status, port_query, window_minutes, mode"
+                )
+            else:
+                scope = event_filters.get("scope")
+                status = event_filters.get("status")
+                event_port_query = event_filters.get("port_query")
+                window_minutes = event_filters.get("window_minutes")
+                event_mode = event_filters.get("mode")
+
+                if scope not in (None, "device_status", "port_status"):
+                    errors.append(
+                        "event_filters.scope must be device_status, "
+                        "port_status, or null"
+                    )
+                if status not in (None, "up", "down"):
+                    errors.append(
+                        "event_filters.status must be up, down, or null"
+                    )
+                if event_port_query is not None and (
+                    not isinstance(event_port_query, str)
+                    or not event_port_query.strip()
+                ):
+                    errors.append(
+                        "event_filters.port_query must be "
+                        "non-empty string or null"
+                    )
+                if window_minutes is not None and (
+                    isinstance(window_minutes, bool)
+                    or not isinstance(window_minutes, int)
+                    or window_minutes < 1
+                    or window_minutes > 10080
+                ):
+                    errors.append(
+                        "event_filters.window_minutes must be "
+                        "an integer from 1 to 10080 or null"
+                    )
+                if event_mode not in (None, "latest", "any"):
+                    errors.append(
+                        "event_filters.mode must be latest, any, or null"
+                    )
+                if scope == "port_status" and not event_port_query:
+                    errors.append(
+                        "port_status event scope requires port_query"
+                    )
+                if scope is None and any(
+                    value is not None
+                    for value in (
+                        status,
+                        event_port_query,
+                        window_minutes,
+                        event_mode,
+                    )
+                ):
+                    errors.append(
+                        "event_filters.scope is required when "
+                        "event constraints are present"
+                    )
+
+            if request_type != "events" and any(
+                value is not None for value in event_filters.values()
+            ):
+                errors.append(
+                    "non-events route must not contain event_filters"
+                )
 
     if not isinstance(filters, dict):
         errors.append("device_filters must be an object")

@@ -1,0 +1,18 @@
+{
+  "task": "EMR-52",
+  "notes": "Run against live SNMPSIM -> LibreNMS -> API pipeline. Direct-read routes must keep synthesis_llm_called=false.",
+  "queries": [
+    {"id": "D1", "query": "lab-j9772a-01'in modeli ne?", "expected_route": "device_fact", "expected_fact": "model"},
+    {"id": "D2", "query": "lab-j9772a-01 ne kadar süredir açık?", "expected_route": "device_fact", "expected_fact": "uptime"},
+    {"id": "D3", "query": "lab-j9772a-01'in location bilgisi ne?", "expected_route": "device_fact", "expected_fact": "location"},
+    {"id": "D4", "query": "lab-j9772a-01 hangi işletim sistemi olarak keşfedilmiş?", "expected_route": "device_fact", "expected_fact": "os"},
+    {"id": "P1", "query": "lab-j9772a-01 port 2'nin hızı ne?", "expected_route": "ports", "expected_fact": "speed", "port_query": "2"},
+    {"id": "P2", "query": "lab-j9772a-01 port 2'nin açıklaması ne?", "expected_route": "ports", "expected_fact": "description", "port_query": "2"},
+    {"id": "P3", "query": "lab-j9772a-01 port 2 ne durumda?", "expected_route": "ports", "expected_fact": "state", "port_query": "2"},
+    {"id": "P4", "query": "lab-j9772a-01 admin açık ama operational down portları göster", "expected_route": "ports", "expected_fact": "state", "port_filters": {"admin_status": "up", "oper_status": "down"}},
+    {"id": "T1", "query": "lab-j9772a-01 en son ne zaman down oldu?", "expected_route": "events", "event_scope": "device_status", "event_status": "down", "mode": "latest"},
+    {"id": "T2", "query": "lab-j9772a-01 son 30 dakikada status değiştirdi mi?", "expected_route": "events", "event_scope": "device_status", "window_minutes": 30, "mode": "any"},
+    {"id": "T3", "query": "lab-j9772a-01 port 2 en son ne zaman down oldu?", "expected_route": "events", "event_scope": "port_status", "event_status": "down", "port_query": "2", "mode": "latest"},
+    {"id": "T4", "query": "lab-j9772a-01 son eventlerini göster", "expected_route": "events", "event_scope": null}
+  ]
+}
