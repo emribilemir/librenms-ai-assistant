@@ -83,7 +83,11 @@ class _ApiHandler(BaseHTTPRequestHandler):
                 {"status": "error", "message": "backend unavailable"},
             )
 
-        if self.path == "/api/v0/devices/3/ports":
+        if self.path == (
+            "/api/v0/devices/3/ports?columns="
+            "port_id%2Cdevice_id%2CifIndex%2CifName%2CifDescr%2C"
+            "ifAdminStatus%2CifOperStatus%2CifAlias%2CifSpeed"
+        ):
             return self._json(
                 200,
                 {
@@ -124,9 +128,75 @@ class _ApiHandler(BaseHTTPRequestHandler):
                         {
                             "event_id": "100",
                             "device_id": "3",
+                            "type": "down",
                             "datetime": "2026-08-26 11:41:36",
                             "message": "Device status changed to Down from check.",
                             "severity": "5",
+                        }
+                    ],
+                    "count": 1,
+                },
+            )
+
+        if self.path == (
+            "/api/v0/logs/eventlog/3?limit=20&sortorder=DESC&"
+            "from=2026-08-20+00%3A00%3A00&to=2026-08-21+00%3A00%3A00"
+        ):
+            return self._json(
+                200,
+                {
+                    "status": "ok",
+                    "logs": [
+                        {
+                            "event_id": "101",
+                            "device_id": "3",
+                            "type": "up",
+                            "datetime": "2026-08-20 12:00:00",
+                            "message": "Device status changed to Up from check.",
+                            "severity": "1",
+                        }
+                    ],
+                    "count": 1,
+                },
+            )
+
+        if self.path == (
+            "/api/v0/logs/eventlog/3?limit=20&sortorder=DESC&"
+            "from=2026-08-22+00%3A00%3A00&to=2026-08-23+00%3A00%3A00"
+        ):
+            return self._json(
+                200,
+                {
+                    "status": "ok",
+                    "logs": [
+                        {
+                            "event_id": str(200 + index),
+                            "device_id": "3",
+                            "type": "down",
+                            "datetime": "2026-08-22 12:00:00",
+                            "message": "Device status changed to Down from check.",
+                        }
+                        for index in range(20)
+                    ],
+                    "count": 20,
+                },
+            )
+
+        if self.path == (
+            "/api/v0/logs/eventlog/3?limit=20&sortorder=DESC&"
+            "from=2026-08-22+00%3A00%3A00&to=2026-08-23+00%3A00%3A00&start=2"
+        ):
+            return self._json(
+                200,
+                {
+                    "status": "ok",
+                    "logs": [
+                        {
+                            "event_id": "220",
+                            "device_id": "3",
+                            "type": "up",
+                            "datetime": "2026-08-22 11:00:00",
+                            "message": "Device status changed to Up from check.",
                         }
                     ],
                     "count": 1,
@@ -164,6 +234,47 @@ class LocalApiServer:
 
 
 class LibreNMSBackendContractTests(unittest.TestCase):
+    def test_windowed_events_paginate_until_the_selected_range_is_complete(self):
+        backend_mod = load_live_backend_module()
+
+        with LocalApiServer() as api:
+            backend = backend_mod.LibreNMSBackend(
+                base_url=api.base_url,
+                token="test-token",
+                timeout=2,
+            )
+            events = backend.get_events(
+                device_id=3,
+                from_time="2026-08-22 00:00:00",
+                to_time="2026-08-23 00:00:00",
+            )
+
+        self.assertEqual(len(events), 21)
+        self.assertTrue(events.complete)
+        self.assertEqual(_ApiHandler.requests[-1]["path"].split("&")[-1], "start=2")
+
+    def test_event_window_is_forwarded_as_librenms_from_and_to_parameters(self):
+        backend_mod = load_live_backend_module()
+
+        with LocalApiServer() as api:
+            backend = backend_mod.LibreNMSBackend(
+                base_url=api.base_url,
+                token="test-token",
+                timeout=2,
+            )
+            events = backend.get_events(
+                device_id=3,
+                from_time="2026-08-20 00:00:00",
+                to_time="2026-08-21 00:00:00",
+            )
+
+        self.assertEqual(events[0]["event_id"], 101)
+        self.assertEqual(
+            _ApiHandler.requests[-1]["path"],
+            "/api/v0/logs/eventlog/3?limit=20&sortorder=DESC&"
+            "from=2026-08-20+00%3A00%3A00&to=2026-08-21+00%3A00%3A00",
+        )
+
     def test_live_backend_uses_auth_header_and_normalizes_read_only_results(self):
         backend_mod = load_live_backend_module()
 
@@ -239,8 +350,16 @@ class BackendIdentityRegressionTests(unittest.TestCase):
         def get_alerts(self, *, device_id):
             return self._record("get_alerts", {"device_id": device_id}, [])
 
-        def get_events(self, *, device_id):
-            return self._record("get_events", {"device_id": device_id}, [])
+        def get_events(self, *, device_id, from_time=None, to_time=None):
+            return self._record(
+                "get_events",
+                {
+                    "device_id": device_id,
+                    "from_time": from_time,
+                    "to_time": to_time,
+                },
+                [],
+            )
 
         def trace(self):
             return list(self.calls)

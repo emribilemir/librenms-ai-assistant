@@ -8,8 +8,23 @@ import urllib.parse
 import urllib.request
 
 
+class EventRecords(list):
+    """Event rows plus whether the selected API window was fully retrieved."""
+
+    def __init__(self, values=(), *, complete):
+        super().__init__(values)
+        self.complete = complete
+
+
 class LibreNMSBackend:
-    def __init__(self, base_url=None, token=None, timeout=10, event_limit=20):
+    def __init__(
+        self,
+        base_url=None,
+        token=None,
+        timeout=10,
+        event_limit=20,
+        event_evidence_cap=200,
+    ):
         self.base_url = (
             base_url
             or os.environ.get("LIBRENMS_BASE_URL")
@@ -22,6 +37,7 @@ class LibreNMSBackend:
             )
         self.timeout = timeout
         self.event_limit = event_limit
+        self.event_evidence_cap = event_evidence_cap
         self.calls = []
 
     def reset_trace(self):
@@ -121,7 +137,15 @@ class LibreNMSBackend:
 
     def get_ports(self, *, device_id):
         ref = urllib.parse.quote(str(device_id), safe="")
-        payload = self._get(f"/devices/{ref}/ports")
+        payload = self._get(
+            f"/devices/{ref}/ports",
+            {
+                "columns": (
+                    "port_id,device_id,ifIndex,ifName,ifDescr,"
+                    "ifAdminStatus,ifOperStatus,ifAlias,ifSpeed"
+                )
+            },
+        )
         result = (payload or {}).get("ports") or []
         return self._record("get_ports", {"device_id": device_id}, result)
 
@@ -135,14 +159,40 @@ class LibreNMSBackend:
         ]
         return self._record("get_alerts", {"device_id": device_id}, result)
 
-    def get_events(self, *, device_id):
+    def get_events(self, *, device_id, from_time=None, to_time=None):
         ref = urllib.parse.quote(str(device_id), safe="")
-        payload = self._get(
-            f"/logs/eventlog/{ref}",
-            {"limit": self.event_limit, "sortorder": "DESC"},
+        base_params = {"limit": self.event_limit, "sortorder": "DESC"}
+        if from_time is not None:
+            base_params["from"] = from_time
+        if to_time is not None:
+            base_params["to"] = to_time
+
+        windowed = from_time is not None or to_time is not None
+        collected = []
+        page = 1
+        complete = False
+        while True:
+            params = dict(base_params)
+            if page > 1:
+                params["start"] = page
+            payload = self._get(f"/logs/eventlog/{ref}", params)
+            rows = (payload or {}).get("logs") or []
+            available = self.event_evidence_cap - len(collected)
+            collected.extend(rows[:available])
+            if len(rows) < self.event_limit:
+                complete = True
+                break
+            if not windowed or len(collected) >= self.event_evidence_cap:
+                break
+            page += 1
+
+        result = EventRecords(
+            [self._normalize_event(event) for event in collected],
+            complete=complete,
         )
-        result = [
-            self._normalize_event(event)
-            for event in ((payload or {}).get("logs") or [])
-        ]
-        return self._record("get_events", {"device_id": device_id}, result)
+        args = {"device_id": device_id}
+        if from_time is not None:
+            args["from_time"] = from_time
+        if to_time is not None:
+            args["to_time"] = to_time
+        return self._record("get_events", args, result)

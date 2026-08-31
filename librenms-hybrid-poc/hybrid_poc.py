@@ -27,15 +27,20 @@ modify the production Modelfile or evaluation suite.
 """
 
 import argparse
+from datetime import datetime
+import inspect
 import json
 import os
 import re
 import sys
 import time
 import urllib.request
+from zoneinfo import ZoneInfo
 
 import resolver
 import planner_v2
+import utility_facts
+import investigation_grounding
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -174,6 +179,33 @@ def ollama_chat(model, messages, schema=None, temperature=0.0, think=False):
         body = json.loads(resp.read().decode("utf-8"))
     elapsed_ms = (time.time() - t0) * 1000.0
     content = (body.get("message") or {}).get("content", "") or ""
+
+    if os.getenv("OLLAMA_TIMING_DEBUG") == "1":
+        system_text = str(
+            (messages[0] if messages else {}).get("content", "")
+        ).lower()
+
+        if "claim-entailment judge" in system_text:
+            role = "judge"
+        elif "planner" in system_text:
+            role = "planner"
+        elif "finding" in system_text or "grounded" in system_text:
+            role = "generator"
+        else:
+            role = "llm"
+
+        debug = {
+            "role": role,
+            "prompt_tokens": body.get("prompt_eval_count"),
+            "output_tokens": body.get("eval_count"),
+            "prompt_eval_ms": round((body.get("prompt_eval_duration") or 0) / 1_000_000, 2),
+            "decode_ms": round((body.get("eval_duration") or 0) / 1_000_000, 2),
+            "load_ms": round((body.get("load_duration") or 0) / 1_000_000, 2),
+            "ollama_total_ms": round((body.get("total_duration") or 0) / 1_000_000, 2),
+            "wall_ms": round(elapsed_ms, 2),
+        }
+        print("OLLAMA_TIMING " + json.dumps(debug, ensure_ascii=False), file=sys.stderr)
+
     return content, body.get("done_reason"), elapsed_ms
 
 
@@ -382,6 +414,7 @@ PLANNING_SCHEMA_GOLD = {
             "type": "string",
             "enum": [
                 "atomic_fact",
+                "device_fact",
                 "ports",
                 "alerts",
                 "events",
@@ -396,6 +429,7 @@ PLANNING_SCHEMA_GOLD = {
             "type": "string",
             "enum": [
                 "device_status",
+                "device_fact",
                 "device_ports",
                 "device_alerts",
                 "device_events",
@@ -409,6 +443,18 @@ PLANNING_SCHEMA_GOLD = {
         },
         "device_query": {"type": ["string", "null"]},
         "device_filters": planner_v2.DEVICE_FILTER_SCHEMA,
+        "device_fact": {
+            "type": ["string", "null"],
+            "enum": [*planner_v2.DEVICE_FACTS, None],
+        },
+        "port_query": {"type": ["string", "null"]},
+        "port_filters": planner_v2.PORT_FILTER_SCHEMA,
+        "port_fact": {
+            "type": ["string", "null"],
+            "enum": [*planner_v2.PORT_FACTS, None],
+        },
+        "event_filters": planner_v2.EVENT_FILTER_SCHEMA,
+        "event_window": planner_v2.EVENT_WINDOW_SCHEMA,
     },
     "required": ["request_type", "intent", "device_query", "device_filters"],
 }
@@ -417,13 +463,14 @@ PLANNING_SYSTEM_GOLD = """You are the semantic planner for a read-only network m
 
 Choose exactly one request_type and its matching intent:
 - atomic_fact / device_status: current status of ONE device reference, including a bare device-like token.
+- device_fact / device_fact: direct current device metadata such as hostname/sysName, model/hardware, uptime, location, or discovered OS/version.
 - device_set_status / device_set_status: current status of a plural group or set of devices.
 - device_set / device_set: list/show a device group; no current-status question.
-- ports / device_ports: directly retrieve port state.
+- ports / device_ports: directly retrieve port state or a direct port fact such as speed or description.
 - alerts / device_alerts: directly retrieve active alerts.
-- events / device_events: directly retrieve events or logs.
+- events / device_events: directly retrieve events/logs, including simple operational transition questions such as when a device or port became up/down. Use this route when no diagnosis or causal explanation is requested.
 - investigation / investigation: cause, reason, diagnosis, explanation, effect, or a reported conflict with the simple status bit. Investigation wins over ports/alerts/events.
-- historical_investigation / historical_status: any question about the past.
+- historical_investigation / historical_status: a past-looking question that asks for cause, reason, diagnosis, explanation, correlation, or multi-source investigation. A simple "when did it go down?" or "was there a status change?" question is events / device_events.
 - unsupported / unsupported: only an explicit write or change request such as reboot, restart, reset, configure, change, or delete.
 
 Identity rules:
@@ -445,20 +492,91 @@ Plurality rules:
 
 device_filters rules:
 - Every output contains exactly brand, family, port_count, and poe.
-- For atomic_fact, ports, alerts, events, investigation, historical_investigation, and unsupported, every filter is null without exception.
+- For atomic_fact, device_fact, ports, alerts, events, investigation, historical_investigation, and unsupported, every filter is null without exception.
 - For device_set and device_set_status, fill filters only when the user explicitly describes a feature/family group rather than naming a model identity.
 - null means unconstrained. poe=false only means explicitly non-PoE.
 - Never infer filters from characters inside device_query. A model phrase such as 6400-24G-PoEP remains one identity and all filters stay null.
+
+Device fact rules:
+- device_fact is only for device_fact / device_fact.
+- Allowed values are "hostname", "model", "uptime", "location", and "os".
+- Current up/down status is NOT device_fact; keep it atomic_fact / device_status.
+- Do not infer or synthesize a missing value. The backend owns the fact.
+
+Port selection rules:
+- port_query, port_filters, and port_fact are only for ports / device_ports.
+- On a ports request, always output port_query plus port_filters with exactly admin_status and oper_status, plus port_fact.
+- port_fact is "state", "speed", or "description".
+- Use port_fact="state" for general port state/list/admin/oper questions.
+- Use port_fact="speed" only when speed is explicitly requested.
+- Use port_fact="description" for ifAlias/description/purpose-style direct questions.
+- port_query is the explicit port/interface identifier only, without words such as port or interface. Use null when no single port is named.
+- port_filters.admin_status and port_filters.oper_status are each null, "up", or "down".
+- "down ports" means operationally down: oper_status="down". This includes both administratively-up/link-down and administratively-down ports.
+- A port that is enabled/administratively up but has lost its link means admin_status="up" AND oper_status="down".
+- Disabled/administratively down ports mean admin_status="down".
+- Do not put raw natural-language phrases into port_filters. Translate meaning into these fields.
+- For non-ports routes, omit port_query, port_filters, and port_fact.
+
+event_filters rules:
+- event_filters are only for events / device_events.
+- For a normal event/log listing with no structured status-transition question, omit event_filters.
+- For a DEVICE up/down transition question, output event_filters with exactly:
+  scope="device_status", status="up|down|null", port_query=null, window_minutes=<integer|null>, mode="latest|any".
+- For a PORT operational transition question, output event_filters with exactly:
+  scope="port_status", status="up|down|null", port_query="<explicit port id>", window_minutes=<integer|null>, mode="latest|any".
+- "ne zaman down oldu?" means mode="latest", status="down".
+- "son 30 dakikada status değişikliği var mı?" means mode="any", window_minutes=30, and the appropriate scope.
+- event_filters.port_query contains only the explicit port/interface identifier.
+- Do not calculate timestamps in the planner. window_minutes is a relative duration; the deterministic layer anchors it.
+- Current state and historical transition are different facts. Never answer a historical transition question from current state.
+
+event_window rules:
+- Omit event_window for every non-investigation route.
+- For a current investigation with no explicit time expression, use {"mode":"default_24h"}.
+- For "son N saat/gün/hafta", use {"mode":"relative","amount":N,"unit":"hour|day|week"}.
+- For an explicit date or interval, use {"mode":"absolute","from":"ISO date or datetime","to":"ISO date or datetime"}.
+- Never calculate relative timestamps; the deterministic orchestrator anchors them to request time.
 
 Examples:
 "6400-24G-PoEP up mı?"
 -> {"request_type":"atomic_fact","intent":"device_status","device_query":"6400-24G-PoEP","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
 
 "core switch port 8 ne durumda?"
--> {"request_type":"ports","intent":"device_ports","device_query":"core switch","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+-> {"request_type":"ports","intent":"device_ports","device_query":"core switch","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":"8","port_filters":{"admin_status":null,"oper_status":null}}
 
 "X100 portlarını göster"
--> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":null,"oper_status":null}}
+
+"X100 down portları hangileri?"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":null,"oper_status":"down"}}
+
+"X100 aktif ama bağlantısı düşmüş portları göster"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":"up","oper_status":"down"}}
+
+"X100 disabled portları göster"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":null,"port_filters":{"admin_status":"down","oper_status":null}}
+
+"X100'ın modeli ne?"
+-> {"request_type":"device_fact","intent":"device_fact","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"device_fact":"model"}
+
+"X100 ne kadar süredir açık?"
+-> {"request_type":"device_fact","intent":"device_fact","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"device_fact":"uptime"}
+
+"X100'ın location bilgisi ne?"
+-> {"request_type":"device_fact","intent":"device_fact","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"device_fact":"location"}
+
+"X100 port 2'nin hızı ne?"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":"2","port_filters":{"admin_status":null,"oper_status":null},"port_fact":"speed"}
+
+"X100 port 2'nin açıklaması ne?"
+-> {"request_type":"ports","intent":"device_ports","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"port_query":"2","port_filters":{"admin_status":null,"oper_status":null},"port_fact":"description"}
+
+"X100 port 2 ne zaman down oldu?"
+-> {"request_type":"events","intent":"device_events","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_filters":{"scope":"port_status","status":"down","port_query":"2","window_minutes":null,"mode":"latest"}}
+
+"X100 son 30 dakikada down olmuş mu?"
+-> {"request_type":"events","intent":"device_events","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_filters":{"scope":"device_status","status":"down","port_query":null,"window_minutes":30,"mode":"any"}}
 
 "X100 üzerinde aktif alarm var mı?"
 -> {"request_type":"alerts","intent":"device_alerts","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
@@ -470,7 +588,13 @@ Examples:
 -> {"request_type":"events","intent":"device_events","device_query":"X100","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
 
 "ZZ999 neden problem yaşıyor?"
--> {"request_type":"investigation","intent":"investigation","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
+-> {"request_type":"investigation","intent":"investigation","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_window":{"mode":"default_24h"}}
+
+"ZZ999 son 7 günde neden problem yaşadı?"
+-> {"request_type":"historical_investigation","intent":"historical_status","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_window":{"mode":"relative","amount":7,"unit":"day"}}
+
+"ZZ999 20 Ağustos 2026 tarihinde neden problem yaşadı?"
+-> {"request_type":"historical_investigation","intent":"historical_status","device_query":"ZZ999","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null},"event_window":{"mode":"absolute","from":"2026-08-20","to":"2026-08-20"}}
 
 "J4850A cihazı açık mı?"
 -> {"request_type":"atomic_fact","intent":"device_status","device_query":"J4850A","device_filters":{"brand":null,"family":null,"port_count":null,"poe":null}}
@@ -497,10 +621,12 @@ Before output, verify mechanically:
 1. request_type and intent are the matching pair above.
 2. Explicit identity present means device_query is not null.
 3. Non-set route means all four filters are null.
-4. Output only the JSON object."""
+4. Ports route includes structured port_query / port_filters; do not encode port semantics in device_query.
+5. Output only the JSON object."""
 
 _ORCH_ROUTE = {
     "atomic_fact": "atomic",
+    "device_fact": "device_fact",
     "ports": "ports",
     "alerts": "alerts",
     "events": "events",
@@ -523,6 +649,42 @@ def _format_ports_text(hostname, ports):
             f"{(' (' + p['ifAlias'] + ')') if p.get('ifAlias') else ''}"
         )
     return f"{hostname} portları:\n" + "\n".join(lines)
+
+
+def _select_ports(ports, port_query=None, port_filters=None):
+    """Apply planner-produced port constraints without parsing user language."""
+    selected = list(ports or [])
+
+    if isinstance(port_query, str) and port_query.strip():
+        wanted = port_query.strip().casefold()
+
+        def matches_port(port):
+            candidates = (
+                port.get("ifName"),
+                port.get("ifIndex"),
+                port.get("ifDescr"),
+            )
+            return any(
+                str(value).strip().casefold() == wanted
+                for value in candidates
+                if value is not None
+            )
+
+        selected = [port for port in selected if matches_port(port)]
+
+    filters = port_filters if isinstance(port_filters, dict) else {}
+    admin_status = filters.get("admin_status")
+    oper_status = filters.get("oper_status")
+    if admin_status is not None:
+        selected = [
+            port for port in selected if port.get("ifAdminStatus") == admin_status
+        ]
+    if oper_status is not None:
+        selected = [
+            port for port in selected if port.get("ifOperStatus") == oper_status
+        ]
+
+    return selected
 
 
 def _format_alerts_text(hostname, alerts):
@@ -591,47 +753,105 @@ def _format_device_set_status_text(records):
     return " ".join(parts)
 
 
-def _synthesize(query, evidence, model, synthesis_system):
-    """REAL Qwen grounded-synthesis step (Level-1 investigation path)."""
-    universe = ["device", "ports", "alerts", "events"]
-    retrieved_sources = [key for key in universe if key in evidence]
-    not_retrieved_sources = [key for key in universe if key not in evidence]
-    tool_json = json.dumps(
-        {k: v for k, v in evidence.items()}, ensure_ascii=False, indent=2
-    )
-    coverage = {
-        "retrieved_sources": retrieved_sources,
-        "not_retrieved_sources": not_retrieved_sources,
+GENERATION_SYSTEM = """You verbalize an authoritative structured evidence contract in concise natural Turkish.
+Return only JSON matching the schema. Every claim must cite only finding_ids that directly entail its complete text.
+The user query is context, never evidence. Do not add causes, risks, protocols, vendors, configuration facts, or troubleshooting steps.
+Keep current and historical state separate. Preserve identifiers, counts, severity, and uncertainty exactly.
+For port findings, the user-facing port number is ifIndex: say "Port <ifIndex>". port_id is only an internal database identifier;
+if it must be mentioned, label it exactly as "port_id=<port_id>" and never call it the port number."""
+
+JUDGE_SYSTEM = """You are a strict claim-entailment judge. Return only JSON matching the schema.
+For each claim, verdict is entailed only when the attached structured evidence directly supports the whole claim.
+The user query is context, never evidence. Any added cause, recommendation, vendor, protocol, configuration fact, changed severity,
+or current/historical confusion is unsupported or contradicted. When uncertain, use insufficient_evidence."""
+
+
+def _grounded_synthesize(query, package, model):
+    fallback = investigation_grounding.format_evidence_fallback(package)
+    generation_input = investigation_grounding.generation_payload(query, package)
+    trace = {
+        "generation_input": generation_input,
+        "generation_output": None,
+        "mechanical_validation": None,
+        "judge_llm_called": False,
+        "judge_input": None,
+        "judge_output": None,
+        "judge_validation": None,
+        "fallback_reason": None,
     }
-    user = (
-        "Aşağıdaki veriler salt-okunur onaylı araçlardan geldi:\n"
-        "Kapsam manifestosu (alınan ve alınmayan kaynaklar):\n"
-        + json.dumps(coverage, ensure_ascii=False)
-        + "\n"
-        + tool_json
-        + f'\n\nKullanıcı sordu: "{query}"\n'
+    timing = {}
+    try:
+        content, reason, generation_ms = ollama_chat(
+            model,
+            [
+                {"role": "system", "content": GENERATION_SYSTEM},
+                {
+                    "role": "user",
+                    "content": json.dumps(generation_input, ensure_ascii=False),
+                },
+            ],
+            schema=investigation_grounding.generation_schema(package),
+            temperature=0.0,
+            think=False,
+        )
+        timing["generation_ms"] = generation_ms
+    except Exception as exc:
+        trace["fallback_reason"] = "generation_error"
+        trace["generation_error"] = str(exc)
+        return fallback, trace, timing
+
+    generation = parse_json_obj(content)
+    trace["generation_output"] = generation
+    errors = investigation_grounding.validate_generation(generation, package)
+    trace["mechanical_validation"] = {"valid": not errors, "errors": errors}
+    if errors:
+        trace["fallback_reason"] = "mechanical_validation_failed"
+        return fallback, trace, timing
+
+    judge_input = investigation_grounding.judge_payload(query, generation, package)
+    trace["judge_input"] = judge_input
+    trace["judge_llm_called"] = True
+    try:
+        judge_content, judge_reason, judge_ms = ollama_chat(
+            model,
+            [
+                {"role": "system", "content": JUDGE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": json.dumps(judge_input, ensure_ascii=False),
+                },
+            ],
+            schema=investigation_grounding.judge_schema(len(generation["claims"])),
+            temperature=0.0,
+            think=False,
+        )
+        timing["judge_ms"] = judge_ms
+    except Exception as exc:
+        trace["fallback_reason"] = "judge_error"
+        trace["judge_error"] = str(exc)
+        return fallback, trace, timing
+
+    judgement = parse_json_obj(judge_content)
+    trace["judge_output"] = judgement
+    judge_errors = investigation_grounding.validate_judgement(
+        judgement, len(generation["claims"])
     )
-    content, reason, ms = ollama_chat(
-        model,
-        [
-            {"role": "system", "content": synthesis_system},
-            {"role": "user", "content": user},
-        ],
-        schema=None,
-        temperature=0.0,
-        think=False,
-    )
-    return content, {
-        "query": query,
-        "evidence": {k: v for k, v in evidence.items()},
-        "coverage": coverage,
-        "system_prompt": synthesis_system,
-    }, ms
+    trace["judge_validation"] = {"valid": not judge_errors, "errors": judge_errors}
+    if judge_errors:
+        trace["fallback_reason"] = "judge_invalid_output"
+        return fallback, trace, timing
+    if any(
+        verdict["verdict"] != "entailed"
+        for verdict in judgement["verdicts"]
+    ):
+        trace["fallback_reason"] = "judge_rejected_claims"
+        return fallback, trace, timing
+    return " ".join(claim["text"].strip() for claim in generation["claims"]), trace, timing
 
 
 def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
                 planner_schema="poc", resolver_module=None,
-                synthesis_system=None):
+                synthesis_system=None, request_time=None):
     """Run the real hybrid pipeline for one user query and return a full trace.
 
     Args:
@@ -641,8 +861,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         model: Ollama model name (default librenms-qwen).
         planner_schema: 'poc' (original taxonomy) or 'gold' (contract taxonomy).
         resolver_module: deterministic resolver module (defaults to the PoC resolver).
-        synthesis_system: system prompt for the Qwen synthesis step
-            (defaults to the production baseline system prompt).
+        synthesis_system: deprecated compatibility argument; grounded generation
+            and judge use their dedicated fixed system prompts.
+        request_time: optional timezone-aware timestamp used to resolve relative
+            investigation event windows exactly once per request.
 
     Returns a dict with route in the gold-compatible vocabulary:
         atomic | ports | alerts | events | device_set | device_set_status | investigation |
@@ -650,7 +872,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     plus planner/synthesis LLM flags kept separate.
     """
     wall0 = time.time()
-    llm = {"planner": False, "synthesis": False}
+    llm = {"planner": False, "synthesis": False, "judge": False}
     timing = {}
     if inventory is None:
         inventory = INVENTORY
@@ -658,6 +880,8 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         resolver_module = resolver
     if synthesis_system is None:
         synthesis_system = PRODUCTION_SYSTEM
+    if request_time is None:
+        request_time = datetime.now(ZoneInfo("Europe/Istanbul"))
 
     if planner_schema == "gold":
         schema, system = PLANNING_SCHEMA_GOLD, PLANNING_SYSTEM_GOLD
@@ -706,6 +930,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
             "tool_results": {},
             "planner_llm_called": llm["planner"],
             "synthesis_llm_called": llm["synthesis"],
+            "judge_llm_called": llm["judge"],
+            "structured_findings": None,
+            "grounding_trace": None,
+            "event_window": None,
             "llm_input": None,
             "llm_output": None,
             "final_answer": None,
@@ -721,6 +949,12 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     intent = plan.get("intent")
     dq = plan.get("device_query")
     device_filters = plan.get("device_filters") if planner_schema == "gold" else None
+    device_fact = plan.get("device_fact") if planner_schema == "gold" else None
+    port_query = plan.get("port_query") if planner_schema == "gold" else None
+    port_filters = plan.get("port_filters") if planner_schema == "gold" else None
+    port_fact = plan.get("port_fact") if planner_schema == "gold" else None
+    event_filters = plan.get("event_filters") if planner_schema == "gold" else None
+    event_window_spec = plan.get("event_window") if planner_schema == "gold" else None
     route = _ORCH_ROUTE.get(rt, "unknown")
 
     # 2) deterministic resolution
@@ -752,12 +986,37 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     final_answer = None
     llm_input = None
     llm_output = None
+    structured_findings = None
+    grounding_trace = None
+    resolved_event_window = None
     device = res.get("device") if isinstance(res, dict) else None
     hostname = device.get("hostname") if device else None
     def bk(fn, **kw):
         if backend is None:
             return None
         return getattr(backend, fn)(**kw)
+
+    def bk_events(device_id, window=None):
+        if backend is None:
+            return None
+        method = getattr(backend, "get_events")
+        kwargs = {"device_id": device_id}
+        if window is not None:
+            parameters = list(inspect.signature(method).parameters.values())
+            parameter_names = {parameter.name for parameter in parameters}
+            supports_window = (
+                any(
+                    parameter.kind == inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                )
+                or {"from_time", "to_time"}.issubset(parameter_names)
+            )
+            if not supports_window:
+                return None
+            kwargs.update(
+                investigation_grounding.event_window_backend_args(window)
+            )
+        return method(**kwargs)
 
     if route == "unsupported":
         final_answer = (
@@ -797,13 +1056,27 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         evidence["device"] = ev
         status = ev.get("status") if isinstance(ev, dict) else None
         final_answer = resolver_module.format_atomic(hostname, status)
+    elif route == "device_fact":
+        evidence["device"] = bk("get_device", hostname=hostname)
+        final_answer = utility_facts.format_device_fact(
+            hostname, evidence["device"], device_fact
+        )
     elif route == "ports":
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
         evidence["ports"] = (
             bk("get_ports", device_id=backend_did) if backend_did is not None else []
         )
-        final_answer = _format_ports_text(hostname, evidence["ports"])
+        selected_ports = _select_ports(
+            evidence["ports"], port_query=port_query, port_filters=port_filters
+        )
+        if port_fact in ("speed", "description"):
+            final_answer = utility_facts.format_ports_fact(
+                hostname, selected_ports, port_fact
+            )
+        else:
+            # Preserve the existing EMR-46 state/list formatter byte-for-byte.
+            final_answer = _format_ports_text(hostname, selected_ports)
     elif route == "alerts":
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
@@ -814,39 +1087,132 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     elif route == "events":
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
-        evidence["events"] = (
-            bk("get_events", device_id=backend_did) if backend_did is not None else []
+
+        filters = (
+            event_filters
+            if isinstance(event_filters, dict)
+            else dict(utility_facts.EMPTY_EVENT_FILTERS)
         )
-        final_answer = _format_events_text(hostname, evidence["events"])
+        structured_event_query = any(
+            value is not None for value in filters.values()
+        )
+
+        if not structured_event_query:
+            evidence["events"] = (
+                bk_events(backend_did) if backend_did is not None else []
+            )
+            final_answer = _format_events_text(hostname, evidence["events"])
+        else:
+            selected_port = None
+
+            if filters.get("scope") == "port_status":
+                evidence["ports"] = (
+                    bk("get_ports", device_id=backend_did)
+                    if backend_did is not None
+                    else []
+                )
+                matched_ports = _select_ports(
+                    evidence["ports"],
+                    port_query=filters.get("port_query"),
+                    port_filters=None,
+                )
+                if len(matched_ports) != 1:
+                    final_answer = (
+                        f"{hostname} için belirtilen port "
+                        "tekil olarak çözülemedi."
+                    )
+                else:
+                    selected_port = matched_ports[0]
+
+            if final_answer is None:
+                now_epoch = (
+                    request_time.timestamp()
+                    if request_time is not None
+                    else None
+                )
+                time_args = utility_facts.event_time_args(
+                    filters.get("window_minutes"),
+                    now_epoch=now_epoch,
+                )
+                evidence["events"] = (
+                    bk(
+                        "get_events",
+                        device_id=backend_did,
+                        **time_args,
+                    )
+                    if backend_did is not None
+                    else []
+                )
+
+                matching_events = utility_facts.select_event_facts(
+                    evidence["events"],
+                    scope=filters.get("scope"),
+                    status=filters.get("status"),
+                    port_id=(
+                        selected_port.get("port_id")
+                        if selected_port is not None
+                        else None
+                    ),
+                )
+
+                if filters.get("mode") == "latest":
+                    matching_events = matching_events[:1]
+
+                final_answer = utility_facts.format_event_fact(
+                    hostname,
+                    matching_events,
+                    filters,
+                    port=selected_port,
+                )
     elif route == "historical_investigation":
+        resolved_event_window = investigation_grounding.resolve_event_window(
+            event_window_spec, request_time
+        )
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
         evidence["events"] = (
-            bk("get_events", device_id=backend_did) if backend_did is not None else []
+            bk_events(backend_did, resolved_event_window)
+            if backend_did is not None
+            else None
         )
-        final_answer, llm_input, synth_ms = _synthesize(
-            query, evidence, model, synthesis_system
+        structured_findings = investigation_grounding.build_investigation_evidence(
+            evidence, resolved_event_window
         )
         llm["synthesis"] = True
-        llm_output = final_answer
-        timing["synthesis_ms"] = round(synth_ms, 1)
+        final_answer, grounding_trace, synth_timing = _grounded_synthesize(
+            query, structured_findings, model
+        )
+        llm["judge"] = grounding_trace["judge_llm_called"]
+        llm_input = grounding_trace["generation_input"]
+        llm_output = grounding_trace["generation_output"]
+        timing.update(synth_timing)
+        timing["synthesis_ms"] = round(sum(synth_timing.values()), 1)
     elif route == "investigation":
+        resolved_event_window = investigation_grounding.resolve_event_window(
+            event_window_spec, request_time
+        )
         evidence["device"] = bk("get_device", hostname=hostname)
         backend_did = (evidence["device"] or {}).get("device_id")
         if backend_did is None:
-            evidence["ports"] = []
-            evidence["alerts"] = []
-            evidence["events"] = []
+            evidence["ports"] = None
+            evidence["alerts"] = None
+            evidence["events"] = None
         else:
             evidence["ports"] = bk("get_ports", device_id=backend_did)
             evidence["alerts"] = bk("get_alerts", device_id=backend_did)
-            evidence["events"] = bk("get_events", device_id=backend_did)
-        final_answer, llm_input, synth_ms = _synthesize(
-            query, evidence, model, synthesis_system
+            evidence["events"] = bk_events(backend_did, resolved_event_window)
+        structured_findings = investigation_grounding.build_investigation_evidence(
+            evidence, resolved_event_window
         )
         llm["synthesis"] = True
-        llm_output = final_answer
-        timing["synthesis_ms"] = round(synth_ms, 1)
+        final_answer, grounding_trace, synth_timing = _grounded_synthesize(
+            query, structured_findings, model
+        )
+        llm["judge"] = grounding_trace["judge_llm_called"]
+        llm_input = grounding_trace["generation_input"]
+        llm_output = grounding_trace["generation_output"]
+        timing.update(synth_timing)
+        timing["synthesis_ms"] = round(sum(synth_timing.values()), 1)
     else:
         final_answer = "İşlem desteklenmiyor."
     timing["execution_ms"] = round((time.time() - t0) * 1000.0, 2)
@@ -862,6 +1228,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         "tool_results": evidence,
         "planner_llm_called": llm["planner"],
         "synthesis_llm_called": llm["synthesis"],
+        "judge_llm_called": llm["judge"],
+        "structured_findings": structured_findings,
+        "grounding_trace": grounding_trace,
+        "event_window": resolved_event_window,
         "llm_input": llm_input,
         "llm_output": llm_output,
         "final_answer": final_answer,
