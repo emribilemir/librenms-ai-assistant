@@ -26,3 +26,14 @@ venv/
 *.bak-*
 *.pre-*
 *.zip
+
+# Generated verification / historical evidence
+4b-verification-results/
+9b-integration-results/
+emr43-evidence/
+emr43-results/
+holdout-evidence/
+holdout-results/
+sut-results/
+v5-results/
+librenms-architecture-v5-first-pass.tar

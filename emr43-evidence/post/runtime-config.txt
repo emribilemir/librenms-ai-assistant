@@ -1,8 +1,0 @@
-SUT_MODEL=librenms-qwen for EMR-43, Gold, and Generated; legacy model=librenms-qwen
-SUT_PLANNER_SCHEMA=gold for E2E, Gold, and Generated
-OLLAMA_URL=http://localhost:11434 (code default)
-python=Python 3.14.7
-head=99cb6670176897ebf04f5ecb8fdd457caa49aec7
-emr43_resolver=hybrid-gold-v3/resolver_candidate_v4.py
-emr43_poc=librenms-hybrid-poc/hybrid_poc.py
-legacy_modelfile_sha256=61f06aef2d20d4c23ec13a1f8ba2a0247afe7b2fb2c02f6b5cebabfcab7072a0
