@@ -1,116 +1,142 @@
 # LibreNMS Natural-Language Hybrid PoC
 
-LibreNMS verilerine doğal dille erişmenin güvenilir olup olmadığını araştıran,
-yerel Qwen modeliyle hazırlanmış read-only bir proof of concept.
+LibreNMS verilerine doğal dille, güvenli ve doğrulanabilir biçimde erişmenin
+uygulanabilirliğini araştıran read-only bir proof of concept.
 
-Bu depo production LibreNMS entegrasyonu değildir. Cihaz çözümleme, katalog
-filtreleme, backend araç sınırları ve LLM sentezi arasındaki mimari sınırı
-ölçmek için hazırlanmış PoC, fixture, test ve deney kayıtlarını içerir.
+Proje; yerel Qwen modeliyle doğal dil planlama, deterministik cihaz çözümleme,
+LibreNMS `/api/v0` sorguları ve kanıta dayalı cevap üretimi arasındaki sınırları
+test eder. Production uygulaması veya write yetkili bir LibreNMS istemcisi
+değildir.
 
-## Güncel yaklaşım
+## Temel yaklaşım
 
-Projenin temel kararı şudur:
-
-> Qwen doğal dili anlar; resolver kimliği çözer; backend neyin doğru olduğunu
-> belirler.
+> Qwen isteği yapılandırır; resolver kimliği çözer; LibreNMS operasyonel
+> gerçeği sağlar; Python kritik kararları doğrular.
 
 ```text
 Kullanıcı sorgusu
         |
         v
 Qwen semantic planner
-(intent + ham cihaz referansı + structured filtreler)
+(route + intent + ham referans + structured filtreler)
         |
         v
-Katı plan doğrulama
+Strict plan validation
         |
         v
 Resolver v5
 (unique / ambiguous / no_match)
         |
         v
-Read-only backend araçları
+Read-only LibreNMS backend
         |
-        +--> Atomik gerçek: deterministik cevap
+        +--> Direct read: deterministik cevap
         |
-        +--> Investigation: sabit kanıt kümesi + bounded LLM synthesis
+        +--> Investigation: typed findings -> Qwen claims -> validation/judge
+                                               |
+                                               +--> güvenli fallback
 ```
 
 ### Sorumluluk sınırları
 
 | Katman | Sorumluluk | Yapmadığı şey |
 |---|---|---|
-| Qwen planner | Doğal dil intent'i, route'u, açık referansı ve ürün filtrelerini structured JSON'a çevirmek | Cihaz seçmek veya operasyonel durum iddia etmek |
-| Plan doğrulayıcı | Schema, tip, route–intent ve alan tutarlılığını kontrol etmek | Türkçe regex/kelime listeleriyle planı onarmak |
-| Resolver v5 | Hostname/SKU/model kimliği, katalog variant'ları, structured filtreler ve ambiguity | Serbest Türkçe intent çözmek |
-| Backend | Status, port, alarm ve event gerçeklerini sağlamak | LLM kararına göre veri uydurmak |
-| Synthesis | Yalnızca alınmış Level-1 kanıtını yorumlamak | Araç kapsamını genişletmek veya write işlemi yapmak |
+| Qwen planner | Doğal dili doğrulanabilir structured plana dönüştürmek | Cihaz seçmek veya backend verisi olmadan durum iddia etmek |
+| Plan doğrulayıcı | Schema, tip, route–intent ve alan tutarlılığını kontrol etmek | Kullanıcı cümlesini regex kurallarıyla yeniden yorumlamak |
+| Resolver v5 | Hostname, SKU, model ve katalog filtrelerini çözmek | Belirsiz eşleşmede rastgele cihaz seçmek |
+| LibreNMS backend | Cihaz, port, alarm ve event gerçeklerini sağlamak | Write endpointi çağırmak veya veri tahmin etmek |
+| Grounding katmanı | Bulguları sabit referanslarla paketlemek ve claim'leri doğrulamak | Kanıtta bulunmayan kök neden üretmek |
 
-## Korunan güvenlik ve doğruluk kuralları
+## Desteklenen sorgu kapsamı
 
-- Sistem read-only araçlarla sınırlıdır.
-- Atomik `up/down/unknown` gerçekleri LLM tarafından yeniden yorumlanmaz.
-- Ambiguous referanslarda rastgele cihaz seçilmez; clarification üretilir.
-- Eşleşme yoksa cihaz veya model uydurulmaz.
-- Eksik katalog alanları UNKNOWN olarak korunur.
-- Device-set cevapları backend çağrısı olmadan canlı durum yazmaz.
-- Investigation yalnızca sabit `device + ports + alerts + events` kanıt kümesini kullanır.
-- Synthesis girdisi alınan ve alınmayan kaynakların coverage manifestosunu taşır.
-- Geçersiz planner çıktısı resolver veya backend'e ulaşmaz.
+- Tekil cihaz veya cihaz seti için canlı durum
+- Cihaz modeli, hostname, uptime, location ve işletim sistemi
+- Port admin/oper durumu, hız ve açıklama
+- Belirli port veya structured port filtreleri
+- Aktif alarm ve event listeleri
+- Son durum değişimi ve zaman pencereli event sorguları
+- Sabit kanıt kümesiyle güncel veya tarihsel investigation
+- Marka, aile, port sayısı ve PoE gibi katalog filtreleriyle cihaz seti çözümleme
 
-## Proje yapısı
+Örnekler:
+
+```text
+lab-j9772a-01 açık mı?
+lab-j9772a-01'in modeli ne?
+lab-j9772a-01 ne kadar süredir açık?
+lab-j9772a-01 port 2'nin hızı ne?
+lab-j9772a-01'in down portları hangileri?
+lab-j9772a-01 son 30 dakikada status değiştirdi mi?
+lab-j9772a-01'de ne sorun var?
+```
+
+## Depo yapısı
 
 | Yol | İçerik |
 |---|---|
-| [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Semantic planner, orchestration PoC'si, yerel inventory ve hedefli offline testler |
-| [`hybrid-gold-v3/`](hybrid-gold-v3/) | Kaynak doğruluğu düzeltilmiş katalog, synthetic backend, Gold/Generated acceptance varlıkları ve resolver v4/v5 |
-| [`sut-results/`](sut-results/) | Gerçek yerel SUT ile daha önce alınmış çalışma izleri ve raporlar |
-| [`4b-verification-results/`](4b-verification-results/) | Qwen 4B doğrulama kayıtları |
-| [`9b-integration-results/`](9b-integration-results/) | Qwen 9B karşılaştırma kayıtları; 4B baseline yerine geçmez |
-| [`holdout-results/`](holdout-results/) | Dondurulmuş hidden-holdout çalışma kayıtları |
-| [`emr43-results/`](emr43-results/) | EMR-43 adversarial deney ve patch kanıtları |
-| [`librenms-prompt-eval/`](librenms-prompt-eval/) | Tarihsel prompt evaluation deneyleri |
-| [`docs/superpowers/specs/`](docs/superpowers/specs/) | Güncel mimari karar belgeleri |
+| [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Güncel planner, orchestration, backend adapter, fixture'lar ve testler |
+| [`librenms-hybrid-poc/hybrid-gold-v3/`](librenms-hybrid-poc/hybrid-gold-v3/) | Katalog ingest, resolver v4/v5, synthetic backend ve Gold/Generated acceptance varlıkları |
+| [`docs/history/`](docs/history/) | Tarihsel inceleme ve düzeltme raporları |
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Opsiyonel Debian, SSH, sudo ve SNMPSim kurulum rehberi |
+| [`docs/lab/`](docs/lab/) | Ayrıntılı tarihsel LibreNMS ve SNMPSim lab notları |
+| [`docs/superpowers/specs/`](docs/superpowers/specs/) | Onaylanmış mimari tasarım belgeleri |
 | [`docs/superpowers/plans/`](docs/superpowers/plans/) | Uygulama planları |
 
-## Önemli dosyalar
+### Önemli dosyalar
 
-- [`librenms-hybrid-poc/hybrid_poc.py`](librenms-hybrid-poc/hybrid_poc.py): planner, resolver ve backend orchestration akışı
-- [`librenms-hybrid-poc/planner_v2.py`](librenms-hybrid-poc/planner_v2.py): yalnız structured plan schema/validation sözleşmesi
-- [`hybrid-gold-v3/resolver_candidate_v5.py`](hybrid-gold-v3/resolver_candidate_v5.py): structured katalog filtreleme ve identity resolution
-- [`hybrid-gold-v3/catalog_ingest.py`](hybrid-gold-v3/catalog_ingest.py): model metnini katalog facet'lerine dönüştürme
-- [`hybrid-gold-v3/dummy_backend.py`](hybrid-gold-v3/dummy_backend.py): gerçek araç çağrılarını kaydeden read-only SpyBackend
-- [`librenms-hybrid-poc/test_semantic_planner.py`](librenms-hybrid-poc/test_semantic_planner.py): yeni sahiplik sınırının küçük offline testleri
-- [`LIBRENMS_PLANNER_CATALOG_RESOLVER_OWNERSHIP_REVIEW.md`](LIBRENMS_PLANNER_CATALOG_RESOLVER_OWNERSHIP_REVIEW.md): planner/catalog/resolver sahiplik incelemesi
-- [`docs/superpowers/specs/2026-08-26-semantic-planner-deterministic-core-rag-design.md`](docs/superpowers/specs/2026-08-26-semantic-planner-deterministic-core-rag-design.md): onaylanan güncel tasarım
+- [`hybrid_poc.py`](librenms-hybrid-poc/hybrid_poc.py): planner, resolver,
+  backend ve synthesis orchestration
+- [`live_query.py`](librenms-hybrid-poc/live_query.py): gerçek LibreNMS API'si
+  için komut satırı giriş noktası
+- [`planner_v2.py`](librenms-hybrid-poc/planner_v2.py): structured plan schema,
+  normalizasyon ve strict validation
+- [`librenms_backend.py`](librenms-hybrid-poc/librenms_backend.py): read-only
+  LibreNMS `/api/v0` adapter'ı
+- [`investigation_grounding.py`](librenms-hybrid-poc/investigation_grounding.py):
+  typed findings, claim doğrulama, judge ve güvenli fallback sözleşmeleri
+- [`utility_facts.py`](librenms-hybrid-poc/utility_facts.py): deterministik cihaz,
+  port ve event fact seçicileri
+- [`resolver_candidate_v5.py`](librenms-hybrid-poc/hybrid-gold-v3/resolver_candidate_v5.py):
+  structured katalog filtreleme ve identity resolution
+- [`emr52_acceptance_queries.json`](librenms-hybrid-poc/emr52_acceptance_queries.json):
+  güncel canlı acceptance sorguları
 
-## Veri kaynağı ve provenance
+## Hızlı başlangıç
 
-Kaynak Excel yalnızca `Brand` ve `Model` alanlarını içerir. Gerçek
-kaynak-destekli kimlikler sekiz HP ProCurve SKU/model kaydıdır:
-
-```text
-J4850A, J9772A, J9774A, J9775A,
-J9776A, J9780A, J9783A, JL357A
-```
-
-`lab-<sku>-NN` biçimindeki hostname'ler, device ID'ler, status, port, alarm ve
-event değerleri synthetic fixture'dır. Production cihazı veya İSBAK gerçek
-operasyon verisi olarak yorumlanmamalıdır.
-
-## Hızlı doğrulama
-
-Yeni semantic-planner sahiplik sınırını ağ veya LLM olmadan kontrol etmek için:
+Proje çekirdek akışında Python standard library kullanır. Depoyu klonlayıp
+offline testleri doğrudan çalıştırabilirsiniz:
 
 ```bash
-python3 librenms-hybrid-poc/test_semantic_planner.py -v
+git clone https://github.com/emribilemir/isbaklibrenms.git
+cd isbaklibrenms
+python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
 ```
 
-Mevcut hedefli suite dokuz küçük offline test içerir. Planner schema, invalid
-plan davranışı, resolver v5 structured filtre aktarımı ve device-set truth
-sınırını doğrular.
+Offline suite, harici LibreNMS veya Ollama bağlantısı gerektirmez. Backend
+adapter testleri yalnızca process içinde açılan localhost test sunucusunu
+kullanır.
 
-Yerel Ollama ile tarihsel PoC harness'ini çalıştırmak için:
+## Opsiyonel uçtan uca lab kurulumu
+
+Offline testler için Debian, UTM, macOS, LibreNMS veya SNMPSim gerekmez.
+Gerçek LibreNMS discovery/poller/API zincirini fiziksel cihaz olmadan denemek
+isteyenler opsiyonel lab ortamını kurabilir:
+
+```text
+SNMPSim -> LibreNMS discovery/poller -> LibreNMS API -> Hybrid PoC
+```
+
+- [Kurulum rehberi](docs/INSTALLATION.md): Debian/Linux hazırlığı, SSH, sudo,
+  firewall, native servis kontrolleri ve SNMPSim kurulumu
+- [Ayrıntılı lab günlüğü](docs/lab/librenms_native_lab_kurulum_ve_snmpsim_notlari_v2.md):
+  doğrulanmış UTM + Debian 13 ARM64 kurulumunun tarihsel adımları ve sorunları
+
+macOS/UTM yalnız doğrulanmış referans ortamdır; zorunlu değildir. Eşdeğer bir
+Linux sunucu veya VM ve herhangi bir SSH istemcisi kullanılabilir.
+
+## Yerel Ollama ile PoC harness'i
+
+Yerel `http://localhost:11434` adresinde uygun model çalışıyorsa:
 
 ```bash
 python3 librenms-hybrid-poc/hybrid_poc.py \
@@ -120,37 +146,78 @@ python3 librenms-hybrid-poc/hybrid_poc.py \
   --out /tmp/librenms-hybrid-results.json
 ```
 
-Bu komut yerel `http://localhost:11434` Ollama servisine ihtiyaç duyar.
+## Gerçek LibreNMS API ile canlı sorgu
 
-## Güncel doğrulama durumu
+Read-only kullanım için legacy `/api/v0` token'ını environment üzerinden
+sağlayın. Gerçek token'ı repoya veya shell history'ye yazmayın.
 
-Semantic-planner sahiplik değişikliğinden sonra:
+```bash
+export LIBRENMS_TOKEN="<read-only-token>"
+export LIBRENMS_BASE_URL="http://<librenms-host>/api/v0"
 
-- hedefli offline testler: **9/9**
-- değiştirilen Python dosyaları: syntax/import kontrolü başarılı
-- Gold/Generated/Legacy ve LLM suite'leri: kullanıcının süre/maliyet tercihi nedeniyle yeniden çalıştırılmadı
+python3 librenms-hybrid-poc/live_query.py "lab-j9775a-01 açık mı?"
+python3 librenms-hybrid-poc/live_query.py "lab-j9772a-01 port 2 ne durumda?"
+python3 librenms-hybrid-poc/live_query.py "lab-j9772a-01'de ne sorun var?"
+```
 
-Depodaki eski skorlar kendi commit, model ve runtime bağlamlarına aittir. Son
-mimari değişiklik için yeni sonuç gibi sunulmamalıdır.
+`live_query.py`, Gold planner sözleşmesini, resolver v5'i ve gerçek
+`LibreNMSBackend` adapter'ını kullanır. İlk cihaz sorgusundan dönen gerçek
+LibreNMS `device_id`, sonraki port/alarm/event çağrılarına aktarılır; fixture
+kimliği backend gerçeği olarak kullanılmaz.
 
-## Bilinen sınırlar ve ertelenen işler
+## Güvenlik ve doğruluk kuralları
 
-- RAG, B planı olarak ertelendi. İleride katalog ve doküman bağlamı için
-  retrieval eklenebilir; canlı status/port/alarm/event verisi yine backend'den
-  gelmelidir.
-- `speed_mbps` filtresi mevcut schema'da yoktur; kaynak veri yeterli olmadan
-  tahmin edilmeyecektir.
-- Multi-device port/alarm/event fan-out desteklenmez; çoklu eşleşmede
-  clarification tercih edilir.
-- Structured findings, evidence ID'leri ve grounding validator sonraki ayrı
-  mimari aşamadır.
-- Bu çalışma production deployment, write operation veya gerçek LibreNMS API
-  bağlantısı içermez.
+- Backend yalnızca read-only endpointlerle sınırlıdır.
+- Token environment üzerinden alınır ve sanitize edilmiş trace'e yazılmaz.
+- Atomik durum ve utility fact cevapları LLM tarafından yeniden yorumlanmaz.
+- Ambiguous referanslarda clarification üretilir; rastgele cihaz seçilmez.
+- Eşleşme veya backend verisi yoksa değer tahmin edilmez.
+- Device-set status cevapları her hostname için ayrı canlı backend çağrısı yapar.
+- Investigation yalnızca alınmış `device + ports + alerts + events` kanıtını
+  kullanır.
+- Mekanik veya semantic doğrulama başarısızsa generated cevap atılır ve
+  deterministik fallback kullanılır.
+- Geçersiz planner çıktısı resolver veya backend'e ulaşmaz.
 
-## Mimari karar
+Kaynak Excel yalnızca marka ve model bilgisi sağlar. `lab-<sku>-NN`
+hostname'leri, device ID'ler ve operasyonel durumlar synthetic fixture'dır;
+gerçek İSBAK operasyon verisi olarak yorumlanmamalıdır.
 
-Projenin güncel hedefi prompt'u veya Python keyword kurallarını sürekli
-büyütmek değildir. Model doğal dili structured plana çevirir; kritik kimlik,
-filtre, izin ve operasyonel gerçek kararları doğrulanabilir katmanlarda kalır.
-Bu sınır yeterli kaliteyi sağlamazsa çalışma dürüstçe PoC/fizibilite sonucu
-olarak kapatılabilir.
+## Doğrulama durumu
+
+31 Ağustos 2026 tarihinde, güncel `main` çalışma ağacında:
+
+- offline unittest discovery: **90/90 başarılı**
+- resolver fixture self-test: **47/47 başarılı**
+
+Canlı Ollama/LibreNMS acceptance koşuları model, token ve erişilebilir lab
+ortamı gerektirdiği için offline suite'in parçası değildir.
+
+## Tarihsel deney çıktıları
+
+`librenms-hybrid-poc/results*.json`, `run_log*.txt` ve `comparison*.md`
+dosyaları ilk PoC karşılaştırmalarının dondurulmuş snapshot'larıdır.
+`hybrid-gold-v3/*results*.json` dosyaları da acceptance harness kanıtıdır.
+Bunlar güncel çalışma sırasında yeniden üretilen geçici çıktılar değildir;
+sonuçlar kendi commit, model ve runtime bağlamlarıyla değerlendirilmelidir.
+
+Yeni yerel çalışma çıktıları repoya eklenmek yerine `/tmp` gibi geçici bir
+konuma yazılmalıdır.
+
+## Bilinen sınırlar
+
+- Proje production deployment, write operation veya yetkilendirme yönetimi
+  içermez.
+- RAG uygulanmadı; katalog ve doküman bağlamı için olası B planıdır.
+- Generator ve judge aynı Qwen modelini ayrı çağrılarda kullanır; judge bağımsız
+  bir doğruluk kaynağı değildir.
+- Investigation kalitesi, backend'in sağladığı veri ve event-window coverage'ı
+  ile sınırlıdır.
+- Kanıtlanmış kök neden yoksa sonuç `root_cause unknown` sınırında kalır.
+
+## Tasarım belgeleri
+
+- [Semantic planner, deterministic core ve RAG tasarımı](docs/superpowers/specs/2026-08-26-semantic-planner-deterministic-core-rag-design.md)
+- [Semantic planner core uygulama planı](docs/superpowers/plans/2026-08-26-semantic-planner-core.md)
+- [Planner/catalog/resolver sahiplik incelemesi](docs/history/LIBRENMS_PLANNER_CATALOG_RESOLVER_OWNERSHIP_REVIEW.md)
+- [Planner v2 düzeltme raporu](docs/history/PLANNER_V2_FIX_REPORT.md)
