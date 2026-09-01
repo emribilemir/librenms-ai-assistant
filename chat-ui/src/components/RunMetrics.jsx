@@ -1,0 +1,3 @@
+import { useId, useState } from "react";
+import styles from "./RunMetrics.module.css";
+export function RunMetrics({ metrics }) { const [open, setOpen] = useState(false); const panelId = useId(); if (!metrics) return null; return <section className={styles.metrics}><button type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>{open ? "Hide run metrics" : "Show run metrics"}</button>{open && <dl id={panelId}>{Object.entries(metrics).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value === null ? "Unavailable" : `${value} ms`}</dd></div>)}</dl>}</section>; }

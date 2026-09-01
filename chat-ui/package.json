@@ -1,0 +1,26 @@
+{
+  "name": "librenms-ai-assistant-chat",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@assistant-ui/react": "0.15.17",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "7.28.6",
+    "@babel/preset-react": "7.28.5",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "babel-jest": "30.2.0",
+    "jest": "30.2.0",
+    "jest-environment-jsdom": "30.2.0",
+    "vite": "8.0.0"
+  }
+}
