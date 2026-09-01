@@ -33,6 +33,17 @@ async function ask(page, question) {
   await page.getByRole("button", { name: "Start investigation" }).click();
 }
 
+async function persistedRunFor(page, title) {
+  return page.evaluate(async ({ threadTitle }) => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    const threads = await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json();
+    const thread = threads.find((candidate) => candidate.title === threadTitle);
+    if (!thread) throw new Error(`Missing persisted thread: ${threadTitle}`);
+    const detail = await (await fetch(`/ai-api/v1/threads/${thread.id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    return detail.runs.at(-1);
+  }, { threadTitle: title });
+}
+
 test("creates, selects, and deletes a saved thread only after confirmation", async ({ page }) => {
   await createThread(page);
   await ask(page, "ambiguous core uplink");
@@ -76,6 +87,9 @@ test("renders only real received stage progress for a successful no-match result
 test("shows a retryable backend failure and allows a real retried stream to succeed", async ({ page }) => {
   await page.getByRole("button", { name: "New investigation" }).click();
   await ask(page, "retryable backend question");
+  const progress = page.getByRole("region", { name: "Pipeline progress" });
+  await expect(progress.getByText(/planner completed, resolver completed, librenms running/)).toBeVisible();
+  expect(await page.evaluate(async () => (await fetch("/ai-api/__test__/release-retryable-failure", { method: "POST" })).status)).toBe(204);
   await expect(page.getByRole("alert")).toHaveText("LibreNMS is temporarily unavailable.");
   const retry = page.getByRole("button", { name: "Retry failed investigation" });
   await expect(retry).toBeVisible();
@@ -94,6 +108,10 @@ test("labels a validated fallback answer and exposes its complete metric disclos
   await disclosure.click();
   await expect(page.getByRole("button", { name: "Hide run metrics" })).toHaveAttribute("aria-expanded", "true");
   for (const metric of metrics) await expect(page.getByText(metric, { exact: true })).toBeVisible();
+  for (const value of ["7 ms", "11 ms", "13 ms", "17 ms", "48 ms"]) await expect(page.getByText(value, { exact: true })).toBeVisible();
+  const persistedRun = await persistedRunFor(page, "fallback investigation evidence");
+  expect(persistedRun).toMatchObject({ planner_ms: 7, resolver_ms: 11, backend_ms: 13, synthesis_ms: 17, total_ms: 48 });
+  expect(persistedRun.total_ms).toBe(persistedRun.planner_ms + persistedRun.resolver_ms + persistedRun.backend_ms + persistedRun.synthesis_ms);
   await page.screenshot({ path: testInfo.outputPath("fallback-metrics.png"), fullPage: true });
 });
 

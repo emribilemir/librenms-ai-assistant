@@ -13,25 +13,30 @@ from collections import defaultdict
 import os
 from pathlib import Path
 import sys
+import threading
 import time
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY / "librenms-hybrid-poc"))
 
 import uvicorn
+from fastapi import Response
 
 from chat_service.app import create_app
 
 
-METRICS = {
-    "planner_ms": 7,
-    "resolver_ms": 11,
-    "backend_ms": 13,
-    "synthesis_ms": None,
-    "time_to_first_token_ms": None,
-    "time_to_first_visible_chunk_ms": None,
-    "total_ms": 31,
-}
+def metrics(*, planner=None, resolver=None, backend=None, synthesis=None):
+    """Build coherent component timings without ever summing total_ms twice."""
+    values = {
+        "planner_ms": planner,
+        "resolver_ms": resolver,
+        "backend_ms": backend,
+        "synthesis_ms": synthesis,
+        "time_to_first_token_ms": None,
+        "time_to_first_visible_chunk_ms": None,
+    }
+    values["total_ms"] = sum(value for key, value in values.items() if key.endswith("_ms") and isinstance(value, int))
+    return values
 
 
 class DeterministicPipelineAdapter:
@@ -39,6 +44,10 @@ class DeterministicPipelineAdapter:
 
     def __init__(self):
         self._attempts = defaultdict(int)
+        self._retry_failure_release = threading.Event()
+
+    def release_retryable_failure(self):
+        self._retry_failure_release.set()
 
     @staticmethod
     def _stage(observer, is_cancelled, stage, duration):
@@ -54,16 +63,17 @@ class DeterministicPipelineAdapter:
         return True
 
     @staticmethod
-    def _result(answer, *, fallback=False, synthesis=None):
-        metrics = dict(METRICS)
-        metrics["synthesis_ms"] = synthesis
-        metrics["total_ms"] = sum(value for value in metrics.values() if isinstance(value, int))
-        return {"answer": answer, "used_fallback": fallback, "metrics": metrics}
+    def _result(answer, *, fallback=False, planner=7, resolver=11, backend=None, synthesis=None):
+        return {
+            "answer": answer,
+            "used_fallback": fallback,
+            "metrics": metrics(planner=planner, resolver=resolver, backend=backend, synthesis=synthesis),
+        }
 
     def run(self, content, observer, is_cancelled):
         question = content.casefold()
         if not self._stage(observer, is_cancelled, "planner", 7):
-            return {"cancelled": True, "metrics": dict(METRICS)}
+            return {"cancelled": True, "metrics": metrics()}
 
         if "cancel after planner" in question:
             # The browser cancellation closes the actual fetch stream.  The
@@ -71,11 +81,25 @@ class DeterministicPipelineAdapter:
             # resolver boundary or answer can be produced after cancellation.
             while not is_cancelled():
                 time.sleep(0.01)
-            return {"cancelled": True, "metrics": dict(METRICS)}
+            return {"cancelled": True, "metrics": metrics(planner=7)}
 
+        if not self._stage(observer, is_cancelled, "resolver", 11):
+            return {"cancelled": True, "metrics": metrics(planner=7)}
+        if "no-match" in question:
+            return self._result("No monitored device matches that name.")
+        if "ambiguous" in question:
+            return self._result("Several matching devices need clarification.")
         if "retryable" in question:
             self._attempts[content] += 1
             if self._attempts[content] == 1:
+                # A backend outage starts the real LibreNMS boundary but never
+                # completes it. The service then emits its librenms-scoped
+                # terminal error, matching the production failure contract.
+                self._retry_failure_release.clear()
+                observer("librenms", "started", None)
+                while not self._retry_failure_release.wait(0.02):
+                    if is_cancelled():
+                        return {"cancelled": True, "metrics": metrics(planner=7, resolver=11)}
                 return {
                     "error": {
                         "stage": "librenms",
@@ -83,24 +107,17 @@ class DeterministicPipelineAdapter:
                         "retryable": True,
                         "message": "LibreNMS is temporarily unavailable.",
                     },
-                    "metrics": dict(METRICS),
+                    "metrics": metrics(planner=7, resolver=11, backend=13),
                 }
-
-        if not self._stage(observer, is_cancelled, "resolver", 11):
-            return {"cancelled": True, "metrics": dict(METRICS)}
-        if "no-match" in question:
-            return self._result("No monitored device matches that name.")
-        if "ambiguous" in question:
-            return self._result("Several matching devices need clarification.")
         if not self._stage(observer, is_cancelled, "librenms", 13):
-            return {"cancelled": True, "metrics": dict(METRICS)}
+            return {"cancelled": True, "metrics": metrics(planner=7, resolver=11)}
         if "fallback" in question:
             if not self._stage(observer, is_cancelled, "synthesis", 17):
-                return {"cancelled": True, "metrics": dict(METRICS)}
-            return self._result("Safe evidence fallback summary.", fallback=True, synthesis=17)
+                return {"cancelled": True, "metrics": metrics(planner=7, resolver=11, backend=13)}
+            return self._result("Safe evidence fallback summary.", fallback=True, backend=13, synthesis=17)
         if "retryable" in question:
-            return self._result("Backend recovered on retry.")
-        return self._result("Deterministic standalone result.")
+            return self._result("Backend recovered on retry.", backend=13)
+        return self._result("Deterministic standalone result.", backend=13)
 
 
 def main():
@@ -114,13 +131,14 @@ def main():
     for suffix in ("", "-shm", "-wal"):
         database.with_name(database.name + suffix).unlink(missing_ok=True)
     os.environ["AI_DEV_AUTH"] = "1"
+    adapter = DeterministicPipelineAdapter()
     app = create_app(
         str(database),
         # The standalone dev-identity gate never verifies a signed token, but the
         # application factory still requires a valid-sized verifier secret. Keep
         # it ephemeral so the fixture does not embed a reusable credential.
         secret=os.urandom(32),
-        adapter=DeterministicPipelineAdapter(),
+        adapter=adapter,
     )
 
     @app.middleware("http")
@@ -133,6 +151,12 @@ def main():
                 if key.lower() != b"authorization"
             ]
         return await call_next(request)
+
+    @app.post("/__test__/release-retryable-failure", status_code=204)
+    def release_retryable_failure():
+        """Test-only deterministic barrier; no production route is changed."""
+        adapter.release_retryable_failure()
+        return Response(status_code=204)
 
     uvicorn.run(
         app,

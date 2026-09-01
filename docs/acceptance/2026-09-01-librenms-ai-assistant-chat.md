@@ -12,9 +12,9 @@ Environment: ephemeral loopback-only standalone fixture (`127.0.0.1`), local SQL
 | Python regression | `.venv/bin/python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v` | PASS — 118 tests in 2.266 s. |
 | Frontend unit test and build | `cd chat-ui && npm test -- --runInBand && npm run build` | PASS — 5 suites / 36 tests; production build completed. |
 | Plugin contracts | `.venv/bin/python3 -m unittest discover -s integrations/librenms/AiAssistant/tests -p 'test_*.py' -v` | PASS — 9 tests. |
-| Unauthorized UTM guard | `cd chat-ui && npx playwright test e2e/utm.spec.js --project=utm` | SKIPPED — 1 test. No target URL or `AI_UTM_AUTHORIZED=1` was supplied. |
+| Unauthorized UTM guard | `cd chat-ui && npx playwright test --project=utm` | SKIPPED — 7 authored tests. No fixture was started and no target URL or authorization was supplied. |
 
-The standalone tests cover saved thread create/select/delete confirmation, no-match progress, retryable failure and retry, fallback labeling and metric disclosure, cancellation before later stage/answer, keyboard focus, polite live region, and the responsive drawer. They use role and label locators with assertion-driven synchronization.
+The standalone tests cover saved thread create/select/delete confirmation, no-match progress, retryable failure and retry, fallback labeling and metric disclosure, cancellation before later stage/answer, keyboard focus, polite live region, and the responsive drawer. They use role and label locators with assertion-driven synchronization. The fallback run verifies persisted component timings of 7 + 11 + 13 + 17 = `total_ms` 48; `total_ms` is not itself included in that sum. The retryable path visibly reaches `librenms running`, then is released through a test-only local server barrier before its terminal backend error, so no browser timer is used to manufacture the ordering.
 
 ## Browser evidence
 
@@ -27,6 +27,8 @@ These are local evidence artifacts, intentionally excluded from the repository.
 
 ## UTM and rollback boundary
 
-UTM acceptance was intentionally **not attempted**: no explicit target authorization, host, credentials, or deployment approval was provided. Consequently this work did not access or change UTM, `/opt/librenms`, Nginx, or an external runtime. The UTM test has no default remote host and remains skipped unless both `AI_UTM_AUTHORIZED=1` and `AI_UTM_BASE_URL` are supplied by the operator.
+UTM acceptance was intentionally **not attempted**: no explicit target authorization, host, credentials, or deployment approval was provided. Consequently this work did not access or change UTM, `/opt/librenms`, Nginx, or an external runtime. The UTM project has no fallback base URL or local fixture for a UTM-only invocation. It remains inert unless the operator supplies `AI_UTM_AUTHORIZED=1`, `AI_UTM_BASE_URL`, readable `AI_UTM_PRIMARY_STORAGE_STATE` and `AI_UTM_SECONDARY_STORAGE_STATE` files, plus the explicitly curated query/expected-text variables required by each scenario.
+
+The authored-but-unexecuted UTM suite covers signed plugin-route identity, responsive keyboard access, create/select/history/delete confirmation, no-match streaming, fallback label and metrics, backend-down/retry, cancellation, and cross-user thread ownership. It uses only supplied signed-in browser states; it embeds no target, credential, token, deployment action, or default host.
 
 There is therefore no UTM installation, Nginx validation/reload, or rollback execution to claim. Those steps remain pending explicit authorization and must follow the rollback procedure in `integrations/librenms/AiAssistant/docs/deployment.md`: disable the plugin, reverse the proxy include, validate/reload Nginx only after validation succeeds, and stop the Mac API. This document records offline verification only.
