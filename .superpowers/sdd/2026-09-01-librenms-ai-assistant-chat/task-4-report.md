@@ -35,3 +35,16 @@ UTM was not attempted and no UTM, `/opt/librenms`, Nginx, or external runtime wa
 - `cd chat-ui && npm test -- --runInBand && npm run build`: PASS, 5 suites / 36 tests and production build.
 - `.venv/bin/python3 -m unittest discover -s integrations/librenms/AiAssistant/tests -p 'test_*.py' -v`: PASS, 9 tests.
 - `cd chat-ui && npx playwright test --project=utm`: 7 skipped; no UTM target was contacted.
+
+## Fix round 2 — UTM authored parity
+
+- RED: added the local static/meta contract `src/utmAcceptanceParity.test.js`; it failed because the authorized suite lacked an explicit live-progress scenario input, `aria-live` assertion, persisted-run metric helper, coherent metric assertion, and ordered planner/resolver/librenms retry assertions. Raw output: `e2e-artifacts/red/task-4-round2-red.txt`.
+- GREEN: the authorized UTM suite now includes an eighth, explicitly curated live-progress scenario that verifies focus before submitting, `aria-live="polite"`, and observed planner then resolver live-text updates. Its fallback scenario requires `AI_UTM_FALLBACK_THREAD_TITLE`, reads the authenticated `/threads/{id}` detail response, and verifies finite/nonnegative metrics with total/component coherence without assuming backend timing is additive.
+- GREEN: the retry scenario now requires `AI_UTM_RETRY_STAGE_GATE` in addition to its query/result inputs and asserts planner completed → resolver completed → librenms running → terminal error, then the successful retry result. This makes a live run opt-in and deterministic only when an authorized operator supplies a controlled scenario.
+- Inert check: `cd chat-ui && npx playwright test --project=utm` skipped 8/8 with no fixture server and no UTM target contact.
+
+### Fix round 2 relevant offline gate
+
+- `cd chat-ui && npm test -- --runInBand`: PASS, 6 suites / 37 tests (including the static UTM authoring contract).
+- `cd chat-ui && npx playwright test e2e/standalone.spec.js --project=chromium`: PASS, 6/6 in 6.0 s.
+- `cd chat-ui && npm run build`: PASS.

@@ -32,7 +32,8 @@ async function signedPluginPage(browser, storageState) {
   const identity = await root.evaluate((element) => {
     const config = JSON.parse(element.dataset.aiAssistantConfig || "{}");
     const [, encodedPayload] = String(config.token || "").split(".");
-    const payload = encodedPayload ? JSON.parse(atob(encodedPayload.replace(/-/g, "+").replace(/_/g, "/"))) : {};
+    const base64 = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = encodedPayload ? JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="))) : {};
     return { apiBase: config.apiBase, tokenVersion: String(config.token || "").split(".")[0], payload };
   });
   expect(identity.tokenVersion).toBe("v1");
@@ -53,6 +54,40 @@ async function createThread(page) {
 async function ask(page, question) {
   await page.getByLabel("Ask about network state").fill(question);
   await page.getByRole("button", { name: "Start investigation" }).click();
+}
+
+async function persistedRunFor(page, threadTitle) {
+  return page.evaluate(async (title) => {
+    const config = JSON.parse(document.querySelector("#root")?.dataset.aiAssistantConfig || "{}");
+    const headers = { Authorization: `Bearer ${config.token}` };
+    const threads = await (await fetch("/ai-api/v1/threads", { headers })).json();
+    const thread = threads.find((candidate) => candidate.title === title);
+    if (!thread) throw new Error(`Missing persisted UTM test thread: ${title}`);
+    const detail = await (await fetch(`/ai-api/v1/threads/${thread.id}`, { headers })).json();
+    return detail.runs.at(-1);
+  }, threadTitle);
+}
+
+function assertCoherentMetrics(run) {
+  const names = ["planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms"];
+  for (const name of names) {
+    expect(run).toHaveProperty(name);
+    if (run[name] !== null) {
+      expect(typeof run[name]).toBe("number");
+      expect(Number.isFinite(run[name])).toBe(true);
+      expect(run[name]).toBeGreaterThanOrEqual(0);
+    }
+  }
+  expect(typeof run.total_ms).toBe("number");
+  expect(Number.isFinite(run.total_ms)).toBe(true);
+  expect(run.total_ms).toBeGreaterThanOrEqual(0);
+  const nonBackendComponentTotal = [run.planner_ms, run.resolver_ms, run.synthesis_ms]
+    .filter((value) => typeof value === "number")
+    .reduce((sum, value) => sum + value, 0);
+  // backend_ms measures the adapter/backend call itself and may overlap other
+  // wall-clock work, so it must fit within total but is not blindly added.
+  expect(run.total_ms).toBeGreaterThanOrEqual(nonBackendComponentTotal);
+  if (typeof run.backend_ms === "number") expect(run.total_ms).toBeGreaterThanOrEqual(run.backend_ms);
 }
 
 test.describe("authorized UTM acceptance", () => {
@@ -113,8 +148,27 @@ test.describe("authorized UTM acceptance", () => {
     }
   });
 
+  test("announces live stage text changes and preserves keyboard focus during a curated stream", async ({ browser }) => {
+    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_LIVE_PROGRESS_QUERY", "AI_UTM_LIVE_PROGRESS_EXPECTED_TEXT");
+    const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
+    try {
+      await createThread(page);
+      const composer = page.getByLabel("Ask about network state");
+      await composer.click();
+      await expect(composer).toBeFocused();
+      await ask(page, process.env.AI_UTM_LIVE_PROGRESS_QUERY);
+      const live = page.getByText(/Pipeline status:/);
+      await expect(live).toHaveAttribute("aria-live", "polite");
+      await expect(live).toContainText("planner");
+      await expect(live).toContainText("resolver");
+      await expect(page.getByText(process.env.AI_UTM_LIVE_PROGRESS_EXPECTED_TEXT, { exact: true })).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
   test("labels a curated fallback result and exposes the real metric disclosure", async ({ browser }) => {
-    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_FALLBACK_QUERY", "AI_UTM_FALLBACK_EXPECTED_TEXT");
+    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_FALLBACK_QUERY", "AI_UTM_FALLBACK_EXPECTED_TEXT", "AI_UTM_FALLBACK_THREAD_TITLE");
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
     try {
       await createThread(page);
@@ -125,18 +179,22 @@ test.describe("authorized UTM acceptance", () => {
       await disclosure.click();
       await expect(page.getByRole("button", { name: "Hide run metrics" })).toHaveAttribute("aria-expanded", "true");
       await expect(page.getByText("total_ms", { exact: true })).toBeVisible();
+      assertCoherentMetrics(await persistedRunFor(page, process.env.AI_UTM_FALLBACK_THREAD_TITLE));
     } finally {
       await context.close();
     }
   });
 
   test("shows a curated backend failure after streamed progress and retries only when the service permits it", async ({ browser }) => {
-    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_RETRY_QUERY", "AI_UTM_RETRY_ERROR_TEXT", "AI_UTM_RETRY_SUCCESS_TEXT");
+    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_RETRY_QUERY", "AI_UTM_RETRY_ERROR_TEXT", "AI_UTM_RETRY_SUCCESS_TEXT", "AI_UTM_RETRY_STAGE_GATE");
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
     try {
       await createThread(page);
       await ask(page, process.env.AI_UTM_RETRY_QUERY);
-      await expect(page.getByRole("region", { name: "Pipeline progress" }).getByText(/Pipeline status:/)).toBeVisible();
+      const live = page.getByRole("region", { name: "Pipeline progress" }).getByText(/Pipeline status:/);
+      await expect(live).toContainText("planner completed");
+      await expect(live).toContainText("resolver completed");
+      await expect(live).toContainText("librenms running");
       await expect(page.getByRole("alert")).toHaveText(process.env.AI_UTM_RETRY_ERROR_TEXT);
       await page.getByRole("button", { name: "Retry failed investigation" }).click();
       await expect(page.getByText(process.env.AI_UTM_RETRY_SUCCESS_TEXT, { exact: true })).toBeVisible();
