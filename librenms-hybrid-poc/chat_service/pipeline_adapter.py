@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import time
+from librenms_backend import LibreNMSBackend
 
 
 _METRICS = ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms")
@@ -15,19 +15,61 @@ class PipelineAdapter:
     def run(self, content, observer, is_cancelled):
         if is_cancelled():
             return {"cancelled": True, "metrics": self._metrics({})}
-        if self._orchestrator is None:
-            import hybrid_poc
-            result = hybrid_poc.orchestrate(content, observer=observer, is_cancelled=is_cancelled)
-        else:
-            result = self._orchestrator(content, observer, is_cancelled)
+        last_stage = "internal"
+
+        def observed(stage, state, duration):
+            nonlocal last_stage
+            last_stage = stage
+            observer(stage, state, duration)
+
+        try:
+            if self._orchestrator is None:
+                import live_query
+                result = live_query.run_live_query(
+                    content,
+                    backend=LibreNMSBackend(),
+                    planner_schema="gold",
+                    observer=observed,
+                    is_cancelled=is_cancelled,
+                )
+            else:
+                result = self._orchestrator(content, observed, is_cancelled)
+        except Exception:
+            return {
+                "error": self._error(last_stage),
+                "metrics": self._metrics({}),
+            }
         if result.get("cancelled") or is_cancelled():
             return {"cancelled": True, "metrics": self._metrics(result.get("timing_ms", {}))}
+        if result.get("planner_failure"):
+            return {
+                "error": self._error("planner", "planner_invalid_output"),
+                "metrics": self._metrics(result.get("timing_ms", {})),
+            }
         trace = result.get("grounding_trace") or {}
         timing = result.get("timing_ms", {})
         return {
             "answer": result.get("final_answer") or result.get("answer") or "İşlem desteklenmiyor.",
             "used_fallback": bool(trace.get("fallback_reason")),
             "metrics": self._metrics(timing if timing else result.get("metrics", {})),
+        }
+
+    @staticmethod
+    def _error(stage, code=None):
+        stage = stage if stage in {"planner", "resolver", "librenms", "synthesis", "storage"} else "internal"
+        messages = {
+            "planner": "Plan oluşturulamadı.",
+            "resolver": "Cihaz çözümlenemedi.",
+            "librenms": "LibreNMS verisi alınamadı.",
+            "synthesis": "Yanıt güvenle oluşturulamadı.",
+            "storage": "Sonuç kaydedilemedi.",
+            "internal": "İşlem tamamlanamadı.",
+        }
+        return {
+            "stage": stage,
+            "code": code or f"{stage}_failed",
+            "retryable": True,
+            "message": messages[stage],
         }
 
     @staticmethod
@@ -45,4 +87,3 @@ class PipelineAdapter:
             if value is not None:
                 metrics[key] = max(0, int(value))
         return metrics
-

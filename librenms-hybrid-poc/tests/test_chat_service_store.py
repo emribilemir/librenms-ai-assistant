@@ -42,3 +42,12 @@ class ChatStoreTests(unittest.TestCase):
         self.assertEqual(len(detail["messages"]), 1)
         self.assertEqual(len(detail["runs"]), 1)
 
+    def test_failed_run_update_rolls_back_assistant_message(self):
+        thread = self.store.create_thread("owner")
+        run = self.store.start_run(thread["id"], "owner", "client-1", "first")
+        with self.store.connection() as connection:
+            connection.execute("CREATE TRIGGER reject_run_update BEFORE UPDATE ON runs BEGIN SELECT RAISE(ABORT, 'no update'); END")
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.store.complete_run(run["id"], "completed", {}, answer="must not persist")
+        detail = self.store.get_thread(thread["id"], "owner")
+        self.assertEqual([message["role"] for message in detail["messages"]], ["user"])

@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import threading
+import time
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
@@ -99,9 +100,14 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
         async def stream():
             queue = asyncio.Queue()
             loop = asyncio.get_running_loop()
-            first_visible = None
+            stream_started = time.perf_counter()
+            task = None
+            terminal = False
+            last_stage = "internal"
 
             def observer(stage, state, duration):
+                nonlocal last_stage
+                last_stage = stage
                 if cancelled.is_set():
                     return
                 payload = {"run_id": started["id"], "stage": stage}
@@ -109,10 +115,14 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     payload["duration_ms"] = max(0, int(duration or 0))
                 loop.call_soon_threadsafe(queue.put_nowait, (f"{stage}.{state}", payload))
 
-            task = asyncio.create_task(asyncio.to_thread(adapter.run, content, observer, cancelled.is_set))
-            yield _sse("run.started", {"run_id": started["id"], "thread_id": thread_id, "client_message_id": body["client_message_id"]})
             try:
+                yield _sse("run.started", {"run_id": started["id"], "thread_id": thread_id, "client_message_id": body["client_message_id"]})
+                if await request.is_disconnected():
+                    cancelled.set()
+                task = asyncio.create_task(asyncio.to_thread(adapter.run, content, observer, cancelled.is_set))
                 while not task.done():
+                    if await request.is_disconnected():
+                        cancelled.set()
                     event_waiter = asyncio.create_task(queue.get())
                     done, _ = await asyncio.wait(
                         (task, event_waiter), timeout=heartbeat_seconds,
@@ -135,20 +145,38 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 if result.get("cancelled") or cancelled.is_set():
                     store.complete_run(started["id"], "cancelled", metrics, error_stage="cancellation", error_code="cancelled")
                     yield _sse("completed", {"run_id": started["id"], "status": "cancelled", "used_fallback": False, "metrics": metrics})
+                    terminal = True
+                    return
+                if result.get("error"):
+                    error = result["error"]
+                    store.complete_run(started["id"], "failed", metrics, error_stage=error["stage"], error_code=error["code"])
+                    logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage=error["stage"], error_code=error["code"])
+                    yield _sse("error", {"run_id": started["id"], **error})
+                    yield _sse("completed", {"run_id": started["id"], "status": "failed", "used_fallback": False, "metrics": metrics})
+                    terminal = True
                     return
                 answer = result["answer"]
-                visible = metrics.get("total_ms")
-                metrics["time_to_first_visible_chunk_ms"] = visible if visible is not None else 0
+                metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
                 message_id = store.complete_run(started["id"], "completed", metrics, used_fallback=result["used_fallback"], answer=answer)
+                terminal = True
                 yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": answer})
                 yield _sse("completed", {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics})
             except Exception:
                 metrics = {key: None for key in ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms")}
-                store.complete_run(started["id"], "failed", metrics, error_stage="internal", error_code="internal_failure")
-                logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage="internal", error_code="internal_failure")
-                yield _sse("error", {"run_id": started["id"], "stage": "internal", "code": "internal_failure", "retryable": True, "message": "İşlem tamamlanamadı."})
+                code = f"{last_stage}_failed" if last_stage in {"planner", "resolver", "librenms", "synthesis", "storage"} else "internal_failure"
+                stage = last_stage if code != "internal_failure" else "internal"
+                store.complete_run(started["id"], "failed", metrics, error_stage=stage, error_code=code)
+                logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage=stage, error_code=code)
+                yield _sse("error", {"run_id": started["id"], "stage": stage, "code": code, "retryable": True, "message": "İşlem tamamlanamadı."})
                 yield _sse("completed", {"run_id": started["id"], "status": "failed", "used_fallback": False, "metrics": metrics})
+                terminal = True
             finally:
+                if not terminal:
+                    cancelled.set()
+                    try:
+                        store.complete_run(started["id"], "cancelled", {}, error_stage="cancellation", error_code="cancelled")
+                    except NotFoundError:
+                        pass
                 registry.finish(thread_id, started["id"])
 
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

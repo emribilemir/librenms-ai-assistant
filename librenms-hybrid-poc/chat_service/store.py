@@ -139,19 +139,25 @@ class ChatStore:
     def complete_run(self, run_id, status, metrics, *, used_fallback=False, answer=None, error_stage=None, error_code=None):
         values = {key: (metrics or {}).get(key) for key in METRIC_COLUMNS}
         with self.connection() as connection:
-            row = connection.execute("SELECT thread_id FROM runs WHERE id=?", (run_id,)).fetchone()
-            if row is None:
-                raise NotFoundError()
-            now, message_id = time.time(), None
-            if status == "completed" and answer:
-                message_id = str(uuid.uuid4())
-                connection.execute("INSERT INTO messages VALUES(?, ?, 'assistant', ?, ?)", (message_id, row["thread_id"], answer, now))
-            assignments = ", ".join(["status=?", "completed_at=?", "used_fallback=?", *[f"{key}=?" for key in METRIC_COLUMNS], "error_stage=?", "error_code=?"])
-            connection.execute(f"UPDATE runs SET {assignments} WHERE id=?", (status, now, int(bool(used_fallback)), *[values[key] for key in METRIC_COLUMNS], error_stage, error_code, run_id))
-            return message_id
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute("SELECT thread_id FROM runs WHERE id=?", (run_id,)).fetchone()
+                if row is None:
+                    raise NotFoundError()
+                now, message_id = time.time(), None
+                if status == "completed" and answer:
+                    message_id = str(uuid.uuid4())
+                    connection.execute("INSERT INTO messages VALUES(?, ?, 'assistant', ?, ?)", (message_id, row["thread_id"], answer, now))
+                assignments = ", ".join(["status=?", "completed_at=?", "used_fallback=?", *[f"{key}=?" for key in METRIC_COLUMNS], "error_stage=?", "error_code=?"])
+                connection.execute(f"UPDATE runs SET {assignments} WHERE id=?", (status, now, int(bool(used_fallback)), *[values[key] for key in METRIC_COLUMNS], error_stage, error_code, run_id))
+                connection.execute("COMMIT")
+                return message_id
+            except Exception:
+                if connection.in_transaction:
+                    connection.execute("ROLLBACK")
+                raise
 
     def delete_thread(self, thread_id, user_sub):
         with self.connection() as connection:
             self._owned_thread(connection, thread_id, user_sub)
             connection.execute("DELETE FROM threads WHERE id=?", (thread_id,))
-

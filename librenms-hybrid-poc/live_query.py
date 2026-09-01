@@ -30,7 +30,8 @@ with INVENTORY_PATH.open(encoding="utf-8") as stream:
     INVENTORY = json.load(stream)
 
 
-def run_live_query(query, *, backend=None, model=hybrid_poc.DEFAULT_MODEL):
+def run_live_query(query, *, backend=None, model=hybrid_poc.DEFAULT_MODEL,
+                   planner_schema="gold", observer=None, is_cancelled=None):
     if backend is None:
         backend = LibreNMSBackend()
     if hasattr(backend, "reset_trace"):
@@ -40,8 +41,10 @@ def run_live_query(query, *, backend=None, model=hybrid_poc.DEFAULT_MODEL):
         inventory=INVENTORY,
         backend=backend,
         model=model,
-        planner_schema="gold",
+        planner_schema=planner_schema,
         resolver_module=resolver_v5,
+        observer=observer,
+        is_cancelled=is_cancelled,
     )
 
 

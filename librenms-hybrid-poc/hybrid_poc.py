@@ -176,10 +176,10 @@ def ollama_chat(model, messages, schema=None, temperature=0.0, think=False):
         data=data,
         headers={"Content-Type": "application/json"},
     )
-    t0 = time.time()
+    t0 = time.perf_counter()
     with urllib.request.urlopen(req, timeout=300) as resp:
         body = json.loads(resp.read().decode("utf-8"))
-    elapsed_ms = (time.time() - t0) * 1000.0
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
     content = (body.get("message") or {}).get("content", "") or ""
 
     if os.getenv("OLLAMA_TIMING_DEBUG") == "1":
@@ -276,7 +276,7 @@ def plan_question(question, model, temperature):
 
 def run_path_b(case, model, temperature):
     q = case["question"]
-    t0 = time.time()
+    t0 = time.perf_counter()
     plan, reason, plan_ms = plan_question(q, model, temperature)
 
     rt = (plan or {}).get("request_type")
@@ -334,7 +334,7 @@ def run_path_b(case, model, temperature):
     else:
         r["route"] = "unknown"
 
-    r["total_latency_ms"] = round((time.time() - t0) * 1000.0, 1)
+    r["total_latency_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
     return r
 
 
@@ -874,7 +874,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         historical_investigation | clarification | no_match | unsupported | unknown
     plus planner/synthesis LLM flags kept separate.
     """
-    wall0 = time.time()
+    monotonic0 = time.perf_counter()
     observer = observer or (lambda stage, state, duration_ms: None)
     is_cancelled = is_cancelled or (lambda: False)
 
@@ -883,7 +883,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
             "query": query,
             "route": "cancelled",
             "final_answer": None,
-            "timing_ms": {"total_ms": round((time.time() - wall0) * 1000.0, 1)},
+            "timing_ms": {"total_ms": round((time.perf_counter() - monotonic0) * 1000.0, 1)},
             "cancelled": True,
         }
 
@@ -891,7 +891,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         observer(
             stage,
             state,
-            None if started is None else round((time.monotonic() - started) * 1000.0, 2),
+            None if started is None else round((time.perf_counter() - started) * 1000.0, 2),
         )
     llm = {"planner": False, "synthesis": False, "judge": False}
     timing = {}
@@ -913,9 +913,9 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     # validates the resulting structured plan before any resolver/tool action.
     if is_cancelled():
         return cancelled_result()
-    planner_started = time.monotonic()
+    planner_started = time.perf_counter()
     notify("planner", "started")
-    t0 = time.time()
+    t0 = time.perf_counter()
     content, reason, ms = ollama_chat(
         model,
         [
@@ -965,7 +965,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
             "final_answer": None,
             "timing_ms": {
                 "planner_ms": timing["planner_ms"],
-                "total_ms": round((time.time() - wall0) * 1000.0, 1),
+                "total_ms": round((time.perf_counter() - monotonic0) * 1000.0, 1),
             },
             "planner_failure": True,
             "planner_errors": planner_errors,
@@ -986,52 +986,50 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     if is_cancelled():
         return cancelled_result()
 
-    # 2) deterministic resolution
-    resolver_started = time.monotonic()
-    notify("resolver", "started")
-    t0 = time.time()
     res = None
-    if route == "unsupported":
-        res = None
-    elif route in ("device_set", "device_set_status"):
-        if hasattr(resolver_module, "planner_catalog_context"):
-            res = resolver_module.resolve_device_set(
-                dq, inventory, filters=device_filters
-            )
+    if route != "unsupported":
+        # 2) deterministic resolution
+        resolver_started = time.perf_counter()
+        notify("resolver", "started")
+        t0 = time.perf_counter()
+        if route in ("device_set", "device_set_status"):
+            if hasattr(resolver_module, "planner_catalog_context"):
+                res = resolver_module.resolve_device_set(
+                    dq, inventory, filters=device_filters
+                )
+            else:
+                # Compatibility only for frozen pre-v5 resolver runs.
+                res = resolver_module.resolve_device_set(dq, inventory)
+            if res.get("outcome") == "no_match":
+                route = "no_match"
         else:
-            # Compatibility only for frozen pre-v5 resolver runs.
-            res = resolver_module.resolve_device_set(dq, inventory)
-        if res.get("outcome") == "no_match":
-            route = "no_match"
-    else:
-        res = resolver_module.resolve_device(dq, inventory)
-        if res.get("outcome") == "ambiguous":
-            route = "clarification"
-        elif res.get("outcome") == "no_match":
-            route = "no_match"
-    timing["resolve_ms"] = round((time.time() - t0) * 1000.0, 2)
-    timing["resolver_ms"] = timing["resolve_ms"]
-    notify("resolver", "completed", resolver_started)
+            res = resolver_module.resolve_device(dq, inventory)
+            if res.get("outcome") == "ambiguous":
+                route = "clarification"
+            elif res.get("outcome") == "no_match":
+                route = "no_match"
+        timing["resolve_ms"] = round((time.perf_counter() - t0) * 1000.0, 2)
+        timing["resolver_ms"] = timing["resolve_ms"]
+        notify("resolver", "completed", resolver_started)
 
     if is_cancelled():
         return cancelled_result()
 
     # 3) backend execution + final answer
-    t0 = time.time()
+    t0 = time.perf_counter()
     backend_started = None
     backend_total_ms = 0.0
 
     def begin_backend():
         nonlocal backend_started
         if backend_started is None:
-            backend_started = time.monotonic()
+            backend_started = time.perf_counter()
             notify("librenms", "started")
 
     def complete_backend():
         nonlocal backend_started, backend_total_ms
         if backend_started is not None:
-            backend_total_ms += (time.monotonic() - backend_started) * 1000.0
-            notify("librenms", "completed", backend_started)
+            observer("librenms", "completed", round(backend_total_ms, 2))
             backend_started = None
 
     evidence = {}
@@ -1047,12 +1045,19 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         if backend is None:
             return None
         begin_backend()
-        return getattr(backend, fn)(**kw)
+        call_started = time.perf_counter()
+        try:
+            return getattr(backend, fn)(**kw)
+        finally:
+            nonlocal_backend_duration(call_started)
+
+    def nonlocal_backend_duration(started):
+        nonlocal backend_total_ms
+        backend_total_ms += (time.perf_counter() - started) * 1000.0
 
     def bk_events(device_id, window=None):
         if backend is None:
             return None
-        begin_backend()
         method = getattr(backend, "get_events")
         kwargs = {"device_id": device_id}
         if window is not None:
@@ -1070,7 +1075,12 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
             kwargs.update(
                 investigation_grounding.event_window_backend_args(window)
             )
-        return method(**kwargs)
+        begin_backend()
+        call_started = time.perf_counter()
+        try:
+            return method(**kwargs)
+        finally:
+            nonlocal_backend_duration(call_started)
 
     if route == "unsupported":
         final_answer = (
@@ -1236,7 +1246,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         timing["backend_ms"] = round(backend_total_ms, 2)
         if is_cancelled():
             return cancelled_result()
-        synthesis_started = time.monotonic()
+        synthesis_started = time.perf_counter()
         notify("synthesis", "started")
         llm["synthesis"] = True
         final_answer, grounding_trace, synth_timing = _grounded_synthesize(
@@ -1269,7 +1279,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         timing["backend_ms"] = round(backend_total_ms, 2)
         if is_cancelled():
             return cancelled_result()
-        synthesis_started = time.monotonic()
+        synthesis_started = time.perf_counter()
         notify("synthesis", "started")
         llm["synthesis"] = True
         final_answer, grounding_trace, synth_timing = _grounded_synthesize(
@@ -1287,8 +1297,8 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     timing["backend_ms"] = round(backend_total_ms, 2)
     if is_cancelled():
         return cancelled_result()
-    timing["execution_ms"] = round((time.time() - t0) * 1000.0, 2)
-    timing["total_ms"] = round((time.time() - wall0) * 1000.0, 1)
+    timing["execution_ms"] = round((time.perf_counter() - t0) * 1000.0, 2)
+    timing["total_ms"] = round((time.perf_counter() - monotonic0) * 1000.0, 1)
 
     return {
         "query": query,

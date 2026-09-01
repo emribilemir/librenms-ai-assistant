@@ -54,7 +54,8 @@ class SseServiceTests(unittest.TestCase):
         self.assertEqual(events, ["run.started", "planner.started", "planner.completed", "resolver.started", "resolver.completed", "librenms.started", "librenms.completed", "answer.delta", "completed"])
         completed = json.loads([line[6:] for line in response.text.splitlines() if line.startswith("data:")][-1])
         self.assertEqual(completed["metrics"]["backend_ms"], 5)
-        self.assertEqual(completed["metrics"]["time_to_first_visible_chunk_ms"], 12)
+        self.assertNotEqual(completed["metrics"]["time_to_first_visible_chunk_ms"], 12)
+        self.assertGreaterEqual(completed["metrics"]["time_to_first_visible_chunk_ms"], 0)
         detail = self.client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
         self.assertEqual(detail["messages"][-1]["content"], "Güvenli yanıt")
 
@@ -79,3 +80,13 @@ class SseServiceTests(unittest.TestCase):
         thread = client.post("/v1/threads", headers=bearer(), json={}).json()
         response = client.post(f"/v1/threads/{thread['id']}/runs", headers=bearer(), json={"client_message_id": "heartbeat", "content": "bekle"})
         self.assertIn(": heartbeat\n\n", response.text)
+
+    def test_stage_error_keeps_the_pipeline_classification(self):
+        class PlannerFailureAdapter:
+            def run(self, content, observer, is_cancelled):
+                return {"error": {"stage": "planner", "code": "planner_invalid_output", "retryable": True, "message": "Plan oluşturulamadı."}, "metrics": {}}
+        client = TestClient(create_app(os.path.join(self.directory.name, "failure.sqlite3"), secret=SECRET, adapter=PlannerFailureAdapter()))
+        thread = client.post("/v1/threads", headers=bearer(), json={}).json()
+        response = client.post(f"/v1/threads/{thread['id']}/runs", headers=bearer(), json={"client_message_id": "failure", "content": "bekle"})
+        payload = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data:")]
+        self.assertIn({"run_id": payload[0]["run_id"], "stage": "planner", "code": "planner_invalid_output", "retryable": True, "message": "Plan oluşturulamadı."}, payload)
