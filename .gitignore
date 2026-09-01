@@ -23,6 +23,7 @@ venv/
 *.swp
 *.tmp
 .superpowers/
+.worktrees/
 *.bak-*
 *.pre-*
 *.zip
