@@ -1,4 +1,4 @@
-import { API_BASE, createThread, readEventStream, runThread } from "./api";
+import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getThread, listThreads, readEventStream, runThread } from "./api";
 
 test("uses only the relative production API base with no embedded identity", async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "thread-a" }) });
@@ -11,15 +11,44 @@ test("uses only the relative production API base with no embedded identity", asy
 
 test("parses fetch SSE events and forwards exact event names", async () => {
   const encoder = new TextEncoder();
-  const stream = new ReadableStream({ start(controller) { controller.enqueue(encoder.encode("event: planner.started\ndata: {\"run_id\":\"r\",\"stage\":\"planner\"}\n\n")); controller.close(); } });
+  const stream = new ReadableStream({ start(controller) { controller.enqueue(encoder.encode("event: planner.started\ndata: {\"run_id\":\"r\",\"stage\":\"planner\"}\n\nevent: completed\ndata: {\"run_id\":\"r\",\"status\":\"completed\"}\n\n")); controller.close(); } });
   const events = [];
   await readEventStream({ body: stream }, (event, data) => events.push([event, data]));
-  expect(events).toEqual([["planner.started", { run_id: "r", stage: "planner" }]]);
+  expect(events).toEqual([["planner.started", { run_id: "r", stage: "planner" }], ["completed", { run_id: "r", status: "completed" }]]);
 });
 
 test("passes AbortController signal to the run request", async () => {
-  global.fetch = jest.fn().mockResolvedValue({ ok: true, body: new ReadableStream({ start(c) { c.close(); } }) });
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, body: new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode("event: completed\ndata: {\"run_id\":\"r\",\"status\":\"cancelled\"}\n\n")); c.close(); } }) });
   const controller = new AbortController();
   await runThread("thread-a", "client-a", "Check edge", "token", controller.signal, () => {});
   expect(global.fetch.mock.calls[0][1].signal).toBe(controller.signal);
+});
+
+test("parses CRLF-delimited, split, multi-line SSE data frames", async () => {
+  const encoder = new TextEncoder();
+  const chunks = ["event: answer.delta\r\ndata: {\"run_id\":\"r\",", "\r\ndata: \"message_id\":\"m\",\"delta\":\"safe\"}\r\n\r", "\n", "event: completed\r\ndata: {\"run_id\":\"r\",\"status\":\"completed\"}\r\n\r\n"];
+  const stream = new ReadableStream({ start(controller) { chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk))); controller.close(); } });
+  const events = [];
+  await readEventStream({ body: stream }, (event, data) => events.push([event, data]));
+  expect(events).toEqual([["answer.delta", { run_id: "r", message_id: "m", delta: "safe" }], ["completed", { run_id: "r", status: "completed" }]]);
+});
+
+test("rejects an SSE response that ends before a completed event", async () => {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({ start(controller) { controller.enqueue(encoder.encode("event: run.started\ndata: {\"run_id\":\"r\"}\n\n")); controller.close(); } });
+  await expect(readEventStream({ body: stream }, () => {})).rejects.toBeInstanceOf(IncompleteStreamError);
+});
+
+test("preserves typed 401 and 409 API errors for central UI handling", async () => {
+  global.fetch = jest.fn()
+    .mockResolvedValueOnce({ ok: false, status: 401 })
+    .mockResolvedValueOnce({ ok: false, status: 401 })
+    .mockResolvedValueOnce({ ok: false, status: 401 })
+    .mockResolvedValueOnce({ ok: false, status: 401 })
+    .mockResolvedValueOnce({ ok: false, status: 409 });
+  await expect(listThreads("token")).rejects.toMatchObject({ status: 401 });
+  await expect(createThread("token")).rejects.toBeInstanceOf(ApiError);
+  await expect(getThread("a", "token")).rejects.toMatchObject({ status: 401 });
+  await expect(deleteThread("a", "token")).rejects.toMatchObject({ status: 401 });
+  await expect(runThread("a", "client", "content", "token", undefined, () => {})).rejects.toMatchObject({ status: 409 });
 });

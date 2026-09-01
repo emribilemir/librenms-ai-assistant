@@ -23,23 +23,61 @@ test("correlates an optimistic client message with the server run", () => {
 
 test("reduces only exact stream stages and exposes real current progress", () => {
   let state = createInitialState({ selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "planner.started", data: { run_id: "r", stage: "planner" } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "planner.completed", data: { run_id: "r", stage: "planner", duration_ms: 8 } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "resolver.started", data: { run_id: "r", stage: "resolver" } });
   expect(state.runs.a.stages).toEqual({ planner: { status: "completed", durationMs: 8 }, resolver: { status: "running" } });
 });
 
+test("uses REST thread.runs history and exposes the latest persisted metrics", () => {
+  let state = createInitialState();
+  state = reduceAssistantChat(state, { type: "thread.loaded", thread: { id: "a", title: "Core", messages: [], runs: [{ id: "old", status: "completed", total_ms: 4 }, { id: "new", status: "completed", total_ms: 9, planner_ms: 2 }] } });
+  expect(state.runHistory.a).toHaveLength(2);
+  expect(state.runs.a).toMatchObject({ id: "new", metrics: { total_ms: 9, planner_ms: 2 } });
+});
+
+test("rejects stale, wrong-run, and post-terminal stream mutations", () => {
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "current", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "current", status: "cancelled", used_fallback: false, metrics } });
+  const terminal = state;
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "current", message_id: "late", delta: "must not show" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "planner.started", data: { run_id: "other", stage: "planner" } });
+  expect(state).toEqual(terminal);
+});
+
+test("does not resurrect a deleted thread from late stream callbacks", () => {
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "thread.deleted", threadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "late", message_id: "late", delta: "late answer" } });
+  expect(state.messages.a).toBeUndefined();
+  expect(state.runs.a).toBeUndefined();
+});
+
+test("marks validated fallback answers for the transcript", () => {
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "Safe fallback" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "completed", message_id: "m", used_fallback: true, metrics } });
+  expect(state.messages.a[0].usedFallback).toBe(true);
+});
+
 test("does not render an answer delta until the server emits a validated delta", () => {
   let state = createInitialState({ selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "Validated answer" } });
   expect(state.messages.a).toEqual([{ id: "m", role: "assistant", content: "Validated answer", pending: true }]);
 });
 
 test("makes retry available only after a retryable terminal error", () => {
   let state = createInitialState({ selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "error", data: { run_id: "r", stage: "librenms", code: "backend_failed", retryable: true, message: "LibreNMS is unavailable" } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "failed", used_fallback: false, metrics } });
   expect(state.runs.a).toMatchObject({ status: "failed", canRetry: true, error: { code: "backend_failed" } });
-  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "cancelled", used_fallback: false, metrics } });
-  expect(state.runs.a.canRetry).toBe(false);
+  let cancelled = createInitialState({ selectedThreadId: "a" });
+  cancelled = reduceAssistantChat(cancelled, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "cancelled", client_message_id: "c" } });
+  cancelled = reduceAssistantChat(cancelled, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "cancelled", status: "cancelled", used_fallback: false, metrics } });
+  expect(cancelled.runs.a.canRetry).toBe(false);
 });
