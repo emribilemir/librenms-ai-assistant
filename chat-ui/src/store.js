@@ -6,6 +6,15 @@ export function createInitialState(seed = {}) {
 
 function messagesFor(state, threadId) { return state.messages[threadId] || []; }
 
+function restoredMessages(messages, history) {
+  const acceptedRuns = history.filter((run) => run.status === "completed"); let acceptedIndex = 0;
+  return messages.map((message) => {
+    if (message.role !== "assistant") return message;
+    const run = acceptedRuns[acceptedIndex++];
+    return run ? { ...message, usedFallback: Boolean(run.used_fallback) } : message;
+  });
+}
+
 function updateRun(state, threadId, update) {
   return { ...state, runs: { ...state.runs, [threadId]: { ...(state.runs[threadId] || {}), ...update } } };
 }
@@ -21,13 +30,14 @@ export function reduceAssistantChat(state, action) {
       const run = latest ? { ...latest, usedFallback: Boolean(latest.used_fallback), metrics: Object.fromEntries(Object.entries(latest).filter(([key]) => key.endsWith("_ms"))) } : state.runs[action.thread.id];
       const thread = { ...action.thread }; delete thread.messages; delete thread.runs;
       const threads = state.threads.some((item) => item.id === thread.id) ? state.threads.map((item) => item.id === thread.id ? { ...item, ...thread } : item) : [thread, ...state.threads];
-      return { ...state, threads, selectedThreadId: action.thread.id, messages: { ...state.messages, [action.thread.id]: action.thread.messages || [] }, runs: run ? { ...state.runs, [action.thread.id]: run } : state.runs, runHistory: { ...state.runHistory, [action.thread.id]: history } };
+      return { ...state, threads, selectedThreadId: action.preserveSelection ? state.selectedThreadId : action.thread.id, messages: { ...state.messages, [action.thread.id]: restoredMessages(action.thread.messages || [], history) }, runs: run ? { ...state.runs, [action.thread.id]: run } : state.runs, runHistory: { ...state.runHistory, [action.thread.id]: history } };
     }
     case "thread.deleted": {
       const threads = state.threads.filter((thread) => thread.id !== action.threadId);
       const { [action.threadId]: deletedMessages, ...messages } = state.messages;
       const { [action.threadId]: deletedRun, ...runs } = state.runs;
-      return { ...state, threads, messages, runs, selectedThreadId: state.selectedThreadId === action.threadId ? (threads[0]?.id || null) : state.selectedThreadId };
+      const { [action.threadId]: deletedHistory, ...runHistory } = state.runHistory;
+      return { ...state, threads, messages, runs, runHistory, selectedThreadId: state.selectedThreadId === action.threadId ? (threads[0]?.id || null) : state.selectedThreadId };
     }
     case "drawer.open": return { ...state, drawerOpen: true };
     case "drawer.close": return { ...state, drawerOpen: false };
@@ -45,12 +55,12 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
   if (event === "run.started") {
     const existing = state.runs[threadId];
     const correlation = data.client_message_id || clientMessageId;
-    if ((clientMessageId && correlation !== clientMessageId) || (existing?.status === "running" && existing.id !== data.run_id)) return state;
+    if ((clientMessageId && correlation !== clientMessageId) || (existing && (existing.id === data.run_id || existing.status === "running" || existing.status === "error"))) return state;
     const messages = messagesFor(state, threadId).map((message) => message.id === (data.client_message_id || clientMessageId) ? { ...message, pending: false } : message);
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { id: data.run_id, clientMessageId: correlation, status: "running", stages: {}, canRetry: false, error: null });
   }
   const currentRun = state.runs[threadId];
-  if (!currentRun || currentRun.id !== data.run_id || currentRun.status !== "running") return state;
+  if (!currentRun || currentRun.id !== data.run_id || (currentRun.status !== "running" && !(event === "completed" && currentRun.status === "error"))) return state;
   if (event.endsWith(".started") || event.endsWith(".completed")) {
     const stage = data.stage;
     if (!STAGES.includes(stage)) return state;
@@ -64,7 +74,7 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
     const messages = existing ? prior.map((message) => message.id === data.message_id ? { ...message, content: `${message.content}${data.delta}` } : message) : [...prior, { id: data.message_id, role: "assistant", content: data.delta, pending: true }];
     return { ...state, messages: { ...state.messages, [threadId]: messages } };
   }
-  if (event === "error") return updateRun(state, threadId, { error: { stage: data.stage, code: data.code, message: data.message, retryable: data.retryable } });
+  if (event === "error") return updateRun(state, threadId, { status: "error", error: { stage: data.stage, code: data.code, message: data.message, retryable: data.retryable } });
   if (event === "completed") {
     const messages = data.message_id ? messagesFor(state, threadId).map((message) => message.id === data.message_id ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback) } : message) : messagesFor(state, threadId);
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { status: data.status, metrics: data.metrics, usedFallback: data.used_fallback, canRetry: data.status === "failed" && Boolean(state.runs[threadId]?.error?.retryable) });

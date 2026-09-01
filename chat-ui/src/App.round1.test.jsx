@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const mockUseExternalStoreRuntime = jest.fn(() => ({}));
 jest.mock("@assistant-ui/react", () => ({ AssistantRuntimeProvider: ({ children }) => children, useExternalStoreRuntime: (...args) => mockUseExternalStoreRuntime(...args) }));
 import App from "./App";
@@ -49,4 +49,30 @@ test("mounted App aborts an active stream before deletion and ignores its late a
   expect(aborted).toBe(true);
   lateEvent("answer.delta", { run_id: "r", message_id: "late", delta: "Late answer" });
   expect(screen.queryByText("Late answer")).not.toBeInTheDocument();
+});
+
+test("multiple active streams are tracked per thread so deleting one does not abort the other", async () => {
+  const chatStore = new AssistantChatStore(createInitialState({ threads: [{ id: "a", title: "Core" }, { id: "b", title: "Edge" }], selectedThreadId: "a", messages: { a: [], b: [] } }));
+  const aborted = [];
+  const api = makeApi({ listThreads: jest.fn().mockResolvedValue([{ id: "a", title: "Core" }, { id: "b", title: "Edge" }]), runThread: jest.fn((threadId, client, _content, _token, signal, onEvent) => new Promise((resolve, reject) => { onEvent("run.started", { run_id: `r-${threadId}`, client_message_id: client }); signal.addEventListener("abort", () => { aborted.push(threadId); reject(new DOMException("Aborted", "AbortError")); }); })) });
+  render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+  fireEvent.change(screen.getByLabelText("Ask about network state"), { target: { value: "Check core" } }); fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
+  await act(async () => { chatStore.dispatch({ type: "thread.selected", threadId: "b" }); });
+  fireEvent.change(screen.getByLabelText("Ask about network state"), { target: { value: "Check edge" } }); fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
+  await waitFor(() => expect(api.runThread).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole("button", { name: "Delete Core" })); fireEvent.click(screen.getByRole("button", { name: "Delete investigation" }));
+  await waitFor(() => expect(api.deleteThread).toHaveBeenCalledWith("a", "plugin-token"));
+  expect(aborted).toEqual(["a"]);
+});
+
+test("completion title refresh does not switch away from a thread selected while the refresh was pending", async () => {
+  const chatStore = new AssistantChatStore(createInitialState({ threads: [{ id: "a", title: "" }, { id: "b", title: "Edge" }], selectedThreadId: "a", messages: { a: [], b: [] } }));
+  let resolveDetail;
+  const api = makeApi({ listThreads: jest.fn().mockResolvedValue([{ id: "a", title: "" }, { id: "b", title: "Edge" }]), runThread: jest.fn(async (_thread, client, _content, _token, _signal, onEvent) => { onEvent("run.started", { run_id: "r-a", client_message_id: client }); onEvent("completed", { run_id: "r-a", status: "completed", used_fallback: false, metrics: currentMetrics }); }), getThread: jest.fn(() => new Promise((resolve) => { resolveDetail = resolve; })) });
+  render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+  fireEvent.change(screen.getByLabelText("Ask about network state"), { target: { value: "Check core" } }); fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
+  await waitFor(() => expect(api.getThread).toHaveBeenCalledWith("a", "plugin-token"));
+  await act(async () => { chatStore.dispatch({ type: "thread.selected", threadId: "b" }); }); await act(async () => { resolveDetail({ id: "a", title: "Core title", messages: [], runs: [] }); });
+  await waitFor(() => expect(chatStore.getSnapshot().threads.find((thread) => thread.id === "a").title).toBe("Core title"));
+  expect(chatStore.getSnapshot().selectedThreadId).toBe("b");
 });

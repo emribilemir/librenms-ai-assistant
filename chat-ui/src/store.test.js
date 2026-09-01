@@ -81,3 +81,37 @@ test("makes retry available only after a retryable terminal error", () => {
   cancelled = reduceAssistantChat(cancelled, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "cancelled", status: "cancelled", used_fallback: false, metrics } });
   expect(cancelled.runs.a.canRetry).toBe(false);
 });
+
+test("error permits only its completed envelope and duplicate run.started cannot reopen a terminal run", () => {
+  let state = createInitialState({ selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "error", data: { run_id: "r", stage: "librenms", code: "backend_failed", retryable: true, message: "Unavailable" } });
+  const errored = state;
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "late", delta: "must not show" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "planner.started", data: { run_id: "r", stage: "planner" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  expect(state).toEqual(errored);
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "failed", used_fallback: false, metrics } });
+  const terminal = state;
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  expect(state).toEqual(terminal);
+});
+
+test("deleting a thread clears its full run history", () => {
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a", runHistory: { a: [{ id: "old" }] } });
+  state = reduceAssistantChat(state, { type: "thread.deleted", threadId: "a" });
+  expect(state.runHistory.a).toBeUndefined();
+});
+
+test("reload maps Task 1 persisted used_fallback summaries onto accepted assistant messages", () => {
+  let state = createInitialState();
+  state = reduceAssistantChat(state, { type: "thread.loaded", thread: { id: "a", title: "Core", messages: [{ id: "u1", role: "user", content: "Check" }, { id: "a1", role: "assistant", content: "Safe evidence summary" }], runs: [{ id: "r1", client_message_id: "c1", status: "completed", used_fallback: 1, total_ms: 9 }] } });
+  expect(state.messages.a.find((message) => message.id === "a1")).toMatchObject({ usedFallback: true });
+});
+
+test("background thread refresh updates a detail without stealing another selected thread", () => {
+  let state = createInitialState({ threads: [{ id: "a", title: "Old" }, { id: "b", title: "Other" }], selectedThreadId: "b" });
+  state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Updated", messages: [], runs: [] } });
+  expect(state.selectedThreadId).toBe("b");
+  expect(state.threads.find((thread) => thread.id === "a").title).toBe("Updated");
+});
