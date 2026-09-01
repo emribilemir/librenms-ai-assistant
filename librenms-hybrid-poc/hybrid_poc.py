@@ -853,7 +853,8 @@ def _grounded_synthesize(query, package, model):
 
 def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
                 planner_schema="poc", resolver_module=None,
-                synthesis_system=None, request_time=None):
+                synthesis_system=None, request_time=None, observer=None,
+                is_cancelled=None):
     """Run the real hybrid pipeline for one user query and return a full trace.
 
     Args:
@@ -874,6 +875,24 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     plus planner/synthesis LLM flags kept separate.
     """
     wall0 = time.time()
+    observer = observer or (lambda stage, state, duration_ms: None)
+    is_cancelled = is_cancelled or (lambda: False)
+
+    def cancelled_result():
+        return {
+            "query": query,
+            "route": "cancelled",
+            "final_answer": None,
+            "timing_ms": {"total_ms": round((time.time() - wall0) * 1000.0, 1)},
+            "cancelled": True,
+        }
+
+    def notify(stage, state, started=None):
+        observer(
+            stage,
+            state,
+            None if started is None else round((time.monotonic() - started) * 1000.0, 2),
+        )
     llm = {"planner": False, "synthesis": False, "judge": False}
     timing = {}
     if inventory is None:
@@ -892,6 +911,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
 
     # 1) planner: Qwen owns all natural-language interpretation. Python only
     # validates the resulting structured plan before any resolver/tool action.
+    if is_cancelled():
+        return cancelled_result()
+    planner_started = time.monotonic()
+    notify("planner", "started")
     t0 = time.time()
     content, reason, ms = ollama_chat(
         model,
@@ -911,6 +934,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         if not valid:
             plan = None
     timing["planner_ms"] = round(ms, 1)
+    notify("planner", "completed", planner_started)
     planner_output = {
         "planner_schema": planner_schema,
         "plan": plan,
@@ -959,7 +983,12 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     event_window_spec = plan.get("event_window") if planner_schema == "gold" else None
     route = _ORCH_ROUTE.get(rt, "unknown")
 
+    if is_cancelled():
+        return cancelled_result()
+
     # 2) deterministic resolution
+    resolver_started = time.monotonic()
+    notify("resolver", "started")
     t0 = time.time()
     res = None
     if route == "unsupported":
@@ -981,9 +1010,30 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         elif res.get("outcome") == "no_match":
             route = "no_match"
     timing["resolve_ms"] = round((time.time() - t0) * 1000.0, 2)
+    timing["resolver_ms"] = timing["resolve_ms"]
+    notify("resolver", "completed", resolver_started)
+
+    if is_cancelled():
+        return cancelled_result()
 
     # 3) backend execution + final answer
     t0 = time.time()
+    backend_started = None
+    backend_total_ms = 0.0
+
+    def begin_backend():
+        nonlocal backend_started
+        if backend_started is None:
+            backend_started = time.monotonic()
+            notify("librenms", "started")
+
+    def complete_backend():
+        nonlocal backend_started, backend_total_ms
+        if backend_started is not None:
+            backend_total_ms += (time.monotonic() - backend_started) * 1000.0
+            notify("librenms", "completed", backend_started)
+            backend_started = None
+
     evidence = {}
     final_answer = None
     llm_input = None
@@ -996,11 +1046,13 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     def bk(fn, **kw):
         if backend is None:
             return None
+        begin_backend()
         return getattr(backend, fn)(**kw)
 
     def bk_events(device_id, window=None):
         if backend is None:
             return None
+        begin_backend()
         method = getattr(backend, "get_events")
         kwargs = {"device_id": device_id}
         if window is not None:
@@ -1180,10 +1232,17 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         structured_findings = investigation_grounding.build_investigation_evidence(
             evidence, resolved_event_window
         )
+        complete_backend()
+        timing["backend_ms"] = round(backend_total_ms, 2)
+        if is_cancelled():
+            return cancelled_result()
+        synthesis_started = time.monotonic()
+        notify("synthesis", "started")
         llm["synthesis"] = True
         final_answer, grounding_trace, synth_timing = _grounded_synthesize(
             query, structured_findings, model
         )
+        notify("synthesis", "completed", synthesis_started)
         llm["judge"] = grounding_trace["judge_llm_called"]
         llm_input = grounding_trace["generation_input"]
         llm_output = grounding_trace["generation_output"]
@@ -1206,10 +1265,17 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         structured_findings = investigation_grounding.build_investigation_evidence(
             evidence, resolved_event_window
         )
+        complete_backend()
+        timing["backend_ms"] = round(backend_total_ms, 2)
+        if is_cancelled():
+            return cancelled_result()
+        synthesis_started = time.monotonic()
+        notify("synthesis", "started")
         llm["synthesis"] = True
         final_answer, grounding_trace, synth_timing = _grounded_synthesize(
             query, structured_findings, model
         )
+        notify("synthesis", "completed", synthesis_started)
         llm["judge"] = grounding_trace["judge_llm_called"]
         llm_input = grounding_trace["generation_input"]
         llm_output = grounding_trace["generation_output"]
@@ -1217,6 +1283,10 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         timing["synthesis_ms"] = round(sum(synth_timing.values()), 1)
     else:
         final_answer = "İşlem desteklenmiyor."
+    complete_backend()
+    timing["backend_ms"] = round(backend_total_ms, 2)
+    if is_cancelled():
+        return cancelled_result()
     timing["execution_ms"] = round((time.time() - t0) * 1000.0, 2)
     timing["total_ms"] = round((time.time() - wall0) * 1000.0, 1)
 
