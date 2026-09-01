@@ -17,7 +17,9 @@ test("mounted App binds the supplied reducer store to the transcript and refresh
   fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
   await waitFor(() => expect(screen.getByRole("heading", { name: "Core uplink degraded" })).toBeVisible());
   expect(screen.getByText("Validated result")).toBeVisible();
-  expect(mockUseExternalStoreRuntime).toHaveBeenLastCalledWith(expect.objectContaining({ messages: [expect.objectContaining({ content: [{ type: "text", text: "Validated result" }] })] }));
+  const bridge = mockUseExternalStoreRuntime.mock.calls.at(-1)[0];
+  expect(bridge.messages).toEqual([expect.objectContaining({ content: "Validated result" })]);
+  expect(bridge.convertMessage(bridge.messages[0])).toMatchObject({ content: [{ type: "text", text: "Validated result" }] });
 });
 
 test("mounted App reports a 409 run conflict without retrying or retaining an unsafe optimistic message", async () => {

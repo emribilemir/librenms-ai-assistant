@@ -27,7 +27,19 @@ export function reduceAssistantChat(state, action) {
     case "thread.loaded": {
       const history = action.thread.runs || [];
       const latest = history.at(-1);
-      const run = latest ? { ...latest, usedFallback: Boolean(latest.used_fallback), metrics: Object.fromEntries(Object.entries(latest).filter(([key]) => key.endsWith("_ms"))) } : state.runs[action.thread.id];
+      const currentRun = state.runs[action.thread.id];
+      const persistedMetrics = latest ? Object.fromEntries(Object.entries(latest).filter(([key]) => key.endsWith("_ms"))) : null;
+      const run = latest ? {
+        ...latest,
+        usedFallback: Boolean(latest.used_fallback),
+        metrics: persistedMetrics,
+        // The REST summary intentionally excludes the safe error message and
+        // retryability. Preserve the stream terminal envelope for this run.
+        ...(currentRun?.id === latest.id && currentRun.error ? {
+          error: currentRun.error,
+          canRetry: latest.status === "failed" && Boolean(currentRun.error.retryable),
+        } : {}),
+      } : currentRun;
       const thread = { ...action.thread }; delete thread.messages; delete thread.runs;
       const threads = state.threads.some((item) => item.id === thread.id) ? state.threads.map((item) => item.id === thread.id ? { ...item, ...thread } : item) : [thread, ...state.threads];
       return { ...state, threads, selectedThreadId: action.preserveSelection ? state.selectedThreadId : action.thread.id, messages: { ...state.messages, [action.thread.id]: restoredMessages(action.thread.messages || [], history) }, runs: run ? { ...state.runs, [action.thread.id]: run } : state.runs, runHistory: { ...state.runHistory, [action.thread.id]: history } };

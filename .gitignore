@@ -51,3 +51,4 @@ librenms-hybrid-poc/hybrid-gold-v3/*external_judge_cases*.jsonl
 # Retired evaluation assets
 librenms-prompt-eval/
 holdout_queries_v1.json
+e2e-artifacts/

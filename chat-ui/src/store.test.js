@@ -37,6 +37,15 @@ test("uses REST thread.runs history and exposes the latest persisted metrics", (
   expect(state.runs.a).toMatchObject({ id: "new", metrics: { total_ms: 9, planner_ms: 2 } });
 });
 
+test("preserves a retryable SSE error when the terminal REST refresh omits its safe message", () => {
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "error", data: { run_id: "r", stage: "librenms", code: "backend_unavailable", retryable: true, message: "Unavailable" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "failed", used_fallback: false, metrics } });
+  state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Core", messages: [], runs: [{ id: "r", status: "failed", total_ms: 9 }] } });
+  expect(state.runs.a).toMatchObject({ status: "failed", canRetry: true, error: { message: "Unavailable" } });
+});
+
 test("rejects stale, wrong-run, and post-terminal stream mutations", () => {
   let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "current", client_message_id: "c" } });
