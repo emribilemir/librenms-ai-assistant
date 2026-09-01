@@ -44,8 +44,9 @@
 Every task uses these stable contracts:
 
 - `POST /v1/threads` creates an empty current-user thread; `GET /v1/threads` lists current-user thread summaries; `GET` and `DELETE /v1/threads/{id}` enforce current-user ownership.
-- `POST /v1/threads/{id}/runs` accepts `{client_message_id, content}` where `content` is non-empty after trimming and at most 8,000 characters; it returns `text/event-stream`.
-- The authenticated identity has `sub` and `name`; the signer/verifier requires `iss=librenms`, `aud=ai-assistant`, and `exp=iat+3600`.
+- `POST /v1/threads/{id}/runs` accepts `{client_message_id, content}` where `content` is non-empty after trimming and at most 8,000 characters; it returns `text/event-stream`. A duplicate `client_message_id` for the same owner/thread returns HTTP `409` before any stream and creates no message or run.
+- The authenticated identity has `sub` and `name`; the signer/verifier requires `iss=librenms`, `aud=ai-assistant`, and `exp=iat+3600`. It accepts `iat` no more than 30 seconds in the future and rejects a token whose `exp` is at or before the service wall clock without an expiry grace period.
+- JSON logs are limited to identifiers, route, stages, monotonic durations, and error codes; HTTP status and user/model content are excluded.
 - Stream events are `run.started`, paired real-stage `planner`, `resolver`, `librenms`, and optional `synthesis` events, zero or more `answer.delta`, and a terminal `completed`; a terminal operational failure additionally emits `error` with `{stage, code, retryable, message}`.
 - The browser cancels the run-creation fetch; server disconnect detection is the cancellation signal. No later stage or answer delta may occur after cancellation.
 - `completed.metrics` contains `planner_ms`, `resolver_ms`, `backend_ms`, `synthesis_ms`, `time_to_first_token_ms`, `time_to_first_visible_chunk_ms`, and `total_ms`; `completed.used_fallback` is boolean.
@@ -67,7 +68,7 @@ Every task uses these stable contracts:
 
 - [ ] **Step 1: Write the RED tests before creating service code.**
 
-Create focused test modules that assert valid/invalid/expired/tampered tokens; foreign-user `404`; title whitespace normalization and 60-character truncation; SQLite foreign-key/WAL/busy-timeout/schema-version setup; same-thread `409` and simultaneous different-thread runs; exact event order plus 15-second heartbeat; metrics attribution; cancellation before every later stage; no raw content in JSON logs; and no rejected investigation token in stream or storage.
+Create focused test modules that assert valid/invalid/tampered tokens; strict expiry at the service wall clock; `iat` exactly 30 seconds in the future accepted and 31 seconds in the future rejected; foreign-user `404`; title whitespace normalization and 60-character truncation; SQLite foreign-key/WAL/busy-timeout/schema-version setup; same-thread active-run `409`, duplicate same-owner/thread `client_message_id` `409` before a stream with no new message/run, and simultaneous different-thread runs; exact event order plus 15-second heartbeat; metrics attribution; cancellation before every later stage; JSON logs contain only identifiers, route, stages, monotonic durations, and error codes with no HTTP status or raw content; and no rejected investigation token in stream or storage.
 
 - [ ] **Step 2: Verify the initial RED state.**
 
@@ -77,7 +78,7 @@ Expected: FAIL because `chat_service` and its tested route, store, adapter, and 
 
 - [ ] **Step 3: Implement the smallest transport and pipeline seam that satisfies the tests.**
 
-Add exact FastAPI `0.141.1` and Uvicorn `0.52.4` pins. Implement the `v1.<base64url-json>.<base64url-hmac-sha256>` verifier with the required claims and 32-byte secret, enabled development identity only behind `AI_DEV_AUTH=1`, and no token in response/configuration. Add SQLite migration, restricted persistence, active-run registry, thread ownership, deterministic title, routes, heartbeat, and restricted JSON logging. Add observer/cancellation hooks with no-op defaults to the existing pipeline, and map real planner/resolver/LibreNMS/synthesis durations precisely. Buffer all investigation generation until mechanical validation and judging finish; emit only accepted text or deterministic fallback.
+Add exact FastAPI `0.141.1` and Uvicorn `0.52.4` pins. Implement the `v1.<base64url-json>.<base64url-hmac-sha256>` verifier with the required claims and 32-byte secret, accept `iat` at most 30 seconds after the service wall clock, reject `iat` 31 or more seconds after it, and reject `exp` at or before the wall clock; enable development identity only behind `AI_DEV_AUTH=1`, and expose no token in response/configuration. Add SQLite migration, restricted persistence, a same-owner/thread client-message uniqueness check that returns `409` before stream creation, active-run registry, thread ownership, deterministic title, routes, heartbeat, and restricted JSON logging limited to identifiers, route, stages, monotonic durations, and error codes. Add observer/cancellation hooks with no-op defaults to the existing pipeline, and map real planner/resolver/LibreNMS/synthesis durations precisely. Buffer all investigation generation until mechanical validation and judging finish; emit only accepted text or deterministic fallback.
 
 - [ ] **Step 4: Verify GREEN at the service boundary.**
 

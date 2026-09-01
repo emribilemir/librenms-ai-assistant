@@ -67,13 +67,13 @@ The LibreNMS plugin signs the current authorized user's identity using a shared 
 v1.<base64url-json>.<base64url-hmac-sha256>
 ```
 
-The JSON payload must contain `sub`, `name`, `iss`, `aud`, `iat`, and `exp`. The verifier requires `iss` equal to `librenms`, `aud` equal to `ai-assistant`, and `exp` exactly `iat + 3600`; it validates the HMAC-SHA-256 signature with the configured shared 32-byte secret and rejects malformed base64url, missing claims, invalid types, expired tokens, future-issued tokens outside the permitted clock-skew policy, and invalid signatures. `sub` is the authorization principal and is the sole ownership key; `name` is display metadata only.
+The JSON payload must contain `sub`, `name`, `iss`, `aud`, `iat`, and `exp`. The verifier requires `iss` equal to `librenms`, `aud` equal to `ai-assistant`, and `exp` exactly `iat + 3600`; it validates the HMAC-SHA-256 signature with the configured shared 32-byte secret. It accepts an `iat` at most 30 seconds later than the service wall clock and rejects an `iat` more than 30 seconds in the future. Expiry has no grace period: a token with `exp` at or before the service wall clock is expired. It rejects malformed base64url, missing claims, invalid types, expired tokens, future-issued tokens outside that 30-second allowance, and invalid signatures. `sub` is the authorization principal and is the sole ownership key; `name` is display metadata only.
 
 The plugin stores the same 32-byte secret in its settings. The Mac service reads it only from its environment. It is neither written to the database nor exposed to client JavaScript. Development identity support is available only when `AI_DEV_AUTH=1` is set on the Mac service; production startup rejects development-auth configuration and the production bundle contains no development token or secret.
 
 Every thread, message history lookup, deletion, and run creation is scoped to the authenticated `sub`. A foreign user receives `404` for a thread identifier they do not own, avoiding cross-user existence disclosure. The plugin is permission-gated by LibreNMS `global-read`; it emits only page root/configuration and the signed identity. PHP contains no AI or pipeline logic.
 
-JSON logs contain only request/run/thread/user identifiers, route, lifecycle stage, monotonic durations, HTTP status, and error codes. They never contain question text, answer text, bearer tokens, raw API payloads, prompts, grounding material, or model tokens.
+JSON logs contain only request/run/thread/user identifiers, route, lifecycle stage, monotonic durations, and error codes. They never contain HTTP status, question text, answer text, bearer tokens, raw API payloads, prompts, grounding material, or model tokens.
 
 ## HTTP and SSE Contract
 
@@ -87,9 +87,9 @@ All browser production requests use relative paths beginning `/ai-api/v1`; the b
 | `GET /v1/threads` | None | `200` ordered current-user thread summaries | `401` for authentication failure. |
 | `GET /v1/threads/{id}` | None | `200` with current-user thread, messages, and run summaries | `401` or ownership-hidden `404`. |
 | `DELETE /v1/threads/{id}` | None | `204` after deleting the current-user thread and its dependent records | `401` or ownership-hidden `404`; an active run is cancelled before deletion completes. |
-| `POST /v1/threads/{id}/runs` | `{ "client_message_id": "string", "content": "string" }` | `200`, `Content-Type: text/event-stream` | `400` malformed JSON; `422` empty/whitespace-only or more than 8,000 characters; `401`; ownership-hidden `404`; `409` active run for the same thread. |
+| `POST /v1/threads/{id}/runs` | `{ "client_message_id": "string", "content": "string" }` | `200`, `Content-Type: text/event-stream` | `400` malformed JSON; `422` empty/whitespace-only or more than 8,000 characters; `401`; ownership-hidden `404`; `409` active run for the same thread or duplicate `client_message_id` for the same owner/thread. |
 
-`client_message_id` is a client-generated, non-empty identifier used to correlate an optimistic user message with the run. Repeating it for the same completed run returns the stored completed result when an idempotent response is available; it never creates another user message. A different thread may have an active run at the same time.
+`client_message_id` is a client-generated, non-empty identifier used to correlate an optimistic user message with the run. A duplicate `client_message_id` for the same owner and thread always returns HTTP `409` before a new stream starts and creates no message or run. It never returns a stored result. A different thread may have an active run at the same time.
 
 There is no resume or replay endpoint in v1. An SSE connection is one request attempt; after a transport interruption, the client refetches thread state and exposes retry when the prior run failed or was cancelled. A completed-message regenerate control is explicitly absent.
 
