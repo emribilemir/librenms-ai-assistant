@@ -164,7 +164,7 @@ _DEFAULT_INDEX = None
 
 def load_inventory(path=None):
     if path is None:
-        path = os.path.join(HERE, "inventory.json")
+        path = os.path.join(HERE, "fixtures", "inventory.json")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 

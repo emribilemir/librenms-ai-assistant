@@ -19,7 +19,7 @@ Two paths are compared per test case:
       -> Qwen reads the tool-result JSON and writes the final answer
 
 The production system prompt is reproduced read-only in
-production_baseline_system.txt (from `ollama show librenms-qwen --modelfile`)
+fixtures/production_baseline_system.txt (from `ollama show librenms-qwen --modelfile`)
 so that Path A faithfully mirrors the current production assistant.
 
 This PoC does NOT touch LibreNMS, does NOT implement real tools, and does NOT
@@ -33,6 +33,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import urllib.request
 from zoneinfo import ZoneInfo
@@ -43,12 +44,13 @@ import utility_facts
 import investigation_grounding
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+FIXTURES = os.path.join(HERE, "fixtures")
 
 OLLAMA_URL = "http://localhost:11434"
 DEFAULT_MODEL = "librenms-qwen"
 
 # ----------------------------------------------------------------------------
-# Device inventory (deterministic source of truth, loaded from inventory.json)
+# Device inventory (deterministic source of truth, loaded from fixtures/inventory.json)
 # ----------------------------------------------------------------------------
 INVENTORY = resolver.load_inventory()
 
@@ -56,7 +58,7 @@ INVENTORY = resolver.load_inventory()
 # Production baseline system prompt (reproduced read-only for Path A)
 # ----------------------------------------------------------------------------
 def load_baseline():
-    path = os.path.join(HERE, "production_baseline_system.txt")
+    path = os.path.join(FIXTURES, "production_baseline_system.txt")
     try:
         with open(path, encoding="utf-8") as f:
             return f.read().strip()
@@ -1468,8 +1470,11 @@ def summarize(cases_results):
 def main():
     parser = argparse.ArgumentParser(description="Hybrid PoC T46 harness")
     parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--cases", default=os.path.join(HERE, "t46_variants.json"))
-    parser.add_argument("--out", default=os.path.join(HERE, "results.json"))
+    parser.add_argument("--cases", default=os.path.join(FIXTURES, "t46_variants.json"))
+    parser.add_argument(
+        "--out",
+        default=os.path.join(tempfile.gettempdir(), "librenms-hybrid-results.json"),
+    )
     parser.add_argument("--temps", default="0.0,0.7",
                         help="comma-separated temperatures to sweep")
     parser.add_argument("--reps", type=int, default=None,

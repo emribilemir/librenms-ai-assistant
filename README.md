@@ -74,7 +74,9 @@ lab-j9772a-01'de ne sorun var?
 
 | Yol | İçerik |
 |---|---|
-| [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Güncel planner, orchestration, backend adapter, fixture'lar ve testler |
+| [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Güncel planner, orchestration ve backend adapter giriş noktaları |
+| [`librenms-hybrid-poc/tests/`](librenms-hybrid-poc/tests/) | 90 testlik offline regression suite |
+| [`librenms-hybrid-poc/fixtures/`](librenms-hybrid-poc/fixtures/) | PoC inventory, prompt ve acceptance girdileri |
 | [`librenms-hybrid-poc/hybrid-gold-v3/`](librenms-hybrid-poc/hybrid-gold-v3/) | Katalog ingest, resolver v4/v5, synthetic backend ve Gold/Generated acceptance varlıkları |
 | [`docs/history/`](docs/history/) | Tarihsel inceleme ve düzeltme raporları |
 | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Opsiyonel Debian, SSH, sudo ve SNMPSim kurulum rehberi |
@@ -98,7 +100,7 @@ lab-j9772a-01'de ne sorun var?
   port ve event fact seçicileri
 - [`resolver_candidate_v5.py`](librenms-hybrid-poc/hybrid-gold-v3/resolver_candidate_v5.py):
   structured katalog filtreleme ve identity resolution
-- [`emr52_acceptance_queries.json`](librenms-hybrid-poc/emr52_acceptance_queries.json):
+- [`emr52_acceptance_queries.json`](librenms-hybrid-poc/fixtures/emr52_acceptance_queries.json):
   güncel canlı acceptance sorguları
 
 ## Hızlı başlangıç
@@ -141,7 +143,7 @@ Yerel `http://localhost:11434` adresinde uygun model çalışıyorsa:
 ```bash
 python3 librenms-hybrid-poc/hybrid_poc.py \
   --model librenms-qwen \
-  --cases librenms-hybrid-poc/t46_v2_cases.json \
+  --cases librenms-hybrid-poc/fixtures/t46_v2_cases.json \
   --temps 0.0 \
   --out /tmp/librenms-hybrid-results.json
 ```
@@ -185,7 +187,7 @@ gerçek İSBAK operasyon verisi olarak yorumlanmamalıdır.
 
 ## Doğrulama durumu
 
-31 Ağustos 2026 tarihinde, güncel `main` çalışma ağacında:
+1 Eylül 2026 tarihinde, güncel doğrulama çalışma ağacında:
 
 - offline unittest discovery: **90/90 başarılı**
 - resolver fixture self-test: **47/47 başarılı**
@@ -193,16 +195,13 @@ gerçek İSBAK operasyon verisi olarak yorumlanmamalıdır.
 Canlı Ollama/LibreNMS acceptance koşuları model, token ve erişilebilir lab
 ortamı gerektirdiği için offline suite'in parçası değildir.
 
-## Tarihsel deney çıktıları
+## Yerel deney çıktıları
 
-`librenms-hybrid-poc/results*.json`, `run_log*.txt` ve `comparison*.md`
-dosyaları ilk PoC karşılaştırmalarının dondurulmuş snapshot'larıdır.
-`hybrid-gold-v3/*results*.json` dosyaları da acceptance harness kanıtıdır.
-Bunlar güncel çalışma sırasında yeniden üretilen geçici çıktılar değildir;
-sonuçlar kendi commit, model ve runtime bağlamlarıyla değerlendirilmelidir.
-
-Yeni yerel çalışma çıktıları repoya eklenmek yerine `/tmp` gibi geçici bir
-konuma yazılmalıdır.
+Harness sonuçları, loglar, comparison raporları ve external-judge export'ları
+yeniden üretilebilir çalışma çıktılarıdır; Git tarafından izlenmez. Varsayılan
+PoC sonucu işletim sisteminin geçici dizinine yazılır. Kalıcı bir deney kanıtı
+gerekiyorsa model, runtime ve commit bilgisiyle ayrı bir release artifact'ı
+olarak saklanmalıdır.
 
 ## Bilinen sınırlar
 
@@ -214,6 +213,13 @@ konuma yazılmalıdır.
 - Investigation kalitesi, backend'in sağladığı veri ve event-window coverage'ı
   ile sınırlıdır.
 - Kanıtlanmış kök neden yoksa sonuç `root_cause unknown` sınırında kalır.
+
+## Sonraki yön
+
+Öncelik, doğrulanmış hybrid akışı LibreNMS'in native chat deneyimine read-only
+olarak bağlamaktır. Bu entegrasyonun sözleşmesi ve güvenlik sınırları
+korunduktan sonra planner, backend ve iki aşamalı investigation zincirindeki
+latency ölçülüp optimize edilecektir.
 
 ## Tasarım belgeleri
 

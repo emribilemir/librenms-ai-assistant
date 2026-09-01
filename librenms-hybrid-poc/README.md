@@ -117,15 +117,9 @@ olarak kullanılmaz.
 | [`planner_v2.py`](planner_v2.py) | Structured plan schema ve strict validation |
 | [`investigation_grounding.py`](investigation_grounding.py) | Deterministic finding builder, claim/judge kontratları ve güvenli fallback |
 | [`resolver.py`](resolver.py) | Eski PoC inventory resolver'ı; compatibility ve tarihsel karşılaştırma |
-| [`inventory.json`](inventory.json) | PoC inventory fixture'ı |
-| [`production_baseline_system.txt`](production_baseline_system.txt) | Tarihsel direct-LLM baseline prompt'u |
-| [`test_semantic_planner.py`](test_semantic_planner.py) | Güncel sahiplik sınırı için küçük offline testler |
-| [`test_live_backend.py`](test_live_backend.py) | API adapter ve gerçek backend `device_id` handoff regression testleri |
-| [`test_investigation_grounding.py`](test_investigation_grounding.py) | Finding, zaman penceresi, event parser ve truncation testleri |
-| [`test_grounded_synthesis.py`](test_grounded_synthesis.py) | Generator, judge, fallback ve route isolation testleri |
-| [`test_port_selection.py`](test_port_selection.py) | EMR-46 planner port contract'ı ve deterministic port selection regression testleri |
-| [`test_resolver.py`](test_resolver.py) | Eski resolver'ın offline testleri |
-| `comparison*.md`, `results*.json` | Daha önceki deney snapshot'ları |
+| [`fixtures/`](fixtures/) | PoC inventory, baseline prompt ve acceptance girdileri |
+| [`tests/`](tests/) | Planner, resolver, backend, grounding ve utility regression testleri |
+| [`hybrid-gold-v3/`](hybrid-gold-v3/) | Aktif Gold/Generated acceptance bundle ve resolver v5 |
 
 ## Hızlı offline test
 
@@ -138,14 +132,18 @@ python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
 Bu testler gerçek Ollama veya harici LibreNMS ağı kullanmaz. Backend adapter
 testleri yalnız process içindeki localhost test sunucusunu kullanır.
 
-Merge-safe grounding doğrulamasında full discovery sonucu `67/67`, resolver'ın
-kendi fixture koşusu ise `PASS=47 FAIL=0` olarak geçmiştir. Odaklı gruplar:
+Güncel full discovery sonucu `90/90`, resolver'ın kendi fixture koşusu ise
+`PASS=47 FAIL=0` olarak geçmiştir. Odaklı gruplar:
 
 ```bash
 cd librenms-hybrid-poc
-python3 -m unittest -v test_port_selection.py
-python3 -m unittest -v test_investigation_grounding.py test_grounded_synthesis.py
-python3 -m unittest -v test_semantic_planner.py test_live_backend.py
+python3 -m unittest -v tests.test_port_selection
+python3 -m unittest -v \
+  tests.test_investigation_grounding \
+  tests.test_grounded_synthesis
+python3 -m unittest -v \
+  tests.test_semantic_planner \
+  tests.test_live_backend
 ```
 
 ## Yerel Ollama ile PoC
@@ -153,13 +151,14 @@ python3 -m unittest -v test_semantic_planner.py test_live_backend.py
 ```bash
 python3 librenms-hybrid-poc/hybrid_poc.py \
   --model librenms-qwen \
-  --cases librenms-hybrid-poc/t46_v2_cases.json \
+  --cases librenms-hybrid-poc/fixtures/t46_v2_cases.json \
   --temps 0.0 \
   --out /tmp/librenms-hybrid-results.json
 ```
 
 Varsayılan Ollama endpoint'i `http://localhost:11434`, planner ve synthesis için
-`think=false` kullanılır.
+`think=false` kullanılır. `--out` verilmezse sonuç sistemin geçici dizinine
+yazılır; sonuç, log ve external-judge export'ları repoda takip edilmez.
 
 ## Gerçek LibreNMS API ile canlı sorgu
 
