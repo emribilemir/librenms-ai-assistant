@@ -56,3 +56,12 @@ class CancellationTests(unittest.TestCase):
             "stage": "planner", "code": "planner_invalid_output",
             "retryable": True, "message": "Plan oluşturulamadı.",
         })
+
+    def test_pipeline_exception_preserves_completed_stage_metrics(self):
+        def broken(content, observer, is_cancelled):
+            observer("planner", "started", None)
+            observer("planner", "completed", 17)
+            raise RuntimeError("backend unavailable")
+        result = PipelineAdapter(orchestrator=broken).run("q", lambda *args: None, lambda: False)
+        self.assertEqual(result["error"]["stage"], "planner")
+        self.assertEqual(result["metrics"]["planner_ms"], 17)

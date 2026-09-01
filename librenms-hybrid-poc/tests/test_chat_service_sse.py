@@ -6,6 +6,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -90,3 +91,30 @@ class SseServiceTests(unittest.TestCase):
         response = client.post(f"/v1/threads/{thread['id']}/runs", headers=bearer(), json={"client_message_id": "failure", "content": "bekle"})
         payload = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data:")]
         self.assertIn({"run_id": payload[0]["run_id"], "stage": "planner", "code": "planner_invalid_output", "retryable": True, "message": "Plan oluşturulamadı."}, payload)
+
+    def test_visible_metric_includes_required_persistence_before_delta(self):
+        original = __import__("chat_service.store", fromlist=["ChatStore"]).ChatStore.complete_run
+        def delayed(store, *args, **kwargs):
+            time.sleep(0.02)
+            return original(store, *args, **kwargs)
+        with patch("chat_service.app.ChatStore.complete_run", delayed):
+            headers = bearer()
+            thread = self.client.post("/v1/threads", headers=headers, json={}).json()
+            response = self.client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "delay", "content": "durum"})
+        completed = json.loads([line[6:] for line in response.text.splitlines() if line.startswith("data:")][-1])
+        self.assertGreaterEqual(completed["metrics"]["time_to_first_visible_chunk_ms"], 20)
+
+    def test_storage_failure_after_pipeline_stage_still_emits_terminal_storage_error(self):
+        original = __import__("chat_service.store", fromlist=["ChatStore"]).ChatStore.complete_run
+        calls = [0]
+        def reject_once(store, *args, **kwargs):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise RuntimeError("disk full")
+            return original(store, *args, **kwargs)
+        with patch("chat_service.app.ChatStore.complete_run", reject_once):
+            headers = bearer()
+            thread = self.client.post("/v1/threads", headers=headers, json={}).json()
+            response = self.client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "storage", "content": "durum"})
+        data = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data:")]
+        self.assertIn({"run_id": data[0]["run_id"], "stage": "storage", "code": "storage_failed", "retryable": True, "message": "Sonuç kaydedilemedi."}, data)

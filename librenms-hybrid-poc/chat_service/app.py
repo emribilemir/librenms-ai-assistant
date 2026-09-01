@@ -104,6 +104,18 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
             task = None
             terminal = False
             last_stage = "internal"
+            work = "pipeline"
+            metrics = {key: None for key in ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms")}
+
+            def persist_failure(stage, code, failure_metrics):
+                try:
+                    store.complete_run(started["id"], "failed", failure_metrics, error_stage=stage, error_code=code)
+                except Exception:
+                    pass
+                try:
+                    logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage=stage, error_code=code)
+                except Exception:
+                    pass
 
             def observer(stage, state, duration):
                 nonlocal last_stage
@@ -143,31 +155,36 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 result = task.result()
                 metrics = result.get("metrics", {})
                 if result.get("cancelled") or cancelled.is_set():
+                    work = "storage"
                     store.complete_run(started["id"], "cancelled", metrics, error_stage="cancellation", error_code="cancelled")
                     yield _sse("completed", {"run_id": started["id"], "status": "cancelled", "used_fallback": False, "metrics": metrics})
                     terminal = True
                     return
                 if result.get("error"):
                     error = result["error"]
-                    store.complete_run(started["id"], "failed", metrics, error_stage=error["stage"], error_code=error["code"])
-                    logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage=error["stage"], error_code=error["code"])
+                    work = "storage"
+                    persist_failure(error["stage"], error["code"], metrics)
                     yield _sse("error", {"run_id": started["id"], **error})
                     yield _sse("completed", {"run_id": started["id"], "status": "failed", "used_fallback": False, "metrics": metrics})
                     terminal = True
                     return
                 answer = result["answer"]
-                metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
+                work = "storage"
                 message_id = store.complete_run(started["id"], "completed", metrics, used_fallback=result["used_fallback"], answer=answer)
+                metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
+                store.update_visible_time(started["id"], metrics["time_to_first_visible_chunk_ms"])
                 terminal = True
                 yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": answer})
                 yield _sse("completed", {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics})
             except Exception:
-                metrics = {key: None for key in ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms")}
-                code = f"{last_stage}_failed" if last_stage in {"planner", "resolver", "librenms", "synthesis", "storage"} else "internal_failure"
-                stage = last_stage if code != "internal_failure" else "internal"
-                store.complete_run(started["id"], "failed", metrics, error_stage=stage, error_code=code)
-                logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage=stage, error_code=code)
-                yield _sse("error", {"run_id": started["id"], "stage": stage, "code": code, "retryable": True, "message": "İşlem tamamlanamadı."})
+                if work == "storage":
+                    stage, code, message = "storage", "storage_failed", "Sonuç kaydedilemedi."
+                elif work == "pipeline" and last_stage in {"planner", "resolver", "librenms", "synthesis"}:
+                    stage, code, message = last_stage, f"{last_stage}_failed", "İşlem tamamlanamadı."
+                else:
+                    stage, code, message = "internal", "internal_failure", "İşlem tamamlanamadı."
+                persist_failure(stage, code, metrics)
+                yield _sse("error", {"run_id": started["id"], "stage": stage, "code": code, "retryable": True, "message": message})
                 yield _sse("completed", {"run_id": started["id"], "status": "failed", "used_fallback": False, "metrics": metrics})
                 terminal = True
             finally:

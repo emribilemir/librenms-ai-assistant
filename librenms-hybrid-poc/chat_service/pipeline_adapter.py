@@ -16,10 +16,15 @@ class PipelineAdapter:
         if is_cancelled():
             return {"cancelled": True, "metrics": self._metrics({})}
         last_stage = "internal"
+        completed_metrics = {}
 
         def observed(stage, state, duration):
             nonlocal last_stage
             last_stage = stage
+            if state == "completed":
+                metric = {"planner": "planner_ms", "resolver": "resolver_ms", "librenms": "backend_ms", "synthesis": "synthesis_ms"}.get(stage)
+                if metric is not None:
+                    completed_metrics[metric] = duration
             observer(stage, state, duration)
 
         try:
@@ -37,7 +42,7 @@ class PipelineAdapter:
         except Exception:
             return {
                 "error": self._error(last_stage),
-                "metrics": self._metrics({}),
+                "metrics": self._metrics(completed_metrics),
             }
         if result.get("cancelled") or is_cancelled():
             return {"cancelled": True, "metrics": self._metrics(result.get("timing_ms", {}))}

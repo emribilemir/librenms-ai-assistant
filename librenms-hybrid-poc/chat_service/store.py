@@ -157,6 +157,13 @@ class ChatStore:
                     connection.execute("ROLLBACK")
                 raise
 
+    def update_visible_time(self, run_id, duration_ms):
+        with self.connection() as connection:
+            connection.execute(
+                "UPDATE runs SET time_to_first_visible_chunk_ms=? WHERE id=?",
+                (duration_ms, run_id),
+            )
+
     def delete_thread(self, thread_id, user_sub):
         with self.connection() as connection:
             self._owned_thread(connection, thread_id, user_sub)
