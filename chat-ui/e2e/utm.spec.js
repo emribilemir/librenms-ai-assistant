@@ -186,11 +186,13 @@ test.describe("authorized UTM acceptance", () => {
   });
 
   test("shows a curated backend failure after streamed progress and retries only when the service permits it", async ({ browser }) => {
-    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_RETRY_QUERY", "AI_UTM_RETRY_ERROR_TEXT", "AI_UTM_RETRY_SUCCESS_TEXT", "AI_UTM_RETRY_STAGE_GATE");
+    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_RETRY_QUERY", "AI_UTM_RETRY_ERROR_TEXT", "AI_UTM_RETRY_SUCCESS_TEXT");
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
     try {
       await createThread(page);
       await ask(page, process.env.AI_UTM_RETRY_QUERY);
+      // The live target must be configured to expose this sequence. This suite
+      // observes the product stream; it does not claim to control its timing.
       const live = page.getByRole("region", { name: "Pipeline progress" }).getByText(/Pipeline status:/);
       await expect(live).toContainText("planner completed");
       await expect(live).toContainText("resolver completed");
