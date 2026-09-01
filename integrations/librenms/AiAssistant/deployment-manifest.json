@@ -1,0 +1,11 @@
+{
+  "librenms_version": "26.8.1",
+  "plugin_name": "AiAssistant",
+  "plugin_source_destination": "/opt/librenms/app/Plugins/AiAssistant/",
+  "asset_destination": "/opt/librenms/html/plugins/ai-assistant/",
+  "assets": [
+    "ai-assistant.js",
+    "ai-assistant.css"
+  ],
+  "browser_api_base": "/ai-api/v1"
+}
