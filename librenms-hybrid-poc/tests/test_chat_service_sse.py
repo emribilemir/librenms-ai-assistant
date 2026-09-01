@@ -118,3 +118,43 @@ class SseServiceTests(unittest.TestCase):
             response = self.client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "storage", "content": "durum"})
         data = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data:")]
         self.assertIn({"run_id": data[0]["run_id"], "stage": "storage", "code": "storage_failed", "retryable": True, "message": "Sonuç kaydedilemedi."}, data)
+
+    def test_visible_metric_update_failure_keeps_accepted_run_and_message_completed(self):
+        with patch("chat_service.app.ChatStore.update_visible_time", side_effect=RuntimeError("metric disk error")):
+            headers = bearer()
+            thread = self.client.post("/v1/threads", headers=headers, json={}).json()
+            response = self.client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "metric-failure", "content": "durum"})
+        events = [line[7:] for line in response.text.splitlines() if line.startswith("event:")]
+        self.assertEqual(events[-2:], ["answer.delta", "completed"])
+        detail = self.client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertEqual(detail["runs"][0]["status"], "completed")
+        self.assertEqual([message["role"] for message in detail["messages"]], ["user", "assistant"])
+
+    def test_first_delta_is_yielded_before_visible_metric_update(self):
+        from chat_service.app import _sse as original_sse
+        from chat_service.store import ChatStore
+        order = []
+        def traced_sse(event, data):
+            if event == "answer.delta":
+                order.append("delta")
+            return original_sse(event, data)
+        original_update = ChatStore.update_visible_time
+        def traced_update(store, *args):
+            order.append("metric")
+            return original_update(store, *args)
+        with patch("chat_service.app._sse", traced_sse), patch("chat_service.app.ChatStore.update_visible_time", traced_update):
+            headers = bearer()
+            thread = self.client.post("/v1/threads", headers=headers, json={}).json()
+            self.client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "ordering", "content": "durum"})
+        self.assertLess(order.index("delta"), order.index("metric"))
+
+    def test_empty_adapter_answer_uses_safe_persisted_fallback(self):
+        class EmptyAdapter:
+            def run(self, content, observer, is_cancelled):
+                return {"answer": "", "used_fallback": True, "metrics": {}}
+        client = TestClient(create_app(os.path.join(self.directory.name, "empty.sqlite3"), secret=SECRET, adapter=EmptyAdapter()))
+        headers = bearer()
+        thread = client.post("/v1/threads", headers=headers, json={}).json()
+        client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "empty", "content": "durum"})
+        detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertEqual(detail["messages"][-1]["content"], "İşlem desteklenmiyor.")

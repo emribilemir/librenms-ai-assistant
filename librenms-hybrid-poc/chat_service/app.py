@@ -168,13 +168,19 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     yield _sse("completed", {"run_id": started["id"], "status": "failed", "used_fallback": False, "metrics": metrics})
                     terminal = True
                     return
-                answer = result["answer"]
+                answer = result.get("answer") or "İşlem desteklenmiyor."
                 work = "storage"
                 message_id = store.complete_run(started["id"], "completed", metrics, used_fallback=result["used_fallback"], answer=answer)
-                metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
-                store.update_visible_time(started["id"], metrics["time_to_first_visible_chunk_ms"])
                 terminal = True
                 yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": answer})
+                metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
+                try:
+                    store.update_visible_time(started["id"], metrics["time_to_first_visible_chunk_ms"])
+                except Exception:
+                    try:
+                        logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage="storage", error_code="visible_metric_unavailable")
+                    except Exception:
+                        pass
                 yield _sse("completed", {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics})
             except Exception:
                 if work == "storage":
