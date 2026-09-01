@@ -62,8 +62,7 @@ class Page extends PageHook
     /** @param array<string, mixed> $settings */
     private function sharedSecret(array $settings): string
     {
-        $encoded = $settings['shared_secret_base64'] ?? null;
-        $secret = is_string($encoded) ? base64_decode($encoded, true) : false;
+        $secret = $settings['shared_secret'] ?? null;
 
         if (! is_string($secret) || strlen($secret) !== 32) {
             abort(503, 'The AI Assistant shared secret is not configured.');

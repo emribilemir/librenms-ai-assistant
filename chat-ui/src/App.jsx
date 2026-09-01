@@ -3,6 +3,7 @@ import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import * as apiClient from "./api";
 import { useLibreNmsExternalStoreRuntime } from "./runtime";
 import { AssistantChatStore } from "./store";
+import { readPluginIdentity } from "./identity";
 import { ChatTranscript } from "./components/ChatTranscript";
 import { Composer } from "./components/Composer";
 import { DeleteThreadDialog } from "./components/DeleteThreadDialog";
@@ -13,7 +14,7 @@ import { ThreadList } from "./components/ThreadList";
 import styles from "./App.module.css";
 
 const defaultStore = new AssistantChatStore();
-const defaultIdentity = window.__LIBRENMS_AI_ASSISTANT__ || {};
+const defaultIdentity = readPluginIdentity();
 const clientMessageId = () => globalThis.crypto?.randomUUID?.() || `message-${Date.now()}`;
 export default function App({ chatStore = defaultStore, identity = defaultIdentity, api = apiClient }) {
   const state = useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot, chatStore.getSnapshot);

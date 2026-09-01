@@ -1,6 +1,3 @@
 <link rel="stylesheet" href="{{ asset('plugins/ai-assistant/ai-assistant.css') }}">
-<div id="root"></div>
-<script>
-window.__LIBRENMS_AI_ASSISTANT__ = {!! $identity_json !!};
-</script>
+<div id="root" data-ai-assistant-config="{{ $identity_json }}"></div>
 <script type="module" src="{{ asset('plugins/ai-assistant/ai-assistant.js') }}"></script>

@@ -1,67 +1,109 @@
 # AI Assistant plugin deployment and rollback
 
-This runbook is deliberately a command reference, not authorization to touch
-the UTM guest, Nginx, or `/opt/librenms`. Execute it only after an operator
-approves the named target and has a rollback window.
+This runbook is a command reference, not authorization to touch the UTM guest,
+Nginx, or `/opt/librenms`. Execute it only after an operator approves the
+named target and has a rollback window.
 
 ## Preconditions
 
-1. Confirm the guest runs LibreNMS 26.8.1 and has no local core changes that
-   this integration would overwrite. The strategy is core-clean: deploy only
+1. Confirm the guest runs LibreNMS 26.8.1 and the core is clean. This is a
+   core-clean deployment: it changes only
    `/opt/librenms/app/Plugins/AiAssistant/`,
-   `/opt/librenms/html/plugins/ai-assistant/`, and one Nginx include; do not
-   alter LibreNMS application source, package metadata, or Vite files.
-2. Generate one secret locally: `openssl rand -base64 32`. Keep it out of the
-   repository, shell history, browser configuration, and logs.
-3. On the Mac host, configure the service environment with the generated value
-   as `AI_ASSISTANT_SHARED_SECRET_BASE64`, then start it bound specifically to
-   `192.168.64.1:8765` (not a public interface):
+   `/opt/librenms/html/plugins/ai-assistant/`, an opt-in Nginx location
+   include, and timestamped backups under `/opt/librenms/.ai-assistant-backups/`.
+   Never edit LibreNMS application source, package metadata, or Vite files.
+2. Create an exact 32-character ASCII secret and keep it out of shell history,
+   the repository, browser configuration, and logs:
 
    ```sh
-   export AI_ASSISTANT_SHARED_SECRET_BASE64='replace-with-32-byte-base64-secret'
-   cd /path/to/isbaklibrenms/librenms-hybrid-poc
-   uvicorn chat_service.app:app --host 192.168.64.1 --port 8765
+   python3 -c 'import secrets; print(secrets.token_urlsafe(24))'
    ```
+
+3. Save that exact value verbatim in the plugin setting and set the same exact
+   value in the Mac service environment. The current backend reads raw bytes
+   from `AI_ASSISTANT_SHARED_SECRET` and exposes the `create_app` factory:
+
+   ```sh
+   export AI_ASSISTANT_SHARED_SECRET='replace-with-exactly-32-ASCII-characters'
+   cd /path/to/isbaklibrenms/librenms-hybrid-poc
+   uvicorn chat_service.app:create_app --factory --host 192.168.64.1 --port 8765
+   ```
+
+   Before a live rollout, run `php -l` on the three deployed PHP hook files;
+   PHP CLI was not available for the offline repository check.
 
 ## Authorized installation sequence
 
-Run the version-controlled script on the approved guest checkout only after
-reviewing its source and preserving the previous plugin/asset directories:
+The script builds and stages the frontend before it writes `/opt/librenms`.
+It backs up existing plugin/assets to a timestamped directory, uses
+`rsync --delete-delay` so stale files are removed after replacement files are
+ready, and restores the backup if either deployment copy fails.
 
 ```sh
 cd /path/to/isbaklibrenms
 sudo integrations/librenms/AiAssistant/scripts/deploy-plugin.sh /opt/librenms
 ```
 
-Install the proxy snippet into the *active LibreNMS server block's include
-location*. The exact include path is distribution-specific; inspect the active
-Nginx configuration first and then copy the file, for example:
+Record the printed backup path. Do not supply a different root: the script
+accepts only an existing `/opt/librenms` target.
+
+## Nginx server-context include
+
+`nginx/ai-assistant.conf` contains a `location` block, which is valid only
+inside a `server {}` block. It must **not** be copied directly to an ordinary
+top-level `/etc/nginx/conf.d/*.conf` include, because those files are normally
+read in the `http {}` context.
+
+First inspect the live configuration and identify the `server {}` block that
+serves LibreNMS:
 
 ```sh
+sudo nginx -T
+```
+
+For the common Debian/Ubuntu LibreNMS layout, edit the active
+`/etc/nginx/sites-available/librenms` (or its enabled symlink target) and add
+this include *inside that existing `server {}` block*:
+
+```nginx
+include /opt/librenms/nginx/ai-assistant.location.conf;
+```
+
+Copy the repository fragment to that exact path, then test before reload:
+
+```sh
+sudo install -d -m 0755 /opt/librenms/nginx
 sudo install -m 0644 integrations/librenms/AiAssistant/nginx/ai-assistant.conf \
-  /etc/nginx/conf.d/ai-assistant.conf
+  /opt/librenms/nginx/ai-assistant.location.conf
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Do not reload if `nginx -t` fails. The include forwards `/ai-api/v1/...` to
-the Mac service as `/v1/...`, uses HTTP/1.1, disables proxy buffering/cache,
-sets the 360-second read timeout, and sends SSE-safe `X-Accel-Buffering: no`.
+Do not reload if `nginx -t` fails. The trailing slash in `proxy_pass` maps
+`/ai-api/v1/...` to upstream `/v1/...`; HTTP/1.1, disabled buffering/cache,
+the 360-second read timeout, and `X-Accel-Buffering: no` preserve SSE.
 
-In LibreNMS, enable **AiAssistant** under Plugins. Then open its plugin
-settings as an administrator and save the same base64 secret from the Mac
-environment. A global-read user should then see **AI Assistant** in the plugin
-menu and `/plugin/AiAssistant` should render the static client.
+Then enable **AiAssistant** under LibreNMS Plugins. A global-read user should
+see its menu entry and `/plugin/AiAssistant` should mount the static client.
 
 ## Rollback
 
-1. Disable **AiAssistant** in LibreNMS Plugins.
-2. Remove only the installed proxy include, then run `sudo nginx -t`; reload
-   Nginx only after that succeeds.
-3. Stop the Mac API service.
-4. Restore or remove only
-   `/opt/librenms/app/Plugins/AiAssistant/` and
-   `/opt/librenms/html/plugins/ai-assistant/` from the backup made before
-   installation.
+1. Disable **AiAssistant** in LibreNMS Plugins and stop the Mac API service.
+2. Remove the server-block include line and
+   `/opt/librenms/nginx/ai-assistant.location.conf`; run `sudo nginx -t` and
+   reload only on success.
+3. Use the recorded backup timestamp. If a component was present before
+   installation, restore it with the narrow, exact destination commands:
 
-No rollback step edits LibreNMS core source, its package files, or Vite setup.
+   ```sh
+   sudo rsync -a --delete-delay /opt/librenms/.ai-assistant-backups/<timestamp>/plugin/ \
+     /opt/librenms/app/Plugins/AiAssistant/
+   sudo rsync -a --delete-delay /opt/librenms/.ai-assistant-backups/<timestamp>/assets/ \
+     /opt/librenms/html/plugins/ai-assistant/
+   ```
+
+   If `plugin-present` or `assets-present` is absent in that backup, the
+   corresponding destination did not exist before deployment; remove only that
+   exact destination after confirming the path and backup marker.
+
+No rollback step edits LibreNMS core source, package files, or Vite setup.

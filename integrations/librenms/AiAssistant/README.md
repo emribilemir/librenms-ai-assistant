@@ -13,11 +13,11 @@ copy destinations and stable frontend asset names.
 
 ## Secret setting
 
-An administrator opens **Plugins → AI Assistant settings** and saves a
-base64-encoded value that decodes to exactly 32 bytes. Generate it with
-`openssl rand -base64 32`. The settings view never renders the stored value;
-the value must be entered again when rotating it. Configure the same value in
-the Mac service as `AI_ASSISTANT_SHARED_SECRET_BASE64`.
+An administrator opens **Plugins → AI Assistant settings** and saves an exact
+32-character ASCII value. Generate it with `python3 -c 'import secrets;
+print(secrets.token_urlsafe(24))'`. The settings view never renders the stored
+value; enter it again when rotating it. Configure the same value verbatim in
+the Mac service as `AI_ASSISTANT_SHARED_SECRET`.
 
 The signed browser token is exactly
 `v1.<base64url-json>.<base64url-hmac-sha256>`. Its signed JSON claims are
