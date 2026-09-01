@@ -38,6 +38,15 @@ sut-results/
 v5-results/
 librenms-architecture-v5-first-pass.tar
 
+# LibreNMS Hybrid PoC local run outputs
+librenms-hybrid-poc/results*.json
+librenms-hybrid-poc/run_log*.txt
+librenms-hybrid-poc/comparison*.md
+librenms-hybrid-poc/hybrid-gold-v3/*_results*.json
+librenms-hybrid-poc/hybrid-gold-v3/*_summary*.json
+librenms-hybrid-poc/hybrid-gold-v3/*_failures*.md
+librenms-hybrid-poc/hybrid-gold-v3/*external_judge_cases*.jsonl
+
 # Retired evaluation assets
 librenms-prompt-eval/
 holdout_queries_v1.json

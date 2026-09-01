@@ -36,6 +36,8 @@ user query
 Harness; resolution, route, gerçek backend çağrıları, argümanlar ve LLM
 invocation davranışını deterministik olarak kontrol eder. Investigation
 semantiği external judging için dışa aktarılır; yerel Qwen kendisini puanlamaz.
+Bu dışa aktarımlar ve result/summary/failure dosyaları yeniden üretilebilir
+yerel çıktılardır ve Git tarafından izlenmez.
 
 ## Resolver sürümleri
 
@@ -101,7 +103,8 @@ hangi mimari snapshot'ın ölçüldüğü açıkça kaydedilmelidir.
 
 ## Sonuçların yorumlanması
 
-Depodaki Gold/Generated sonuç dosyaları üretildikleri resolver, planner, model
-ve runtime snapshot'ına aittir. Güncel semantic-planner sahiplik değişikliğinden
-sonra full LLM/regression suite yeniden çalıştırılmadığı için eski skorlar yeni
-mimarinin sonucu gibi sunulmamalıdır.
+Gold/Generated sonuçları üretildikleri resolver, planner, model ve runtime
+snapshot'ına aittir. Güncel semantic-planner sahiplik değişikliğinden sonra
+full LLM/regression suite yeniden çalıştırılmadıysa eski skorlar yeni mimarinin
+sonucu gibi sunulmamalıdır. Kalıcı kanıt gerekiyorsa çıktı, commit ve runtime
+metadata'sıyla release artifact'ı olarak saklanmalıdır.

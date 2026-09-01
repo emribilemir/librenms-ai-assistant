@@ -17,9 +17,9 @@ from unittest.mock import patch
 import hybrid_poc
 import planner_v2
 
-ROOT = Path(__file__).resolve().parent.parent
-POC = ROOT / "librenms-hybrid-poc"
-GOLD = ROOT / "librenms-hybrid-poc" / "hybrid-gold-v3"
+POC = Path(__file__).resolve().parents[1]
+ROOT = POC.parent
+GOLD = POC / "hybrid-gold-v3"
 BACKEND_PATH = POC / "librenms_backend.py"
 
 
