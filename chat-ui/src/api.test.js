@@ -1,4 +1,4 @@
-import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getThread, listThreads, readEventStream, runThread } from "./api";
+import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getSuggestions, getThread, listThreads, readEventStream, runThread } from "./api";
 
 test("uses only the relative production API base with no embedded identity", async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "thread-a" }) });
@@ -7,6 +7,28 @@ test("uses only the relative production API base with no embedded identity", asy
   expect(global.fetch.mock.calls[0][0]).toBe("/ai-api/v1/threads");
   expect(global.fetch.mock.calls[0][0]).not.toMatch(/192\\.168|localhost|dev-auth/);
   expect(global.fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer signed-plugin-token");
+});
+
+test("loads authenticated live suggestions", async () => {
+  const suggestion = {
+    title: "sw-01 durumunu kontrol et",
+    label: "Güncel cihaz durumu",
+    prompt: "sw-01 cihazının mevcut durumunu göster.",
+  };
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ suggestions: [suggestion] }),
+  });
+
+  await expect(getSuggestions("signed-plugin-token")).resolves.toEqual([suggestion]);
+  expect(global.fetch).toHaveBeenCalledWith(
+    "/ai-api/v1/suggestions",
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer signed-plugin-token",
+      }),
+    }),
+  );
 });
 
 test("parses fetch SSE events and forwards exact event names", async () => {

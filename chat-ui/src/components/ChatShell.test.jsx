@@ -1,4 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
+import { AssistantThread } from "./AssistantThread";
 import { DeleteThreadDialog } from "./DeleteThreadDialog";
 import { ChatTranscript } from "./ChatTranscript";
 import { RunMetrics } from "./RunMetrics";
@@ -27,7 +29,7 @@ test("delete dialog traps tab focus, closes on Escape, and restores its trigger"
 
 test("metrics are expandable and expose their accessible disclosure state", () => {
   render(<RunMetrics metrics={{ planner_ms: 8, resolver_ms: null, backend_ms: 12, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 20, total_ms: 25 }} />);
-  const disclosure = screen.getByRole("button", { name: "Show run metrics" });
+  const disclosure = screen.getByRole("button", { name: /System vitals/i });
   expect(disclosure).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(disclosure);
   expect(disclosure).toHaveAttribute("aria-expanded", "true");
@@ -57,8 +59,67 @@ test("closed mobile drawer removes its controls from keyboard focus", async () =
 
 test("real pipeline stage updates are announced in a polite live region", () => {
   render(<RunProgress run={{ status: "running", stages: { planner: { status: "completed", durationMs: 8 }, resolver: { status: "running" } } }} />);
-  expect(screen.getByText(/Pipeline status: planner completed, resolver running/)).toHaveAttribute("aria-live", "polite");
+  expect(screen.getByText(/Soruyu sınıflandırdı.*Cihazı çözümlüyor/)).toHaveAttribute("aria-live", "polite");
   expect(screen.getByText("8ms")).toBeVisible();
+});
+
+test("assistant-ui suggestions send the exact live-device prompt", async () => {
+  const send = jest.fn();
+  const suggestions = [{
+    title: "a-up durumunu kontrol et",
+    label: "Güncel cihaz durumu",
+    prompt: "a-up cihazının mevcut durumunu göster.",
+  }];
+  const runtimeStore = {
+    messages: [],
+    convertMessage: (message) => message,
+    suggestions,
+    isRunning: false,
+    onNew: async (message) => send(message.content[0].text),
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return (
+      <AssistantRuntimeProvider runtime={runtime}>
+        <AssistantThread suggestionsUnavailable={false} />
+      </AssistantRuntimeProvider>
+    );
+  }
+
+  render(<Fixture />);
+  fireEvent.click(screen.getByRole("button", { name: /a-up durumunu kontrol et/i }));
+
+  await waitFor(() => {
+    expect(send).toHaveBeenCalledWith("a-up cihazının mevcut durumunu göster.");
+  });
+});
+
+test("assistant messages expose an assistant-ui copy action", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "Observed result" }],
+    createdAt: new Date(),
+  }];
+  const runtimeStore = {
+    messages,
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return (
+      <AssistantRuntimeProvider runtime={runtime}>
+        <AssistantThread suggestionsUnavailable={false} />
+      </AssistantRuntimeProvider>
+    );
+  }
+
+  render(<Fixture />);
+  expect(screen.getByRole("button", { name: "Copy response" })).toBeVisible();
 });
 
 test("validated fallback results are explicitly labelled for the operator", () => {

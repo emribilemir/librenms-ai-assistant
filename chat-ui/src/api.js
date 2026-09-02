@@ -9,6 +9,10 @@ async function request(path, token, options = {}) {
   return response;
 }
 export async function listThreads(token) { return (await request("/threads", token)).json(); }
+export async function getSuggestions(token) {
+  const payload = await (await request("/suggestions", token)).json();
+  return Array.isArray(payload.suggestions) ? payload.suggestions : [];
+}
 export async function getThread(threadId, token) { return (await request(`/threads/${encodeURIComponent(threadId)}`, token)).json(); }
 export async function createThread(token) { return (await request("/threads", token, { method: "POST", body: "{}" })).json(); }
 export async function deleteThread(threadId, token) { await request(`/threads/${encodeURIComponent(threadId)}`, token, { method: "DELETE" }); }

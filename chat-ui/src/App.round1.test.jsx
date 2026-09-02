@@ -1,12 +1,47 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const mockUseExternalStoreRuntime = jest.fn(() => ({}));
 jest.mock("@assistant-ui/react", () => ({ AssistantRuntimeProvider: ({ children }) => children, useExternalStoreRuntime: (...args) => mockUseExternalStoreRuntime(...args) }));
+jest.mock("./components/AssistantThread", () => {
+  const React = require("react");
+  return {
+    AssistantThread: ({ messages = [], running, onSend, onCancel, canRetry, onRetry, suggestionsUnavailable }) => {
+      const [content, setContent] = React.useState("");
+      return <section data-assistant-ui="thread">{messages.map((message) => <p key={message.id}>{message.content}</p>)}{suggestionsUnavailable && <p>Canlı cihaz önerileri şu anda alınamıyor.</p>}<label htmlFor="investigation-question">Ask about network state</label><textarea id="investigation-question" value={content} onChange={(event) => setContent(event.target.value)} />{running ? <button type="button" onClick={onCancel}>Cancel run</button> : <button type="button" disabled={!content.trim()} onClick={() => { onSend(content.trim()); setContent(""); }}>Start investigation</button>}{canRetry && <button type="button" onClick={onRetry}>Retry failed investigation</button>}</section>;
+    },
+  };
+});
 import App from "./App";
 import { ApiError } from "./api";
 import { AssistantChatStore, createInitialState } from "./store";
 
 const currentMetrics = { planner_ms: 2, resolver_ms: 3, backend_ms: 4, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 6, total_ms: 8 };
-const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+
+test("loads live suggestions into ExternalStoreRuntime", async () => {
+  const suggestions = [{
+    title: "lab-j9775a-01 durumunu kontrol et",
+    label: "Güncel cihaz durumu",
+    prompt: "lab-j9775a-01 cihazının mevcut durumunu göster.",
+  }];
+  const api = makeApi({ getSuggestions: jest.fn().mockResolvedValue(suggestions) });
+
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+
+  await waitFor(() => expect(api.getSuggestions).toHaveBeenCalledWith("plugin-token"));
+  await waitFor(() => {
+    const bridge = mockUseExternalStoreRuntime.mock.calls.at(-1)[0];
+    expect(bridge.suggestions).toEqual(suggestions);
+  });
+});
+
+test("keeps manual chat available when live suggestions fail", async () => {
+  const api = makeApi({ getSuggestions: jest.fn().mockRejectedValue(new ApiError(503)) });
+
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+
+  expect(await screen.findByText("Canlı cihaz önerileri şu anda alınamıyor.")).toBeVisible();
+  expect(screen.getByLabelText("Ask about network state")).toBeEnabled();
+});
 
 test("empty history keeps the composer writable and creates a thread on first send", async () => {
   const api = makeApi({
