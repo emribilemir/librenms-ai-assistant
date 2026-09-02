@@ -52,8 +52,8 @@ async function createThread(page) {
 }
 
 async function ask(page, question) {
-  await page.getByLabel("Ask about network state").fill(question);
-  await page.getByRole("button", { name: "Start investigation" }).click();
+  await page.getByLabel("Ask LibreNMS").fill(question);
+  await page.getByRole("button", { name: "Soruyu gönder" }).click();
 }
 
 async function persistedRunFor(page, threadTitle) {
@@ -91,6 +91,29 @@ function assertCoherentMetrics(run) {
 }
 
 test.describe("authorized UTM acceptance", () => {
+  test("shows live-device assistant-ui suggestions from the signed backend", async ({ browser }) => {
+    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE");
+    const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
+    try {
+      const suggestions = await page.evaluate(async () => {
+        const config = JSON.parse(document.querySelector("#root")?.dataset.aiAssistantConfig || "{}");
+        const response = await fetch("/ai-api/v1/suggestions", {
+          headers: { Authorization: `Bearer ${config.token}` },
+        });
+        if (!response.ok) throw new Error(`Suggestion request failed: ${response.status}`);
+        return (await response.json()).suggestions;
+      });
+      expect(suggestions.length).toBeGreaterThan(0);
+      const first = suggestions[0];
+      const trigger = page.getByRole("button", { name: new RegExp(first.title, "i") });
+      await expect(trigger).toBeVisible();
+      await trigger.click();
+      await expect(page.getByText(first.prompt, { exact: true })).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
   test("loads the signed plugin route and keeps the responsive drawer keyboard-accessible", async ({ browser }) => {
     skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE");
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
@@ -140,7 +163,7 @@ test.describe("authorized UTM acceptance", () => {
       await createThread(page);
       await ask(page, process.env.AI_UTM_NO_MATCH_QUERY);
       const progress = page.getByRole("region", { name: "Pipeline progress" });
-      await expect(progress.getByText(/Pipeline status: planner/)).toBeVisible();
+      await expect(progress.locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandır/);
       await expect(page.getByText(process.env.AI_UTM_NO_MATCH_EXPECTED_TEXT, { exact: true })).toBeVisible();
       await expect(progress).toHaveCount(0);
     } finally {
@@ -153,14 +176,14 @@ test.describe("authorized UTM acceptance", () => {
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
     try {
       await createThread(page);
-      const composer = page.getByLabel("Ask about network state");
+      const composer = page.getByLabel("Ask LibreNMS");
       await composer.click();
       await expect(composer).toBeFocused();
       await ask(page, process.env.AI_UTM_LIVE_PROGRESS_QUERY);
-      const live = page.getByText(/Pipeline status:/);
+      const live = page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']");
       await expect(live).toHaveAttribute("aria-live", "polite");
-      await expect(live).toContainText("planner");
-      await expect(live).toContainText("resolver");
+      await expect(live).toContainText("Soruyu sınıflandırdı");
+      await expect(live).toContainText("Cihazı çözümledi");
       await expect(page.getByText(process.env.AI_UTM_LIVE_PROGRESS_EXPECTED_TEXT, { exact: true })).toBeVisible();
     } finally {
       await context.close();
@@ -175,9 +198,9 @@ test.describe("authorized UTM acceptance", () => {
       await ask(page, process.env.AI_UTM_FALLBACK_QUERY);
       await expect(page.getByText(process.env.AI_UTM_FALLBACK_EXPECTED_TEXT, { exact: true })).toBeVisible();
       await expect(page.getByText("Validated fallback result")).toBeVisible();
-      const disclosure = page.getByRole("button", { name: "Show run metrics" });
+      const disclosure = page.getByRole("button", { name: /System vitals/ });
       await disclosure.click();
-      await expect(page.getByRole("button", { name: "Hide run metrics" })).toHaveAttribute("aria-expanded", "true");
+      await expect(disclosure).toHaveAttribute("aria-expanded", "true");
       await expect(page.getByText("total_ms", { exact: true })).toBeVisible();
       assertCoherentMetrics(await persistedRunFor(page, process.env.AI_UTM_FALLBACK_THREAD_TITLE));
     } finally {
@@ -193,10 +216,10 @@ test.describe("authorized UTM acceptance", () => {
       await ask(page, process.env.AI_UTM_RETRY_QUERY);
       // The live target must be configured to expose this sequence. This suite
       // observes the product stream; it does not claim to control its timing.
-      const live = page.getByRole("region", { name: "Pipeline progress" }).getByText(/Pipeline status:/);
-      await expect(live).toContainText("planner completed");
-      await expect(live).toContainText("resolver completed");
-      await expect(live).toContainText("librenms running");
+      const live = page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']");
+      await expect(live).toContainText("Soruyu sınıflandırdı");
+      await expect(live).toContainText("Cihazı çözümledi");
+      await expect(live).toContainText("LibreNMS verisini okuyor");
       await expect(page.getByRole("alert")).toHaveText(process.env.AI_UTM_RETRY_ERROR_TEXT);
       await page.getByRole("button", { name: "Retry failed investigation" }).click();
       await expect(page.getByText(process.env.AI_UTM_RETRY_SUCCESS_TEXT, { exact: true })).toBeVisible();
@@ -211,8 +234,8 @@ test.describe("authorized UTM acceptance", () => {
     try {
       await createThread(page);
       await ask(page, process.env.AI_UTM_CANCEL_QUERY);
-      await expect(page.getByRole("region", { name: "Pipeline progress" }).getByText(/Pipeline status:/)).toBeVisible();
-      await page.getByRole("button", { name: "Cancel run" }).click();
+      await expect(page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandır/);
+      await page.getByRole("button", { name: "Çalışmayı iptal et" }).click();
       await expect(page.getByRole("region", { name: "Pipeline progress" })).toHaveCount(0);
       await expect(page.getByText(process.env.AI_UTM_CANCEL_FORBIDDEN_TEXT, { exact: true })).toHaveCount(0);
     } finally {

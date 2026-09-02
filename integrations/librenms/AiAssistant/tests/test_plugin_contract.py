@@ -18,7 +18,6 @@ import unittest
 
 PLUGIN = Path(__file__).resolve().parents[1]
 REPOSITORY = PLUGIN.parents[2]
-OFFICIAL_SETTINGS_HOOK = Path("/private/tmp/librenms-inspect.eLIkd2/repo/app/Plugins/Hooks/SettingsHook.php")
 sys.path.insert(0, str(REPOSITORY / "librenms-hybrid-poc"))
 
 from chat_service.auth import IdentityVerifier  # noqa: E402
@@ -76,9 +75,7 @@ class AiAssistantPluginContractTests(unittest.TestCase):
         self.assertEqual((identity.sub, identity.name), ("42", "NOC Operator"))
 
     def test_settings_two_phase_contract_keeps_configured_status_without_returning_secret(self) -> None:
-        """The official SettingsHook invokes data twice, so final view data must stay configured."""
-        official = OFFICIAL_SETTINGS_HOOK.read_text(encoding="utf-8")
-        self.assertIn("$this->data($app->call($this->data(...)", official)
+        """The 26.8.1 SettingsHook invokes data twice, so final view data must stay configured."""
         settings = read("Settings.php")
         self.assertIn("_ai_assistant_stored_settings", settings)
         self.assertIn("'secret_configured'", settings)

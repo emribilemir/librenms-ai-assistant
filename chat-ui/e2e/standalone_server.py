@@ -50,6 +50,15 @@ class DeterministicPipelineAdapter:
         self._retry_failure_release.set()
 
     @staticmethod
+    def list_devices():
+        """Expose a stable live-inventory shape through the production route."""
+        return [
+            {"hostname": "lab-j9775a-01", "status": 1},
+            {"hostname": "lab-j9776a-01", "status": 1},
+            {"hostname": "lab-offline-01", "status": 0},
+        ]
+
+    @staticmethod
     def _stage(observer, is_cancelled, stage, duration):
         if is_cancelled():
             return False

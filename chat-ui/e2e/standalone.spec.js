@@ -29,8 +29,8 @@ async function createThread(page) {
 }
 
 async function ask(page, question) {
-  await page.getByLabel("Ask about network state").fill(question);
-  await page.getByRole("button", { name: "Start investigation" }).click();
+  await page.getByLabel("Ask LibreNMS").fill(question);
+  await page.getByRole("button", { name: "Soruyu gönder" }).click();
 }
 
 async function persistedRunFor(page, title) {
@@ -43,6 +43,24 @@ async function persistedRunFor(page, title) {
     return detail.runs.at(-1);
   }, { threadTitle: title });
 }
+
+test("sends the first assistant-ui message without pre-creating a thread", async ({ page }) => {
+  const composer = page.getByLabel("Ask LibreNMS");
+  await expect(composer).toBeEnabled();
+  await ask(page, "first direct question");
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  await expect(page.locator("[data-message-id]")).toHaveCount(2);
+  await expect(page.getByRole("navigation", { name: "Saved investigations" }).getByRole("button", { name: "first direct question", exact: true })).toBeVisible();
+});
+
+test("builds assistant-ui starter prompts from currently up devices", async ({ page }) => {
+  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 durumunu kontrol et/i });
+  await expect(liveSuggestion).toBeVisible();
+  await liveSuggestion.click();
+  await expect(page.getByText("lab-j9775a-01 cihazının mevcut durumunu göster.")).toBeVisible();
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /lab-offline-01/i })).toHaveCount(0);
+});
 
 test("creates, selects, and deletes a saved thread only after confirmation", async ({ page }) => {
   await createThread(page);
@@ -77,9 +95,12 @@ test("renders only real received stage progress for a successful no-match result
   await createThread(page);
   await ask(page, "no-match branch switch");
   const progress = page.getByRole("region", { name: "Pipeline progress" });
-  await expect(progress.getByText(/Pipeline status: planner/)).toBeVisible();
-  await expect(progress.getByText(/Pipeline status: .*resolver/)).toBeVisible();
+  const live = progress.locator("p[aria-live='polite']");
+  await expect(live).toContainText(/Soruyu sınıflandır/);
+  await expect(live).toContainText(/Cihazı çözüml/);
   await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
+  await expect(page.locator('[data-assistant-ui="thread"]')).toBeVisible();
+  await expect(page.locator("[data-message-id]")).toHaveCount(2);
   await expect(progress).toHaveCount(0);
   await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
 });
@@ -88,7 +109,7 @@ test("shows a retryable backend failure and allows a real retried stream to succ
   await page.getByRole("button", { name: "New investigation" }).click();
   await ask(page, "retryable backend question");
   const progress = page.getByRole("region", { name: "Pipeline progress" });
-  await expect(progress.getByText(/planner completed, resolver completed, librenms running/)).toBeVisible();
+  await expect(progress.locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandırdı.*Cihazı çözümledi.*LibreNMS verisini okuyor/);
   expect(await page.evaluate(async () => (await fetch("/ai-api/__test__/release-retryable-failure", { method: "POST" })).status)).toBe(204);
   await expect(page.getByRole("alert")).toHaveText("LibreNMS is temporarily unavailable.");
   const retry = page.getByRole("button", { name: "Retry failed investigation" });
@@ -103,10 +124,10 @@ test("labels a validated fallback answer and exposes its complete metric disclos
   await ask(page, "fallback investigation evidence");
   await expect(page.getByText("Safe evidence fallback summary.")).toBeVisible();
   await expect(page.getByText("Validated fallback result")).toBeVisible();
-  const disclosure = page.getByRole("button", { name: /run metrics/ });
+  const disclosure = page.getByRole("button", { name: /System vitals/ });
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   await disclosure.click();
-  await expect(page.getByRole("button", { name: "Hide run metrics" })).toHaveAttribute("aria-expanded", "true");
+  await expect(disclosure).toHaveAttribute("aria-expanded", "true");
   for (const metric of metrics) await expect(page.getByText(metric, { exact: true })).toBeVisible();
   for (const value of ["7 ms", "11 ms", "13 ms", "17 ms", "48 ms"]) await expect(page.getByText(value, { exact: true })).toBeVisible();
   const persistedRun = await persistedRunFor(page, "fallback investigation evidence");
@@ -119,8 +140,8 @@ test("cancelling a real stream prevents later stages and answer output", async (
   await page.getByRole("button", { name: "New investigation" }).click();
   await ask(page, "cancel after planner");
   const progress = page.getByRole("region", { name: "Pipeline progress" });
-  await expect(progress.getByText(/Pipeline status: planner completed/)).toBeVisible();
-  await page.getByRole("button", { name: "Cancel run" }).click();
+  await expect(progress.locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandırdı/);
+  await page.getByRole("button", { name: "Çalışmayı iptal et" }).click();
   await expect(progress).toHaveCount(0);
   await expect(page.getByText("This answer must never be visible.")).toHaveCount(0);
   await expect(page.getByText("resolver", { exact: true })).toHaveCount(0);
@@ -134,10 +155,10 @@ test("supports keyboard focus, live stage announcements, and the responsive draw
   await page.getByRole("button", { name: "Open investigations" }).press("Enter");
   await expect(page.getByRole("button", { name: "New investigation" })).toBeVisible();
   await page.getByRole("button", { name: "New investigation" }).click();
-  const composer = page.getByLabel("Ask about network state");
+  const composer = page.getByLabel("Ask LibreNMS");
   await composer.click();
   await expect(composer).toBeFocused();
   await ask(page, "ambiguous keyboard check");
-  const live = page.getByText(/Pipeline status:/);
+  const live = page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']");
   await expect(live).toHaveAttribute("aria-live", "polite");
 });
