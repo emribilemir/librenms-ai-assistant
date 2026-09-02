@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brain, ChevronDown } from "lucide-react";
+import { ChevronDown, ListTree } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import styles from "./PipelineReasoning.module.css";
 
@@ -18,12 +18,17 @@ export function PipelineReasoning() {
 
   if (!part) return null;
   const lines = part.text.split("\n").filter(Boolean);
+  const elapsedMs = lines.reduce((total, line) => total + Number(line.match(/· (\d+) ms$/)?.[1] || 0), 0);
+  const activeStep = lines.at(-1)?.replace(/ · \d+ ms$/, "") || "İşlem sürüyor";
+  const label = streaming
+    ? (activeStep === "Yanıtı doğruladı" ? "Yanıt aktarılıyor" : activeStep)
+    : `İşlem ayrıntıları${elapsedMs ? ` · ${elapsedMs} ms` : ""}`;
 
   return (
     <section className={styles.root} data-streaming={streaming || undefined}>
       <button type="button" className={styles.trigger} aria-expanded={open} onClick={() => setManualOpen(!open)}>
-        <Brain size={16} strokeWidth={1.8} aria-hidden="true" />
-        <span className={streaming ? styles.shimmer : undefined}>İnceleme adımları</span>
+        <ListTree size={15} strokeWidth={1.8} aria-hidden="true" />
+        <span className={streaming ? styles.shimmer : undefined}>{label}</span>
         <ChevronDown className={styles.chevron} size={16} aria-hidden="true" />
       </button>
       <div className={styles.panel} data-open={open || undefined} aria-live="polite" aria-busy={streaming}>

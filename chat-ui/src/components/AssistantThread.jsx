@@ -9,14 +9,15 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { Activity, ArrowRight, Check, ChevronDown, Copy, Search, Square } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronDown, Copy, Square } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
+import { RunMetrics } from "./RunMetrics";
 import styles from "./AssistantThread.module.css";
 
 // Structure adapted from assistant-ui's official Perplexity Clone example.
 // Only LibreNMS-specific colors, typography and product controls are changed.
 function AssistantText() {
-  return <MarkdownTextPrimitive smooth defer className={styles.markdown} />;
+  return <div data-slot="assistant-answer"><MarkdownTextPrimitive smooth defer className={styles.markdown} /></div>;
 }
 
 function UserText() {
@@ -25,7 +26,7 @@ function UserText() {
 
 function CopyAction() {
   return (
-    <ActionBarPrimitive.Copy className={styles.messageAction} aria-label="Copy response">
+    <ActionBarPrimitive.Copy className={styles.messageAction} aria-label="Yanıtı kopyala">
       <AuiIf condition={(state) => state.message.isCopied}><Check size={16} aria-hidden="true" /></AuiIf>
       <AuiIf condition={(state) => !state.message.isCopied}><Copy size={16} aria-hidden="true" /></AuiIf>
     </ActionBarPrimitive.Copy>
@@ -42,15 +43,16 @@ function UserMessage() {
 
 function AssistantMessage() {
   const usedFallback = useAuiState((state) => Boolean(state.message.metadata?.custom?.usedFallback));
+  const metrics = useAuiState((state) => state.message.metadata?.custom?.metrics || null);
   return (
     <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
-      <div className={styles.assistantAvatar} aria-hidden="true"><Search size={16} strokeWidth={1.9} /></div>
       <div className={styles.assistantBody}>
         {usedFallback && <span className={styles.fallback}>Doğrulanmış güvenli yanıt</span>}
         <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: PipelineReasoning, Empty: () => null }} />
-        <AuiIf condition={(state) => state.message.status?.type !== "running"}>
-          <ActionBarPrimitive.Root className={styles.actionBar} autohide="not-last"><CopyAction /></ActionBarPrimitive.Root>
-        </AuiIf>
+        <div className={styles.messageTools}>
+          <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
+          {metrics && <RunMetrics metrics={metrics} />}
+        </div>
       </div>
     </MessagePrimitive.Root>
   );
@@ -70,7 +72,7 @@ function Composer({ placeholder, canRetry, onRetry }) {
     <ComposerPrimitive.Root className={styles.composer}>
       <ComposerPrimitive.Input rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" />
       <div className={styles.composerBar}>
-        <span className={styles.liveMode}><Activity size={14} aria-hidden="true" /> Live LibreNMS</span>
+        <span className={styles.liveMode}><Activity size={14} aria-hidden="true" /> Canlı LibreNMS</span>
         <div className={styles.composerActions}>
           {canRetry && <button type="button" className={styles.retry} onClick={onRetry}>Yeniden dene</button>}
           <span className={styles.primaryAction}>
@@ -94,7 +96,7 @@ function EmptyState({ suggestionsUnavailable, canRetry, onRetry }) {
   return (
     <div className={styles.empty}>
       <div className={styles.emptyInner}>
-        <div className={styles.wordmark}><span>LibreNMS</span> AI</div>
+        <div className={styles.wordmark}><span>LibreNMS</span> Assistant</div>
         <h2>Ağında neyi inceleyelim?</h2>
         <p className={styles.intro}>Cihaz, port, alarm ve olay verilerini canlı LibreNMS kayıtlarından araştır.</p>
         <Composer placeholder="Ağın hakkında bir soru sor…" canRetry={canRetry} onRetry={onRetry} />
@@ -107,10 +109,10 @@ function EmptyState({ suggestionsUnavailable, canRetry, onRetry }) {
 
 export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable }) {
   return (
-    <ThreadPrimitive.Root className={styles.thread} aria-label="AI Assistant conversation" data-assistant-ui="thread" style={{ "--thread-max-width": "42rem" }}>
+    <ThreadPrimitive.Root className={styles.thread} aria-label="AI Assistant sohbeti" data-assistant-ui="thread" style={{ "--thread-max-width": "54rem" }}>
       <AuiIf condition={(state) => state.thread.isEmpty}><EmptyState suggestionsUnavailable={suggestionsUnavailable} canRetry={canRetry} onRetry={onRetry} /></AuiIf>
       <AuiIf condition={(state) => !state.thread.isEmpty}>
-        <ThreadPrimitive.Viewport className={styles.viewport}>
+        <ThreadPrimitive.Viewport className={styles.viewport} data-slot="thread-viewport">
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
           <ThreadPrimitive.ViewportFooter className={styles.footer}>
             <ThreadPrimitive.ScrollToBottom className={styles.scrollToBottom} aria-label="En yeni mesaja git"><ChevronDown size={17} aria-hidden="true" /></ThreadPrimitive.ScrollToBottom>

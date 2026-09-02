@@ -134,6 +134,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
             loop = asyncio.get_running_loop()
             stream_started = time.perf_counter()
             task = None
+            event_waiter = None
             terminal = False
             last_stage = "internal"
             work = "pipeline"
@@ -177,6 +178,10 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                         yield _sse(event, payload)
                     else:
                         event_waiter.cancel()
+                        try:
+                            await event_waiter
+                        except asyncio.CancelledError:
+                            pass
                         if not task.done():
                             if await request.is_disconnected():
                                 cancelled.set()
@@ -240,6 +245,12 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 yield _sse("completed", {"run_id": started["id"], "status": "failed", "used_fallback": False, "metrics": metrics})
                 terminal = True
             finally:
+                if event_waiter is not None and not event_waiter.done():
+                    event_waiter.cancel()
+                    try:
+                        await event_waiter
+                    except asyncio.CancelledError:
+                        pass
                 if not terminal:
                     cancelled.set()
                     try:

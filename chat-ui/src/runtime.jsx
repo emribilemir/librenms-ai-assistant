@@ -28,7 +28,16 @@ export function pipelineReasoningText(run) {
 
 // The application reducer remains the source of truth; this bridge only exposes
 // its message snapshot to assistant-ui's local ExternalStoreRuntime interface.
-export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCancel, suggestions = []) {
+const METRIC_KEYS = ["planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms"];
+
+function publicMetrics(run) {
+  if (!run) return null;
+  if (run.metrics) return run.metrics;
+  const metrics = Object.fromEntries(METRIC_KEYS.map((key) => [key, run[key] ?? null]));
+  return METRIC_KEYS.some((key) => metrics[key] != null) ? metrics : null;
+}
+
+export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCancel, suggestions = [], threadActions = {}) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const messages = state.messages[threadId] || [];
   const convertMessage = useCallback((message) => {
@@ -44,7 +53,7 @@ export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCance
       role: message.role,
       content,
       createdAt: new Date(),
-      metadata: { custom: { usedFallback: Boolean(message.usedFallback) } },
+      metadata: { custom: { usedFallback: Boolean(message.usedFallback), metrics: publicMetrics(run) } },
     };
   }, [state.runs, state.runHistory, threadId]);
   const runtimeStore = useMemo(() => ({
@@ -54,6 +63,19 @@ export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCance
     isRunning: state.runs[threadId]?.status === "running",
     onNew: async (message) => onSend(message.content?.[0]?.text || ""),
     onCancel: async () => onCancel(),
-  }), [messages, convertMessage, suggestions, state.runs, threadId, onSend, onCancel]);
+    adapters: {
+      threadList: {
+        threadId: threadId || undefined,
+        threads: state.threads.map((thread) => ({
+          id: thread.id,
+          remoteId: thread.id,
+          status: "regular",
+          title: thread.title || undefined,
+        })),
+        onSwitchToNewThread: threadActions.onCreate,
+        onSwitchToThread: threadActions.onSelect,
+      },
+    },
+  }), [messages, convertMessage, suggestions, state.runs, state.threads, threadId, onSend, onCancel, threadActions.onCreate, threadActions.onSelect]);
   return useExternalStoreRuntime(runtimeStore);
 }

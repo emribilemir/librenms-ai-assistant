@@ -55,6 +55,30 @@ test("parses CRLF-delimited, split, multi-line SSE data frames", async () => {
   expect(events).toEqual([["answer.delta", { run_id: "r", message_id: "m", delta: "safe" }], ["completed", { run_id: "r", status: "completed" }]]);
 });
 
+test("gives each validated answer delta a paint frame before processing completion", async () => {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(encoder.encode("event: answer.delta\ndata: {\"run_id\":\"r\",\"message_id\":\"m\",\"delta\":\"Visible answer\"}\n\nevent: completed\ndata: {\"run_id\":\"r\",\"status\":\"completed\"}\n\n"));
+    controller.close();
+  } });
+  const events = [];
+  const originalAnimationFrame = global.requestAnimationFrame;
+  let releaseFrame;
+  global.requestAnimationFrame = jest.fn((callback) => { releaseFrame = callback; return 1; });
+
+  try {
+    const reading = readEventStream({ body: stream }, (event, data) => events.push([event, data]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.map(([event]) => event)).toEqual(["answer.delta"]);
+    expect(releaseFrame).toEqual(expect.any(Function));
+    releaseFrame();
+    await reading;
+    expect(events.map(([event]) => event)).toEqual(["answer.delta", "completed"]);
+  } finally {
+    global.requestAnimationFrame = originalAnimationFrame;
+  }
+});
+
 test("rejects an SSE response that ends before a completed event", async () => {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({ start(controller) { controller.enqueue(encoder.encode("event: run.started\ndata: {\"run_id\":\"r\"}\n\n")); controller.close(); } });

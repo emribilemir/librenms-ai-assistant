@@ -126,6 +126,12 @@ class DeterministicPipelineAdapter:
             return self._result("Safe evidence fallback summary.", fallback=True, backend=13, synthesis=17)
         if "retryable" in question:
             return self._result("Backend recovered on retry.", backend=13)
+        if "streaming cadence" in question:
+            lines = [
+                f"Port grubu {index:02d}: canlı telemetri incelendi; durum normal ve gözlenen sayaçlar tutarlı."
+                for index in range(1, 25)
+            ]
+            return self._result("\n\n".join(lines), backend=13)
         return self._result("Deterministic standalone result.", backend=13)
 
 

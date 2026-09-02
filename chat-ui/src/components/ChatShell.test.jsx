@@ -5,13 +5,14 @@ import { DeleteThreadDialog } from "./DeleteThreadDialog";
 import { ChatTranscript } from "./ChatTranscript";
 import { RunMetrics } from "./RunMetrics";
 import { ThreadDrawer } from "./ThreadDrawer";
+import { ThreadList } from "./ThreadList";
 import { AssistantChatStore } from "../store";
 import { useLibreNmsExternalStoreRuntime } from "../runtime";
 
 test("delete confirmation focuses cancel and cancellation leaves the thread intact", () => {
   const cancel = jest.fn();
   render(<DeleteThreadDialog open threadTitle="Core switch" onCancel={cancel} onConfirm={jest.fn()} />);
-  const cancelButton = screen.getByRole("button", { name: "Keep thread" });
+  const cancelButton = screen.getByRole("button", { name: "Sohbeti tut" });
   expect(cancelButton).toHaveFocus();
   fireEvent.click(cancelButton);
   expect(cancel).toHaveBeenCalledTimes(1);
@@ -21,7 +22,7 @@ test("delete dialog traps tab focus, closes on Escape, and restores its trigger"
   function Fixture() { const [open, setOpen] = require("react").useState(false); const trigger = require("react").useRef(null); const close = () => { setOpen(false); requestAnimationFrame(() => trigger.current.focus()); }; return <><button ref={trigger} type="button" onClick={() => setOpen(true)}>Delete Core</button><DeleteThreadDialog open={open} threadTitle="Core" onCancel={close} onConfirm={jest.fn()} /></>; }
   render(<Fixture />);
   fireEvent.click(screen.getByRole("button", { name: "Delete Core" }));
-  const cancel = screen.getByRole("button", { name: "Keep thread" }); const confirm = screen.getByRole("button", { name: "Delete investigation" });
+  const cancel = screen.getByRole("button", { name: "Sohbeti tut" }); const confirm = screen.getByRole("button", { name: "Sohbeti sil" });
   fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true }); expect(confirm).toHaveFocus();
   fireEvent.keyDown(confirm, { key: "Tab" }); expect(cancel).toHaveFocus();
   fireEvent.keyDown(cancel, { key: "Escape" });
@@ -30,7 +31,7 @@ test("delete dialog traps tab focus, closes on Escape, and restores its trigger"
 
 test("metrics are expandable and expose their accessible disclosure state", () => {
   render(<RunMetrics metrics={{ planner_ms: 8, resolver_ms: null, backend_ms: 12, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 20, total_ms: 25 }} />);
-  const disclosure = screen.getByRole("button", { name: /System vitals/i });
+  const disclosure = screen.getByRole("button", { name: /Çalışma ayrıntıları/i });
   expect(disclosure).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(disclosure);
   expect(disclosure).toHaveAttribute("aria-expanded", "true");
@@ -38,23 +39,21 @@ test("metrics are expandable and expose their accessible disclosure state", () =
 });
 
 test("narrow drawer uses named native controls with visible focus styling", () => {
-  render(<ThreadDrawer open onClose={jest.fn()} onCreate={jest.fn()}><p>Thread list</p></ThreadDrawer>);
-  expect(screen.getByRole("button", { name: "Close investigations" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "New investigation" })).toBeVisible();
+  render(<ThreadDrawer open onClose={jest.fn()} onToggleCollapse={jest.fn()}><p>Thread list</p></ThreadDrawer>);
+  expect(screen.getByRole("button", { name: "Sohbet geçmişini kapat" })).toBeVisible();
   expect(document.querySelector("[data-focus-visible='true']")).toBeTruthy();
 });
 
 test("desktop investigations remain in the accessibility tree when the mobile drawer is closed", () => {
-  render(<ThreadDrawer open={false} onClose={jest.fn()} onCreate={jest.fn()}><p>Thread list</p></ThreadDrawer>);
-  expect(screen.getByLabelText("Investigations")).not.toHaveAttribute("aria-hidden", "true");
+  render(<ThreadDrawer open={false} onClose={jest.fn()} onToggleCollapse={jest.fn()}><p>Thread list</p></ThreadDrawer>);
+  expect(screen.getByLabelText("Sohbet geçmişi")).not.toHaveAttribute("aria-hidden", "true");
 });
 
 test("closed mobile drawer removes its controls from keyboard focus", async () => {
   const listeners = new Set(); window.matchMedia = jest.fn(() => ({ matches: true, addEventListener: (_, listener) => listeners.add(listener), removeEventListener: (_, listener) => listeners.delete(listener) }));
-  render(<ThreadDrawer open={false} onClose={jest.fn()} onCreate={jest.fn()}><button type="button">Saved thread</button></ThreadDrawer>);
+  render(<ThreadDrawer open={false} onClose={jest.fn()} onToggleCollapse={jest.fn()}><button type="button">Saved thread</button></ThreadDrawer>);
   await Promise.resolve();
-  expect(screen.getByLabelText("Investigations")).toHaveAttribute("aria-hidden", "true");
-  expect(screen.queryByRole("button", { name: "New investigation" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Sohbet geçmişi")).toHaveAttribute("aria-hidden", "true");
   expect(screen.queryByRole("button", { name: "Saved thread" })).not.toBeInTheDocument();
 });
 
@@ -114,7 +113,89 @@ test("assistant messages expose an assistant-ui copy action", () => {
   }
 
   render(<Fixture />);
-  expect(screen.getByRole("button", { name: "Copy response" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
+});
+
+test("assistant-ui keeps the copy action in the message layout while a validated answer is streaming", () => {
+  const runtimeStore = {
+    messages: [{
+      id: "answer",
+      role: "assistant",
+      content: [{ type: "text", text: "Observed partial result" }],
+      createdAt: new Date(),
+    }],
+    convertMessage: (message) => message,
+    isRunning: true,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  expect(screen.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
+});
+
+test("saved conversations are rendered and switched by assistant-ui thread-list primitives", async () => {
+  const switchThread = jest.fn();
+  const createThread = jest.fn();
+  const runtimeStore = {
+    messages: [],
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+    adapters: {
+      threadList: {
+        threadId: "core",
+        threads: [
+          { id: "core", status: "regular", title: "Core uplink" },
+          { id: "edge", status: "regular", title: "Edge alarms" },
+        ],
+        onSwitchToThread: switchThread,
+        onSwitchToNewThread: createThread,
+      },
+    },
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><ThreadList onDelete={jest.fn()} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  expect(document.querySelector('[data-slot="aui_thread-list-root"]')).toBeTruthy();
+  expect(document.querySelector('[data-slot="aui_thread-list-item"]')).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Yeni sohbet" }));
+  await waitFor(() => expect(createThread).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Edge alarms" }));
+  await waitFor(() => expect(switchThread).toHaveBeenCalledWith("edge"));
+});
+
+test("completed assistant answers own a compact expandable timing disclosure", () => {
+  const runtimeStore = {
+    messages: [{
+      id: "answer",
+      role: "assistant",
+      content: [{ type: "text", text: "Observed result" }],
+      createdAt: new Date(),
+      metadata: { custom: { metrics: { planner_ms: 8, resolver_ms: 11, backend_ms: 14, synthesis_ms: 17, time_to_first_token_ms: 21, time_to_first_visible_chunk_ms: 29, total_ms: 58 } } },
+    }],
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const disclosure = screen.getByRole("button", { name: /Çalışma ayrıntıları/i });
+  expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  expect(disclosure).toHaveTextContent("58 ms");
 });
 
 test("live SSE stages appear as an expanded assistant-ui reasoning disclosure inside the assistant message", () => {
@@ -147,9 +228,9 @@ test("live SSE stages appear as an expanded assistant-ui reasoning disclosure in
 
   render(<Fixture />);
 
-  expect(screen.getByRole("button", { name: /İnceleme adımları/i })).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByRole("button", { name: /Cihazı çözümlüyor/i })).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByText(/Soruyu sınıflandırdı/)).toBeVisible();
-  expect(screen.getByText(/Cihazı çözümlüyor/)).toBeVisible();
+  expect(screen.getAllByText(/Cihazı çözümlüyor/)).toHaveLength(2);
   expect(screen.queryByText("Validating…")).not.toBeInTheDocument();
 });
 

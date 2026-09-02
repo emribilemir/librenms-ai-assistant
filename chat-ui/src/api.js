@@ -17,6 +17,13 @@ export async function getThread(threadId, token) { return (await request(`/threa
 export async function createThread(token) { return (await request("/threads", token, { method: "POST", body: "{}" })).json(); }
 export async function deleteThread(threadId, token) { await request(`/threads/${encodeURIComponent(threadId)}`, token, { method: "DELETE" }); }
 
+function waitForPaint() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 16);
+  });
+}
+
 export async function readEventStream(response, onEvent) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -32,7 +39,14 @@ export async function readEventStream(response, onEvent) {
       const lines = frame.split(/\r?\n/);
       const event = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
       const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).replace(/^ /, ""));
-      if (event && dataLines.length) { onEvent(event, JSON.parse(dataLines.join("\n"))); completed ||= event === "completed"; }
+      if (event && dataLines.length) {
+        onEvent(event, JSON.parse(dataLines.join("\n")));
+        completed ||= event === "completed";
+        // Validation finishes before answer.delta reaches this layer. Yielding
+        // one paint frame keeps assistant-ui's smooth renderer in its running
+        // state instead of collapsing a buffered answer into one instant draw.
+        if (event === "answer.delta") await waitForPaint();
+      }
     }
     if (done) { if (!completed) throw new IncompleteStreamError(); return; }
   }

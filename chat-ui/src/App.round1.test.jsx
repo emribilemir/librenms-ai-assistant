@@ -10,6 +10,13 @@ jest.mock("./components/AssistantThread", () => {
     },
   };
 });
+jest.mock("./components/ThreadList", () => ({
+  ThreadList: ({ threads = [], selectedThreadId, onSelect, onDelete }) => (
+    <nav aria-label="Kayıtlı sohbetler">
+      {threads.map((thread) => <span key={thread.id}><button type="button" aria-current={thread.id === selectedThreadId ? "page" : undefined} onClick={() => onSelect(thread.id)}>{thread.title || "Yeni sohbet"}</button><button type="button" onClick={(event) => onDelete(thread, event.currentTarget)} aria-label={`Delete ${thread.title || "investigation"}`}>×</button></span>)}
+    </nav>
+  ),
+}));
 import App from "./App";
 import { ApiError } from "./api";
 import { AssistantChatStore, createInitialState } from "./store";
@@ -97,7 +104,7 @@ test("mounted App reports a 409 run conflict without retrying or retaining an un
 test("mounted App handles a 401 as an expired session without offering retry", async () => {
   const api = makeApi({ listThreads: jest.fn().mockRejectedValue(new ApiError(401)) });
   render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
-  expect(await screen.findByRole("alert")).toHaveTextContent("LibreNMS session has expired");
+  expect(await screen.findByRole("alert")).toHaveTextContent("LibreNMS oturumunun süresi doldu");
   expect(screen.queryByRole("button", { name: "Retry failed investigation" })).not.toBeInTheDocument();
 });
 
@@ -108,7 +115,7 @@ test("mounted App aborts an active stream before deletion and ignores its late a
   render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
   fireEvent.change(screen.getByLabelText("Ask about network state"), { target: { value: "Check core" } }); fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
   await screen.findByRole("button", { name: "Cancel run" });
-  fireEvent.click(screen.getByRole("button", { name: "Delete Core" })); fireEvent.click(screen.getByRole("button", { name: "Delete investigation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete Core" })); fireEvent.click(screen.getByRole("button", { name: "Sohbeti sil" }));
   await waitFor(() => expect(api.deleteThread).toHaveBeenCalledWith("a", "plugin-token"));
   expect(aborted).toBe(true);
   lateEvent("answer.delta", { run_id: "r", message_id: "late", delta: "Late answer" });
@@ -124,7 +131,7 @@ test("multiple active streams are tracked per thread so deleting one does not ab
   await act(async () => { chatStore.dispatch({ type: "thread.selected", threadId: "b" }); });
   fireEvent.change(screen.getByLabelText("Ask about network state"), { target: { value: "Check edge" } }); fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
   await waitFor(() => expect(api.runThread).toHaveBeenCalledTimes(2));
-  fireEvent.click(screen.getByRole("button", { name: "Delete Core" })); fireEvent.click(screen.getByRole("button", { name: "Delete investigation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete Core" })); fireEvent.click(screen.getByRole("button", { name: "Sohbeti sil" }));
   await waitFor(() => expect(api.deleteThread).toHaveBeenCalledWith("a", "plugin-token"));
   expect(aborted).toEqual(["a"]);
 });

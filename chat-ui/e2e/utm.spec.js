@@ -45,9 +45,12 @@ async function signedPluginPage(browser, storageState) {
 }
 
 async function createThread(page) {
-  await page.getByRole("button", { name: "New investigation" }).click();
-  const item = page.getByRole("navigation", { name: "Saved investigations" }).getByRole("button", { name: "Untitled investigation" }).first();
-  await expect(item).toBeVisible();
+  const created = page.waitForResponse((response) =>
+    response.url().endsWith("/ai-api/v1/threads") && response.request().method() === "POST",
+  );
+  await page.locator('[data-slot="aui_thread-list-new"]').click();
+  expect((await created).status()).toBe(201);
+  const item = page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "Yeni sohbet", exact: true }).first();
   return item;
 }
 
@@ -119,10 +122,10 @@ test.describe("authorized UTM acceptance", () => {
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
     try {
       await page.setViewportSize({ width: 390, height: 844 });
-      await expect(page.getByRole("button", { name: "Open investigations" })).toBeVisible();
-      await expect(page.getByLabel("Investigations", { exact: true })).toHaveAttribute("aria-hidden", "true");
-      await page.getByRole("button", { name: "Open investigations" }).press("Enter");
-      await expect(page.getByRole("button", { name: "New investigation" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Sohbet geçmişini aç" })).toBeVisible();
+      await expect(page.getByLabel("Sohbet geçmişi", { exact: true })).toHaveAttribute("aria-hidden", "true");
+      await page.getByRole("button", { name: "Sohbet geçmişini aç" }).press("Enter");
+      await expect(page.locator('[data-slot="aui_thread-list-new"]')).toBeVisible();
     } finally {
       await context.close();
     }
@@ -136,20 +139,22 @@ test.describe("authorized UTM acceptance", () => {
       await createThread(page);
       await ask(page, query);
       await expect(page.getByText(process.env.AI_UTM_AMBIGUOUS_EXPECTED_TEXT, { exact: true })).toBeVisible();
-      const saved = page.getByRole("navigation", { name: "Saved investigations" });
+      const saved = page.getByRole("navigation", { name: "Kayıtlı sohbetler" });
       const titled = saved.getByRole("button", { name: query, exact: true });
       await expect(titled).toBeVisible();
       await createThread(page);
       await titled.click();
       await expect(page.getByText(process.env.AI_UTM_AMBIGUOUS_EXPECTED_TEXT, { exact: true })).toBeVisible();
-      const remove = page.getByRole("button", { name: `Delete ${query}` });
+      const remove = page.getByRole("button", { name: `${query} için seçenekler` });
       await remove.click();
+      await page.getByRole("menuitem", { name: "Sohbeti sil" }).click();
       const dialog = page.getByRole("alertdialog");
-      await expect(dialog.getByRole("button", { name: "Keep thread" })).toBeFocused();
-      await dialog.getByRole("button", { name: "Keep thread" }).click();
+      await expect(dialog.getByRole("button", { name: "Sohbeti tut" })).toBeFocused();
+      await dialog.getByRole("button", { name: "Sohbeti tut" }).click();
       await expect(remove).toBeFocused();
       await remove.click();
-      await dialog.getByRole("button", { name: "Delete investigation" }).click();
+      await page.getByRole("menuitem", { name: "Sohbeti sil" }).click();
+      await dialog.getByRole("button", { name: "Sohbeti sil" }).click();
       await expect(titled).toHaveCount(0);
     } finally {
       await context.close();
@@ -162,10 +167,10 @@ test.describe("authorized UTM acceptance", () => {
     try {
       await createThread(page);
       await ask(page, process.env.AI_UTM_NO_MATCH_QUERY);
-      const progress = page.getByRole("region", { name: "Pipeline progress" });
-      await expect(progress.locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandır/);
+      const progress = page.locator("[data-streaming]");
+      await expect(progress.locator("[aria-live='polite']")).toContainText(/Soruyu sınıflandır/);
       await expect(page.getByText(process.env.AI_UTM_NO_MATCH_EXPECTED_TEXT, { exact: true })).toBeVisible();
-      await expect(progress).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /İşlem ayrıntıları/i })).toHaveAttribute("aria-expanded", "false");
     } finally {
       await context.close();
     }
@@ -180,7 +185,7 @@ test.describe("authorized UTM acceptance", () => {
       await composer.click();
       await expect(composer).toBeFocused();
       await ask(page, process.env.AI_UTM_LIVE_PROGRESS_QUERY);
-      const live = page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']");
+      const live = page.locator("[data-streaming] [aria-live='polite']");
       await expect(live).toHaveAttribute("aria-live", "polite");
       await expect(live).toContainText("Soruyu sınıflandırdı");
       await expect(live).toContainText("Cihazı çözümledi");
@@ -197,8 +202,8 @@ test.describe("authorized UTM acceptance", () => {
       await createThread(page);
       await ask(page, process.env.AI_UTM_FALLBACK_QUERY);
       await expect(page.getByText(process.env.AI_UTM_FALLBACK_EXPECTED_TEXT, { exact: true })).toBeVisible();
-      await expect(page.getByText("Validated fallback result")).toBeVisible();
-      const disclosure = page.getByRole("button", { name: /System vitals/ });
+      await expect(page.getByText("Doğrulanmış güvenli yanıt")).toBeVisible();
+      const disclosure = page.getByRole("button", { name: /Çalışma ayrıntıları/ });
       await disclosure.click();
       await expect(disclosure).toHaveAttribute("aria-expanded", "true");
       await expect(page.getByText("total_ms", { exact: true })).toBeVisible();
@@ -216,12 +221,12 @@ test.describe("authorized UTM acceptance", () => {
       await ask(page, process.env.AI_UTM_RETRY_QUERY);
       // The live target must be configured to expose this sequence. This suite
       // observes the product stream; it does not claim to control its timing.
-      const live = page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']");
+      const live = page.locator("[data-streaming] [aria-live='polite']");
       await expect(live).toContainText("Soruyu sınıflandırdı");
       await expect(live).toContainText("Cihazı çözümledi");
       await expect(live).toContainText("LibreNMS verisini okuyor");
       await expect(page.getByRole("alert")).toHaveText(process.env.AI_UTM_RETRY_ERROR_TEXT);
-      await page.getByRole("button", { name: "Retry failed investigation" }).click();
+      await page.getByRole("button", { name: "Yeniden dene" }).click();
       await expect(page.getByText(process.env.AI_UTM_RETRY_SUCCESS_TEXT, { exact: true })).toBeVisible();
     } finally {
       await context.close();
@@ -234,9 +239,9 @@ test.describe("authorized UTM acceptance", () => {
     try {
       await createThread(page);
       await ask(page, process.env.AI_UTM_CANCEL_QUERY);
-      await expect(page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandır/);
+      await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText(/Soruyu sınıflandır/);
       await page.getByRole("button", { name: "Çalışmayı iptal et" }).click();
-      await expect(page.getByRole("region", { name: "Pipeline progress" })).toHaveCount(0);
+      await expect(page.locator("[data-streaming]")).toHaveCount(0);
       await expect(page.getByText(process.env.AI_UTM_CANCEL_FORBIDDEN_TEXT, { exact: true })).toHaveCount(0);
     } finally {
       await context.close();
