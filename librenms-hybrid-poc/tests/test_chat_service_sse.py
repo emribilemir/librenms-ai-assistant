@@ -143,6 +143,12 @@ class SseServiceTests(unittest.TestCase):
             response = self.client.post(f"/v1/threads/{thread['id']}/runs", headers=headers, json={"client_message_id": "delay", "content": "durum"})
         completed = json.loads([line[6:] for line in response.text.splitlines() if line.startswith("data:")][-1])
         self.assertGreaterEqual(completed["metrics"]["time_to_first_visible_chunk_ms"], 20)
+        self.assertGreaterEqual(
+            completed["metrics"]["total_ms"],
+            completed["metrics"]["time_to_first_visible_chunk_ms"],
+        )
+        detail = self.client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertEqual(detail["runs"][0]["total_ms"], completed["metrics"]["total_ms"])
 
     def test_storage_failure_after_pipeline_stage_still_emits_terminal_storage_error(self):
         original = __import__("chat_service.store", fromlist=["ChatStore"]).ChatStore.complete_run

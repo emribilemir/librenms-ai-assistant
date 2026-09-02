@@ -208,15 +208,25 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 first_chunk = next(chunks)
                 yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": first_chunk})
                 metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
+                for chunk in chunks:
+                    yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": chunk})
+                delivery_total_ms = max(0, int((time.perf_counter() - stream_started) * 1000))
+                metrics["total_ms"] = max(
+                    metrics.get("total_ms") or 0,
+                    metrics["time_to_first_visible_chunk_ms"],
+                    delivery_total_ms,
+                )
                 try:
-                    store.update_visible_time(started["id"], metrics["time_to_first_visible_chunk_ms"])
+                    store.update_visible_time(
+                        started["id"],
+                        metrics["time_to_first_visible_chunk_ms"],
+                        metrics["total_ms"],
+                    )
                 except Exception:
                     try:
                         logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage="storage", error_code="visible_metric_unavailable")
                     except Exception:
                         pass
-                for chunk in chunks:
-                    yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": chunk})
                 yield _sse("completed", {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics})
             except Exception:
                 if work == "storage":
