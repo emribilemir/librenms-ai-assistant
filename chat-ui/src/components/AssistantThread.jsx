@@ -8,130 +8,117 @@ import {
   ThreadPrimitive,
   useAuiState,
 } from "@assistant-ui/react";
+import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import { Activity, ArrowRight, Check, ChevronDown, Copy, Search, Square } from "lucide-react";
+import { PipelineReasoning } from "./PipelineReasoning";
 import styles from "./AssistantThread.module.css";
 
-function Message({ role }) {
-  const usedFallback = useAuiState(
-    (state) => Boolean(state.message.metadata?.custom?.usedFallback),
-  );
+// Structure adapted from assistant-ui's official Perplexity Clone example.
+// Only LibreNMS-specific colors, typography and product controls are changed.
+function AssistantText() {
+  return <MarkdownTextPrimitive smooth defer className={styles.markdown} />;
+}
 
+function UserText() {
+  return <MessagePartPrimitive.Text component="p" className={styles.userText} />;
+}
+
+function CopyAction() {
   return (
-    <MessagePrimitive.Root className={`${styles.message} ${styles[role]}`}>
-      <div className={styles.avatar} aria-hidden="true">
-        {role === "user" ? "OP" : "AI"}
-      </div>
-      <div className={styles.messageBody}>
-        <span className={styles.role}>
-          {role === "user" ? "Operator" : "AI Assistant"}
-        </span>
-        {usedFallback && (
-          <span className={styles.fallback}>Validated fallback result</span>
-        )}
-        <MessagePrimitive.Parts
-          components={{
-            Text: () => (
-              <MessagePartPrimitive.Text
-                component="p"
-                smooth={false}
-                className={styles.messageText}
-              />
-            ),
-            Empty: () => <span className={styles.pending}>Validating…</span>,
-          }}
-        />
-        {role === "assistant" && (
-          <ActionBarPrimitive.Root className={styles.actionBar}>
-            <ActionBarPrimitive.Copy
-              className={styles.copy}
-              aria-label="Copy response"
-            >
-              Copy response
-            </ActionBarPrimitive.Copy>
-          </ActionBarPrimitive.Root>
-        )}
+    <ActionBarPrimitive.Copy className={styles.messageAction} aria-label="Copy response">
+      <AuiIf condition={(state) => state.message.isCopied}><Check size={16} aria-hidden="true" /></AuiIf>
+      <AuiIf condition={(state) => !state.message.isCopied}><Copy size={16} aria-hidden="true" /></AuiIf>
+    </ActionBarPrimitive.Copy>
+  );
+}
+
+function UserMessage() {
+  return (
+    <MessagePrimitive.Root className={`${styles.message} ${styles.userMessage}`}>
+      <div className={styles.userBubble}><MessagePrimitive.Parts components={{ Text: UserText }} /></div>
+    </MessagePrimitive.Root>
+  );
+}
+
+function AssistantMessage() {
+  const usedFallback = useAuiState((state) => Boolean(state.message.metadata?.custom?.usedFallback));
+  return (
+    <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
+      <div className={styles.assistantAvatar} aria-hidden="true"><Search size={16} strokeWidth={1.9} /></div>
+      <div className={styles.assistantBody}>
+        {usedFallback && <span className={styles.fallback}>Doğrulanmış güvenli yanıt</span>}
+        <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: PipelineReasoning, Empty: () => null }} />
+        <AuiIf condition={(state) => state.message.status?.type !== "running"}>
+          <ActionBarPrimitive.Root className={styles.actionBar} autohide="not-last"><CopyAction /></ActionBarPrimitive.Root>
+        </AuiIf>
       </div>
     </MessagePrimitive.Root>
   );
 }
 
-const UserMessage = () => <Message role="user" />;
-const AssistantMessage = () => <Message role="assistant" />;
-
 function LiveSuggestion() {
   return (
     <SuggestionPrimitive.Trigger send className={styles.suggestion}>
-      <span className={styles.suggestionArrow} aria-hidden="true">↗</span>
-      <span>
-        <SuggestionPrimitive.Title className={styles.suggestionTitle} />
-        <SuggestionPrimitive.Description className={styles.suggestionLabel} />
-      </span>
+      <span><SuggestionPrimitive.Title className={styles.suggestionTitle} /><SuggestionPrimitive.Description className={styles.suggestionLabel} /></span>
+      <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
     </SuggestionPrimitive.Trigger>
+  );
+}
+
+function Composer({ placeholder, canRetry, onRetry }) {
+  return (
+    <ComposerPrimitive.Root className={styles.composer}>
+      <ComposerPrimitive.Input rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" />
+      <div className={styles.composerBar}>
+        <span className={styles.liveMode}><Activity size={14} aria-hidden="true" /> Live LibreNMS</span>
+        <div className={styles.composerActions}>
+          {canRetry && <button type="button" className={styles.retry} onClick={onRetry}>Yeniden dene</button>}
+          <span className={styles.primaryAction}>
+            <AuiIf condition={(state) => state.thread.isRunning}>
+              <ComposerPrimitive.Cancel className={styles.primaryButton} aria-label="Çalışmayı iptal et"><Square size={13} fill="currentColor" aria-hidden="true" /></ComposerPrimitive.Cancel>
+            </AuiIf>
+            <AuiIf condition={(state) => !state.thread.isRunning && !state.composer.isEmpty}>
+              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu gönder"><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
+            </AuiIf>
+            <AuiIf condition={(state) => !state.thread.isRunning && state.composer.isEmpty}>
+              <button type="button" className={styles.primaryButton} aria-label="Bir soru yazın" disabled><ArrowRight size={19} aria-hidden="true" /></button>
+            </AuiIf>
+          </span>
+        </div>
+      </div>
+    </ComposerPrimitive.Root>
+  );
+}
+
+function EmptyState({ suggestionsUnavailable, canRetry, onRetry }) {
+  return (
+    <div className={styles.empty}>
+      <div className={styles.emptyInner}>
+        <div className={styles.wordmark}><span>LibreNMS</span> AI</div>
+        <h2>Ağında neyi inceleyelim?</h2>
+        <p className={styles.intro}>Cihaz, port, alarm ve olay verilerini canlı LibreNMS kayıtlarından araştır.</p>
+        <Composer placeholder="Ağın hakkında bir soru sor…" canRetry={canRetry} onRetry={onRetry} />
+        <div className={styles.suggestions} aria-label="Canlı cihaz önerileri"><ThreadPrimitive.Suggestions>{() => <LiveSuggestion />}</ThreadPrimitive.Suggestions></div>
+        {suggestionsUnavailable && <p className={styles.suggestionError} role="status">Canlı cihaz önerileri şu anda alınamıyor.</p>}
+      </div>
+    </div>
   );
 }
 
 export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable }) {
   return (
-    <ThreadPrimitive.Root
-      className={styles.thread}
-      aria-label="AI Assistant conversation"
-      data-assistant-ui="thread"
-    >
-      <ThreadPrimitive.Viewport className={styles.viewport}>
-        <AuiIf condition={(state) => state.thread.isEmpty}>
-          <div className={styles.empty}>
-            <span className={styles.emptyIcon} aria-hidden="true">AI</span>
-            <p className={styles.eyebrow}>LibreNMS · Read-only assistant</p>
-            <h2>Ağında neyi inceleyelim?</h2>
-            <p>Cihaz durumu, portlar, alarmlar ve olaylar hakkında canlı veriye dayalı sorular sor.</p>
-            <div className={styles.suggestions}>
-              <ThreadPrimitive.Suggestions>
-                {() => <LiveSuggestion />}
-              </ThreadPrimitive.Suggestions>
-            </div>
-            {suggestionsUnavailable && (
-              <p className={styles.suggestionError} role="status">
-                Canlı cihaz önerileri şu anda alınamıyor.
-              </p>
-            )}
-            <small>Yanıtlar yalnız gözlemlenen LibreNMS verilerine dayanır.</small>
-          </div>
-        </AuiIf>
-        <ThreadPrimitive.Messages
-          components={{ UserMessage, AssistantMessage }}
-        />
-      </ThreadPrimitive.Viewport>
-
-      <ThreadPrimitive.ViewportFooter className={styles.footer}>
-        <ComposerPrimitive.Root className={styles.composer}>
-          <label className={styles.label} htmlFor="investigation-question">
-            Ask LibreNMS
-          </label>
-          <ComposerPrimitive.Input
-            id="investigation-question"
-            className={styles.input}
-            maxLength={8000}
-            placeholder="Example: Why is lab-j9775a-01 down?"
-            submitMode="enter"
-          />
-          <div className={styles.actions}>
-            <AuiIf condition={(state) => !state.thread.isRunning}>
-              <ComposerPrimitive.Send className={styles.send}>
-                Soruyu gönder
-              </ComposerPrimitive.Send>
-            </AuiIf>
-            <AuiIf condition={(state) => state.thread.isRunning}>
-              <ComposerPrimitive.Cancel className={styles.cancel}>
-                Çalışmayı iptal et
-              </ComposerPrimitive.Cancel>
-            </AuiIf>
-            {canRetry && (
-              <button type="button" className={styles.retry} onClick={onRetry}>
-                Retry failed investigation
-              </button>
-            )}
-          </div>
-        </ComposerPrimitive.Root>
-      </ThreadPrimitive.ViewportFooter>
+    <ThreadPrimitive.Root className={styles.thread} aria-label="AI Assistant conversation" data-assistant-ui="thread" style={{ "--thread-max-width": "42rem" }}>
+      <AuiIf condition={(state) => state.thread.isEmpty}><EmptyState suggestionsUnavailable={suggestionsUnavailable} canRetry={canRetry} onRetry={onRetry} /></AuiIf>
+      <AuiIf condition={(state) => !state.thread.isEmpty}>
+        <ThreadPrimitive.Viewport className={styles.viewport}>
+          <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+          <ThreadPrimitive.ViewportFooter className={styles.footer}>
+            <ThreadPrimitive.ScrollToBottom className={styles.scrollToBottom} aria-label="En yeni mesaja git"><ChevronDown size={17} aria-hidden="true" /></ThreadPrimitive.ScrollToBottom>
+            <Composer placeholder="Devam sorusu sor…" canRetry={canRetry} onRetry={onRetry} />
+            <p className={styles.disclaimer}>Yalnızca salt-okunur LibreNMS verileri kullanılır.</p>
+          </ThreadPrimitive.ViewportFooter>
+        </ThreadPrimitive.Viewport>
+      </AuiIf>
     </ThreadPrimitive.Root>
   );
 }

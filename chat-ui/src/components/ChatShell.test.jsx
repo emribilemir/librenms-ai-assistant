@@ -4,8 +4,9 @@ import { AssistantThread } from "./AssistantThread";
 import { DeleteThreadDialog } from "./DeleteThreadDialog";
 import { ChatTranscript } from "./ChatTranscript";
 import { RunMetrics } from "./RunMetrics";
-import { RunProgress } from "./RunProgress";
 import { ThreadDrawer } from "./ThreadDrawer";
+import { AssistantChatStore } from "../store";
+import { useLibreNmsExternalStoreRuntime } from "../runtime";
 
 test("delete confirmation focuses cancel and cancellation leaves the thread intact", () => {
   const cancel = jest.fn();
@@ -55,12 +56,6 @@ test("closed mobile drawer removes its controls from keyboard focus", async () =
   expect(screen.getByLabelText("Investigations")).toHaveAttribute("aria-hidden", "true");
   expect(screen.queryByRole("button", { name: "New investigation" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Saved thread" })).not.toBeInTheDocument();
-});
-
-test("real pipeline stage updates are announced in a polite live region", () => {
-  render(<RunProgress run={{ status: "running", stages: { planner: { status: "completed", durationMs: 8 }, resolver: { status: "running" } } }} />);
-  expect(screen.getByText(/Soruyu sınıflandırdı.*Cihazı çözümlüyor/)).toHaveAttribute("aria-live", "polite");
-  expect(screen.getByText("8ms")).toBeVisible();
 });
 
 test("assistant-ui suggestions send the exact live-device prompt", async () => {
@@ -120,6 +115,42 @@ test("assistant messages expose an assistant-ui copy action", () => {
 
   render(<Fixture />);
   expect(screen.getByRole("button", { name: "Copy response" })).toBeVisible();
+});
+
+test("live SSE stages appear as an expanded assistant-ui reasoning disclosure inside the assistant message", () => {
+  const store = new AssistantChatStore({
+    threads: [{ id: "a", title: "Core" }],
+    selectedThreadId: "a",
+    messages: { a: [{ id: "run-r", role: "assistant", content: "", pending: true, runId: "r" }] },
+    runs: {
+      a: {
+        id: "r",
+        status: "running",
+        stages: {
+          planner: { status: "completed", durationMs: 8 },
+          resolver: { status: "running" },
+        },
+      },
+    },
+    runHistory: {},
+    drawerOpen: false,
+  });
+
+  function Fixture() {
+    const runtime = useLibreNmsExternalStoreRuntime(store, "a", jest.fn(), jest.fn(), []);
+    return (
+      <AssistantRuntimeProvider runtime={runtime}>
+        <AssistantThread suggestionsUnavailable={false} />
+      </AssistantRuntimeProvider>
+    );
+  }
+
+  render(<Fixture />);
+
+  expect(screen.getByRole("button", { name: /İnceleme adımları/i })).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByText(/Soruyu sınıflandırdı/)).toBeVisible();
+  expect(screen.getByText(/Cihazı çözümlüyor/)).toBeVisible();
+  expect(screen.queryByText("Validating…")).not.toBeInTheDocument();
 });
 
 test("validated fallback results are explicitly labelled for the operator", () => {

@@ -1,0 +1,17 @@
+.root { color: #aab2ba; margin: 0 0 12px; width: 100%; }
+.trigger { align-items: center; background: transparent; border: 0; color: #aab2ba; display: inline-flex; font: inherit; font-size: 13px; gap: 8px; padding: 6px 0; transition: color 180ms ease, transform 180ms ease; }
+.trigger:hover { color: #eef1f3; }
+.trigger:active { transform: scale(.98); }
+.chevron { transition: transform 200ms cubic-bezier(.32, .72, 0, 1); }
+.trigger[aria-expanded="false"] .chevron { transform: rotate(-90deg); }
+.panel { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 200ms cubic-bezier(.32, .72, 0, 1), opacity 160ms ease; }
+.panel[data-open] { grid-template-rows: 1fr; opacity: 1; }
+.steps { border-left: 1px solid #424a52; display: flex; flex-direction: column; gap: 9px; list-style: none; margin: 3px 0 1px 7px; min-height: 0; overflow: hidden; padding: 6px 0 7px 18px; }
+.steps li { align-items: center; display: flex; font-size: 12px; gap: 9px; line-height: 1.4; }
+.marker { background: #78828b; border-radius: 50%; height: 5px; margin-left: -21px; width: 5px; }
+.steps li[data-running] { color: #e7eaed; }
+.steps li[data-running] .marker { animation: pulse 1.25s ease-in-out infinite; background: #d9232e; box-shadow: 0 0 0 4px rgba(217, 35, 46, .13); }
+.shimmer { animation: shimmer 1.8s linear infinite; background: linear-gradient(90deg, #8d969f 18%, #fff 48%, #8d969f 78%); background-clip: text; background-size: 220% 100%; color: transparent; }
+@keyframes shimmer { to { background-position: -220% 0; } }
+@keyframes pulse { 50% { opacity: .45; transform: scale(.82); } }
+@media (prefers-reduced-motion: reduce) { .panel, .chevron, .trigger { transition: none; } .shimmer, .steps li[data-running] .marker { animation: none; } }

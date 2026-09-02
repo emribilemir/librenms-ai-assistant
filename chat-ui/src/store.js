@@ -11,7 +11,7 @@ function restoredMessages(messages, history) {
   return messages.map((message) => {
     if (message.role !== "assistant") return message;
     const run = acceptedRuns[acceptedIndex++];
-    return run ? { ...message, usedFallback: Boolean(run.used_fallback) } : message;
+    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback) } : message;
   });
 }
 
@@ -68,7 +68,9 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
     const existing = state.runs[threadId];
     const correlation = data.client_message_id || clientMessageId;
     if ((clientMessageId && correlation !== clientMessageId) || (existing && (existing.id === data.run_id || existing.status === "running" || existing.status === "error"))) return state;
-    const messages = messagesFor(state, threadId).map((message) => message.id === (data.client_message_id || clientMessageId) ? { ...message, pending: false } : message);
+    const acknowledged = messagesFor(state, threadId).map((message) => message.id === (data.client_message_id || clientMessageId) ? { ...message, pending: false } : message);
+    const placeholder = { id: `run-${data.run_id}`, role: "assistant", content: "", pending: true, runId: data.run_id };
+    const messages = acknowledged.some((message) => message.runId === data.run_id) ? acknowledged : [...acknowledged, placeholder];
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { id: data.run_id, clientMessageId: correlation, status: "running", stages: {}, canRetry: false, error: null });
   }
   const currentRun = state.runs[threadId];
@@ -83,12 +85,20 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
   if (event === "answer.delta") {
     const prior = messagesFor(state, threadId);
     const existing = prior.find((message) => message.id === data.message_id);
-    const messages = existing ? prior.map((message) => message.id === data.message_id ? { ...message, content: `${message.content}${data.delta}` } : message) : [...prior, { id: data.message_id, role: "assistant", content: data.delta, pending: true }];
+    const placeholder = prior.find((message) => message.role === "assistant" && message.runId === data.run_id && message.pending);
+    const messages = existing
+      ? prior.map((message) => message.id === data.message_id ? { ...message, content: `${message.content}${data.delta}` } : message)
+      : placeholder
+        ? prior.map((message) => message === placeholder ? { ...message, id: data.message_id, content: data.delta } : message)
+        : [...prior, { id: data.message_id, role: "assistant", content: data.delta, pending: true, runId: data.run_id }];
     return { ...state, messages: { ...state.messages, [threadId]: messages } };
   }
   if (event === "error") return updateRun(state, threadId, { status: "error", error: { stage: data.stage, code: data.code, message: data.message, retryable: data.retryable } });
   if (event === "completed") {
-    const messages = data.message_id ? messagesFor(state, threadId).map((message) => message.id === data.message_id ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback) } : message) : messagesFor(state, threadId);
+    const messages = messagesFor(state, threadId).map((message) => {
+      const isAnswer = data.message_id ? message.id === data.message_id : message.runId === data.run_id;
+      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback) } : message;
+    });
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { status: data.status, metrics: data.metrics, usedFallback: data.used_fallback, canRetry: data.status === "failed" && Boolean(state.runs[threadId]?.error?.retryable) });
   }
   return state;

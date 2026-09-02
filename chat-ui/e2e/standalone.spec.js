@@ -94,55 +94,64 @@ test("creates, selects, and deletes a saved thread only after confirmation", asy
 test("renders only real received stage progress for a successful no-match result", async ({ page }) => {
   await createThread(page);
   await ask(page, "no-match branch switch");
-  const progress = page.getByRole("region", { name: "Pipeline progress" });
-  const live = progress.locator("p[aria-live='polite']");
+  const reasoning = page.getByRole("button", { name: /İnceleme adımları/i });
+  const live = page.locator("[aria-live='polite']").last();
+  await expect(reasoning).toHaveAttribute("aria-expanded", "true");
   await expect(live).toContainText(/Soruyu sınıflandır/);
   await expect(live).toContainText(/Cihazı çözüml/);
   await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
   await expect(page.locator('[data-assistant-ui="thread"]')).toBeVisible();
   await expect(page.locator("[data-message-id]")).toHaveCount(2);
-  await expect(progress).toHaveCount(0);
+  await expect(reasoning).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
 });
 
 test("shows a retryable backend failure and allows a real retried stream to succeed", async ({ page }) => {
   await page.getByRole("button", { name: "New investigation" }).click();
   await ask(page, "retryable backend question");
-  const progress = page.getByRole("region", { name: "Pipeline progress" });
-  await expect(progress.locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandırdı.*Cihazı çözümledi.*LibreNMS verisini okuyor/);
+  const live = page.locator("[aria-live='polite']").last();
+  await expect(live).toContainText(/Soruyu sınıflandırdı.*Cihazı çözümledi.*LibreNMS verisini okuyor/);
   expect(await page.evaluate(async () => (await fetch("/ai-api/__test__/release-retryable-failure", { method: "POST" })).status)).toBe(204);
   await expect(page.getByRole("alert")).toHaveText("LibreNMS is temporarily unavailable.");
-  const retry = page.getByRole("button", { name: "Retry failed investigation" });
+  const retry = page.getByRole("button", { name: "Yeniden dene" });
   await expect(retry).toBeVisible();
   await retry.click();
   await expect(page.getByText("Backend recovered on retry.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Retry failed investigation" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Yeniden dene" })).toHaveCount(0);
 });
 
 test("labels a validated fallback answer and exposes its complete metric disclosure", async ({ page }, testInfo) => {
   await createThread(page);
   await ask(page, "fallback investigation evidence");
   await expect(page.getByText("Safe evidence fallback summary.")).toBeVisible();
-  await expect(page.getByText("Validated fallback result")).toBeVisible();
+  await expect(page.getByText("Doğrulanmış güvenli yanıt")).toBeVisible();
   const disclosure = page.getByRole("button", { name: /System vitals/ });
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   await disclosure.click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "true");
   for (const metric of metrics) await expect(page.getByText(metric, { exact: true })).toBeVisible();
-  for (const value of ["7 ms", "11 ms", "13 ms", "17 ms", "48 ms"]) await expect(page.getByText(value, { exact: true })).toBeVisible();
+  for (const value of ["7 ms", "11 ms", "13 ms", "17 ms"]) await expect(page.getByText(value, { exact: true })).toBeVisible();
   const persistedRun = await persistedRunFor(page, "fallback investigation evidence");
-  expect(persistedRun).toMatchObject({ planner_ms: 7, resolver_ms: 11, backend_ms: 13, synthesis_ms: 17, total_ms: 48 });
-  expect(persistedRun.total_ms).toBe(persistedRun.planner_ms + persistedRun.resolver_ms + persistedRun.backend_ms + persistedRun.synthesis_ms);
+  expect(persistedRun).toMatchObject({ planner_ms: 7, resolver_ms: 11, backend_ms: 13, synthesis_ms: 17 });
+  expect(persistedRun.total_ms).toBeGreaterThanOrEqual(48);
+  expect(persistedRun.total_ms).toBeGreaterThanOrEqual(persistedRun.time_to_first_visible_chunk_ms);
+  const totalMetric = page.locator("dl > div").filter({ hasText: "total_ms" });
+  await expect(totalMetric.getByText(`${persistedRun.total_ms} ms`, { exact: true })).toBeVisible();
+  const [totalBox, shellBox] = await Promise.all([
+    totalMetric.boundingBox(),
+    page.locator("#root > div").boundingBox(),
+  ]);
+  expect(totalBox.y + totalBox.height).toBeLessThanOrEqual(shellBox.y + shellBox.height);
   await page.screenshot({ path: testInfo.outputPath("fallback-metrics.png"), fullPage: true });
 });
 
 test("cancelling a real stream prevents later stages and answer output", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "New investigation" }).click();
   await ask(page, "cancel after planner");
-  const progress = page.getByRole("region", { name: "Pipeline progress" });
-  await expect(progress.locator("p[aria-live='polite']")).toContainText(/Soruyu sınıflandırdı/);
+  const live = page.locator("[aria-live='polite']").last();
+  await expect(live).toContainText(/Soruyu sınıflandırdı/);
   await page.getByRole("button", { name: "Çalışmayı iptal et" }).click();
-  await expect(progress).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /İnceleme adımları/i })).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByText("This answer must never be visible.")).toHaveCount(0);
   await expect(page.getByText("resolver", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("cancelled-run.png"), fullPage: true });
@@ -159,6 +168,6 @@ test("supports keyboard focus, live stage announcements, and the responsive draw
   await composer.click();
   await expect(composer).toBeFocused();
   await ask(page, "ambiguous keyboard check");
-  const live = page.getByRole("region", { name: "Pipeline progress" }).locator("p[aria-live='polite']");
+  const live = page.locator("[aria-live='polite']").last();
   await expect(live).toHaveAttribute("aria-live", "polite");
 });

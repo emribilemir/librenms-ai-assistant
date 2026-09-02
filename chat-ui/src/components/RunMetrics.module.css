@@ -3,8 +3,9 @@
 .metrics button span:first-child { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .metrics button strong { color: #929da6; font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; margin-left: auto; }
 .metrics button span:last-child { color: #d84049; font-size: 16px; }
-.metrics dl { display: grid; gap: 4px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 8px 0 0; }
+.metrics dl { display: grid; gap: 4px; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 8px 0 0; }
 .metrics dl div { background: #23282d; border: 1px solid #3e464d; border-radius: 4px; padding: 8px; }
 .metrics dt { color: #d7dde1; font-size: 10px; font-weight: 700; }
 .metrics dt small { color: #78838c; display: block; font: 600 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 3px; }
 .metrics dd { color: #eef1f3; font: 700 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 3px 0 0; }
+@media (max-width: 900px) { .metrics { max-height: 190px; overflow-y: auto; } .metrics dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

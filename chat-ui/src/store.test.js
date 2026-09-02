@@ -18,7 +18,17 @@ test("correlates an optimistic client message with the server run", () => {
   state = reduceAssistantChat(state, { type: "message.optimistic", threadId: "a", clientMessageId: "client-1", content: "Check edge" });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", clientMessageId: "client-1", event: "run.started", data: { run_id: "run-1", thread_id: "a", client_message_id: "client-1" } });
   expect(state.messages.a[0]).toMatchObject({ id: "client-1", role: "user", pending: false });
+  expect(state.messages.a[1]).toMatchObject({ id: "run-run-1", role: "assistant", content: "", pending: true, runId: "run-1" });
   expect(state.runs.a.clientMessageId).toBe("client-1");
+});
+
+test("reuses the live assistant placeholder when the first validated answer delta arrives", () => {
+  let state = createInitialState({ selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "Validated" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: " answer" } });
+
+  expect(state.messages.a).toEqual([{ id: "m", role: "assistant", content: "Validated answer", pending: true, runId: "r" }]);
 });
 
 test("reduces only exact stream stages and exposes real current progress", () => {
@@ -76,7 +86,7 @@ test("does not render an answer delta until the server emits a validated delta",
   let state = createInitialState({ selectedThreadId: "a" });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "Validated answer" } });
-  expect(state.messages.a).toEqual([{ id: "m", role: "assistant", content: "Validated answer", pending: true }]);
+  expect(state.messages.a).toEqual([{ id: "m", role: "assistant", content: "Validated answer", pending: true, runId: "r" }]);
 });
 
 test("makes retry available only after a retryable terminal error", () => {
