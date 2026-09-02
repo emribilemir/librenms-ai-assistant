@@ -35,8 +35,8 @@ class AiAssistantPluginContractTests(unittest.TestCase):
         page = read("Page.php")
         self.assertIn("class Menu extends MenuEntryHook", menu)
         self.assertIn("class Page extends PageHook", page)
-        self.assertIn("$user->can('global-read')", menu)
-        self.assertIn("$user->can('global-read')", page)
+        self.assertIn("$authenticatedUser->can('global-read')", menu)
+        self.assertIn("$authenticatedUser->can('global-read')", page)
         self.assertIn("plugin/AiAssistant", read("resources/views/menu.blade.php"))
 
     def test_page_uses_only_a_root_nonsecret_config_and_fixed_assets(self) -> None:

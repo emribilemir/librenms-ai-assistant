@@ -10,6 +10,9 @@ class Menu extends MenuEntryHook
 {
     public function authorize(User $user): bool
     {
-        return $user->can('global-read');
+        $authenticatedUser = auth()->user();
+
+        return $authenticatedUser instanceof User
+            && $authenticatedUser->can('global-read');
     }
 }
