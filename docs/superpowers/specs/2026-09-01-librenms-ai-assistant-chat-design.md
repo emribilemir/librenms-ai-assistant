@@ -28,7 +28,7 @@ SQLite stores user-owned threads, messages, run state, and summary metrics.
 
 The service is added below `librenms-hybrid-poc/chat_service/` and uses FastAPI `0.141.1` with Uvicorn `0.52.4`. The existing hybrid pipeline remains importable and callable as it is today. A small integration adapter supplies an optional event observer and cancellation predicate at real planner, resolver, LibreNMS, and synthesis boundaries; it does not replace orchestration semantics or add a parallel planner/resolver implementation.
 
-All elapsed durations use `time.monotonic()` (or `time.monotonic_ns()` converted to milliseconds). `resolver_ms` is the current resolver execution duration exposed by the pipeline. `backend_ms` accumulates only actual LibreNMS adapter calls; it excludes resolver work, formatting, storage, serialization, validation, and SSE delivery. `planner_ms`, `synthesis_ms`, `time_to_first_token_ms`, `time_to_first_visible_chunk_ms`, and `total_ms` are measured from their corresponding real boundaries.
+All elapsed durations use `time.perf_counter()` (or `time.perf_counter_ns()` converted to milliseconds). `resolver_ms` is the current resolver execution duration exposed by the pipeline. `backend_ms` accumulates only actual LibreNMS adapter calls; it excludes resolver work, formatting, storage, serialization, validation, and SSE delivery. `planner_ms`, `synthesis_ms`, `time_to_first_token_ms`, `time_to_first_visible_chunk_ms`, and `total_ms` are measured from their corresponding real boundaries.
 
 ## Python Service Components
 
@@ -86,6 +86,7 @@ All browser production requests use relative paths beginning `/ai-api/v1`; the b
 | `POST /v1/threads` | Empty JSON object | `201` and a new empty thread | `401` for authentication failure. |
 | `GET /v1/threads` | None | `200` ordered current-user thread summaries | `401` for authentication failure. |
 | `GET /v1/threads/{id}` | None | `200` with current-user thread, messages, and run summaries | `401` or ownership-hidden `404`. |
+| `GET /v1/suggestions` | None | `200` with deterministic prompts derived from currently up LibreNMS devices | `401` for authentication failure; `503` with a safe code when LibreNMS inventory is unavailable. |
 | `DELETE /v1/threads/{id}` | None | `204` after deleting the current-user thread and its dependent records | `401` or ownership-hidden `404`; an active run is cancelled before deletion completes. |
 | `POST /v1/threads/{id}/runs` | `{ "client_message_id": "string", "content": "string" }` | `200`, `Content-Type: text/event-stream` | `400` malformed JSON; `422` empty/whitespace-only or more than 8,000 characters; `401`; ownership-hidden `404`; `409` active run for the same thread or duplicate `client_message_id` for the same owner/thread. |
 
@@ -126,6 +127,30 @@ The `metrics` object has exactly these fields, each a non-negative integer milli
 
 The reusable frontend lives under `chat-ui/` and is built with Vite `8`, React `19.2.8`, ReactDOM `19.2.8`, and `@assistant-ui/react` `0.15.17`, all exact-pinned with a committed lockfile. It uses a custom `ExternalStoreRuntime` backed by an application-owned reducer and store. It does not use AI SDK, Next.js, or assistant-ui's wire protocol.
 
+The selected visual direction is **Native Assistant**. The existing LibreNMS top navigation and dark visual language remain recognizable, while the plugin content is a purpose-built AI workspace rather than a generic dashboard panel. The desktop layout has a persistent conversation sidebar and a focused chat surface; the sidebar becomes a focus-managed drawer on narrow screens. Typography, borders, neutral surfaces, and LibreNMS red are inherited visually without importing LibreNMS CSS into the reusable component or adding global styles.
+
+assistant-ui is the interaction layer, not a hidden provider wrapper. The visible chat surface uses:
+
+- `ThreadPrimitive` for the viewport, empty state, message flow, and suggestions;
+- `MessagePrimitive` and `MessagePartPrimitive` for user and accepted assistant messages;
+- `ComposerPrimitive` for input, send, and cancellation;
+- `SuggestionPrimitive` for clickable, live-inventory starter prompts;
+- `ActionBarPrimitive` for actions bound to an accepted assistant message, including copy;
+- `AuiIf` for empty, running, failed, and completed presentation;
+- `ExternalStoreRuntime` as the bridge to the existing reducer, persisted thread state, and custom HTTP/SSE client.
+
+The registry's generated Tailwind/shadcn thread is not copied wholesale because it would introduce global Tailwind dependencies and conflict with the LibreNMS host page. The application composes the official primitives directly and styles them with scoped CSS Modules. No `assistant-ui init` command is run because this is an existing Vite application with a custom backend and an established component/runtime boundary.
+
+On an empty thread the frontend fetches authenticated suggestions from `/ai-api/v1/suggestions`. The service reads the live LibreNMS device collection, filters to devices whose current status is up, sorts them deterministically, and selects a bounded subset without an LLM. It generates only prompt families already supported by the hybrid pipeline: current device status, down ports, active alerts, and recent events. Every prompt contains a real current hostname. The response shape is an array of `{title, label, prompt}` objects suitable for assistant-ui runtime-driven suggestions. Selecting a suggestion through `SuggestionPrimitive.Trigger send` immediately creates the user message and run.
+
+Suggestion failure does not block chat. If LibreNMS inventory is unavailable, the empty state displays a clear unavailable notice and leaves the composer enabled; it does not show fake, cached, fixture, or invented devices. Suggestions are presentation assistance only and are neither persisted nor logged.
+
+A retryable failed run has no accepted assistant message, so its retry control is a thread-level action rather than a message `ActionBarPrimitive`. Retrying submits the latest user question as a new run and does not masquerade as completed-message regeneration.
+
+Pipeline feedback is specific to the submitted question. The UI derives stage labels exclusively from the run's SSE events: planner classification, resolver device resolution, LibreNMS data retrieval, and synthesis only for routes that actually enter synthesis. It never displays a skipped stage as active and never uses timers to advance progress. Internal model reasoning or chain-of-thought is not exposed.
+
+For investigations, generated synthesis remains buffered and invisible until mechanical validation and judging finish. After acceptance, the service emits the approved response as `answer.delta` chunks so the final answer visibly flows through the assistant message surface. A deterministic fallback follows the same visible chunk path and is marked in message metadata. `time_to_first_token_ms` measures the model's first internal token; `time_to_first_visible_chunk_ms` measures the first approved chunk exposed to the browser.
+
 The complete page has:
 
 - a thread list with create, select, and delete-after-confirmation controls;
@@ -133,6 +158,8 @@ The complete page has:
 - real pipeline progress driven by the SSE stage events, not simulated timers;
 - a composer with send, cancel while running, and retry after a retryable terminal result;
 - expandable final-run metrics;
+- a compact system-vitals summary backed only by the current run's real metrics;
+- live, clickable device suggestions in the empty thread state;
 - a responsive thread drawer that preserves keyboard operation on narrow screens.
 
 Styling uses CSS Modules only. It adds no global reset and no Tailwind. Keyboard focus is visible, order is logical, controls have accessible names and states, the delete confirmation is focus-managed, the current progress and errors are announced through an appropriate live region, and colour is not the only source of status information. The implementation targets WCAG 2.2 AA, including keyboard operation, focus visibility, target sizing, and responsive reflow.
@@ -156,10 +183,10 @@ Rollback is reversible: disable the plugin, remove or revert the Nginx proxy inc
 
 ## Test and Acceptance Strategy
 
-All 90 existing Python tests must remain green. New Python tests cover authentication claims/signatures/expiry, ownership, title generation, SQLite migration/foreign keys/WAL/busy timeout, active-run conflict, event ordering/heartbeat, cancellation boundaries, metric attribution, no rejected synthesis leakage, fallback results, and restricted logging. They run without a live Qwen service or a live LibreNMS server by using controlled pipeline and adapter seams.
+All 90 existing Python tests must remain green. New Python tests cover authentication claims/signatures/expiry, ownership, title generation, SQLite migration/foreign keys/WAL/busy timeout, active-run conflict, event ordering/heartbeat, cancellation boundaries, metric attribution, no rejected synthesis leakage, fallback results, restricted logging, live-device filtering, deterministic suggestion generation, and safe suggestion failure. They run without a live Qwen service or a live LibreNMS server by using controlled pipeline and adapter seams.
 
-Frontend tests cover the reducer/store, `ExternalStoreRuntime` integration, fetch/SSE parsing, thread/delete/cancel/retry states, responsive drawer semantics, and keyboard/focus/live-region accessibility. Playwright covers the standalone Vite shell with the dev proxy and the authorized real UTM installation. The UTM browser acceptance must prove signed user scoping, thread lifecycle, real stage progress, ambiguity/no-match success, safe investigation fallback, cancellation preventing later stages, and no accessible secret or user content in logs/bundled configuration.
+Frontend tests cover the reducer/store, `ExternalStoreRuntime` integration, visible assistant-ui primitives, runtime-driven suggestions, suggestion send, fetch/SSE parsing, stage-to-message behavior, approved chunk assembly, thread/delete/cancel/retry states, responsive drawer semantics, and keyboard/focus/live-region accessibility. Playwright covers the standalone Vite shell with the dev proxy and the authorized real UTM installation. The UTM browser acceptance must prove signed user scoping, live device suggestions, thread lifecycle, real question-specific stage progress, visible approved answer chunking, exact run metrics, ambiguity/no-match success, safe investigation fallback, cancellation preventing later stages, backend-unavailable handling, and no accessible secret or user content in logs/bundled configuration.
 
 ## Acceptance Criteria
 
-The feature is accepted only when the existing Python suite remains green, the new service and frontend tests pass, exact dependency pins and lockfile are committed, the plugin/assets deploy outside LibreNMS core source, Nginx successfully validates and streams SSE, and authorized UTM Playwright evidence demonstrates the contract above. Production installation requires explicit authorization before any UTM mutation.
+The feature is accepted only when the existing Python suite remains green, the new service and frontend tests pass, exact dependency pins and lockfile are committed, assistant-ui primitives are visibly responsible for the chat interactions, live suggestions contain only actual up devices, the plugin/assets deploy outside LibreNMS core source, Nginx successfully validates and streams SSE, and authorized UTM Playwright evidence demonstrates the contract above. Production installation requires explicit authorization before any UTM mutation.
