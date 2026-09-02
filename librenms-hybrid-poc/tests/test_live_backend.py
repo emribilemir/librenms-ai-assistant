@@ -59,6 +59,19 @@ class _ApiHandler(BaseHTTPRequestHandler):
         if self.headers.get("X-Auth-Token") != self.expected_token:
             return self._json(401, {"message": "Unauthenticated."})
 
+        if self.path == "/api/v0/devices":
+            return self._json(
+                200,
+                {
+                    "status": "ok",
+                    "devices": [
+                        {"device_id": "7", "hostname": "lab-down", "status": "0"},
+                        {"device_id": "8", "hostname": "lab-up", "status": "1"},
+                    ],
+                    "count": 2,
+                },
+            )
+
         if self.path == "/api/v0/devices/lab-j9775a-01":
             return self._json(
                 200,
@@ -234,6 +247,30 @@ class LocalApiServer:
 
 
 class LibreNMSBackendContractTests(unittest.TestCase):
+    def test_list_devices_normalizes_status_and_records_one_read_only_call(self):
+        backend_mod = load_live_backend_module()
+        backend = backend_mod.LibreNMSBackend(
+            base_url="http://librenms.invalid/api/v0",
+            token="test-token",
+            timeout=2,
+        )
+        payload = {
+            "devices": [
+                {"device_id": "7", "hostname": "lab-down", "status": "0"},
+                {"device_id": "8", "hostname": "lab-up", "status": "1"},
+            ]
+        }
+        with patch.object(backend, "_get", return_value=payload) as get:
+            devices = backend.list_devices()
+
+        get.assert_called_once_with("/devices")
+        self.assertEqual(
+            [device["hostname"] for device in devices],
+            ["lab-down", "lab-up"],
+        )
+        self.assertEqual([device["status"] for device in devices], [0, 1])
+        self.assertEqual(backend.tool_names, ["list_devices"])
+
     def test_windowed_events_paginate_until_the_selected_range_is_complete(self):
         backend_mod = load_live_backend_module()
 

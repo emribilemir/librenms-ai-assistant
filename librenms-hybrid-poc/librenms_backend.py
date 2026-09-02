@@ -135,6 +135,18 @@ class LibreNMSBackend:
         result = self._normalize_device(devices[0]) if len(devices) == 1 else None
         return self._record("get_device", args, result)
 
+    def list_devices(self):
+        try:
+            payload = self._get("/devices")
+        except Exception:
+            self._record("list_devices", {}, None)
+            raise
+        result = [
+            self._normalize_device(device)
+            for device in ((payload or {}).get("devices") or [])
+        ]
+        return self._record("list_devices", {}, result)
+
     def get_ports(self, *, device_id):
         ref = urllib.parse.quote(str(device_id), safe="")
         payload = self._get(

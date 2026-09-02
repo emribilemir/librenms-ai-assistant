@@ -9,8 +9,15 @@ _METRICS = ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_
 
 
 class PipelineAdapter:
-    def __init__(self, orchestrator=None):
+    def __init__(self, orchestrator=None, device_source=None):
         self._orchestrator = orchestrator
+        self._device_source = device_source
+
+    def list_devices(self):
+        source = self._device_source
+        if source is None:
+            source = LibreNMSBackend().list_devices
+        return source()
 
     def run(self, content, observer, is_cancelled):
         if is_cancelled():

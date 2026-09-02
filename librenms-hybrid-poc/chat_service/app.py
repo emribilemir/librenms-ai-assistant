@@ -17,6 +17,7 @@ from .logging import RestrictedJsonLogger
 from .pipeline_adapter import PipelineAdapter
 from .runs import ActiveRunRegistry, RunConflictError
 from .store import ChatStore, ConflictError, NotFoundError
+from .suggestions import build_suggestions
 
 
 def _sse(event, data):
@@ -64,6 +65,21 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     async def list_threads(authorization: str | None = Header(default=None)):
         user = identity(authorization)
         return store.list_threads(user.sub)
+
+    @app.get("/v1/suggestions")
+    async def list_suggestions(authorization: str | None = Header(default=None)):
+        identity(authorization)
+        try:
+            devices = adapter.list_devices()
+        except Exception:
+            raise HTTPException(
+                503,
+                {
+                    "code": "librenms_unavailable",
+                    "message": "Canlı cihaz önerileri şu anda alınamıyor.",
+                },
+            ) from None
+        return {"suggestions": build_suggestions(devices)}
 
     @app.get("/v1/threads/{thread_id}")
     async def get_thread(thread_id: str, authorization: str | None = Header(default=None)):
