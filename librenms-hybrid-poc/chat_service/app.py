@@ -24,6 +24,22 @@ def _sse(event, data):
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
 
+def iter_answer_chunks(answer, max_chars=72):
+    """Split accepted text without changing the text reconstructed by clients."""
+    start = 0
+    while start < len(answer):
+        end = min(len(answer), start + max_chars)
+        if end < len(answer):
+            boundary = max(
+                answer.rfind(" ", start + 1, end + 1),
+                answer.rfind("\n", start + 1, end + 1),
+            )
+            if boundary > start:
+                end = boundary + 1
+        yield answer[start:end]
+        start = end
+
+
 def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                heartbeat_seconds=15):
     secret = secret if secret is not None else os.environ.get("AI_ASSISTANT_SHARED_SECRET", "").encode()
@@ -188,7 +204,9 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 work = "storage"
                 message_id = store.complete_run(started["id"], "completed", metrics, used_fallback=result["used_fallback"], answer=answer)
                 terminal = True
-                yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": answer})
+                chunks = iter(iter_answer_chunks(answer))
+                first_chunk = next(chunks)
+                yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": first_chunk})
                 metrics["time_to_first_visible_chunk_ms"] = max(0, int((time.perf_counter() - stream_started) * 1000))
                 try:
                     store.update_visible_time(started["id"], metrics["time_to_first_visible_chunk_ms"])
@@ -197,6 +215,8 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                         logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage="storage", error_code="visible_metric_unavailable")
                     except Exception:
                         pass
+                for chunk in chunks:
+                    yield _sse("answer.delta", {"run_id": started["id"], "message_id": message_id, "delta": chunk})
                 yield _sse("completed", {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics})
             except Exception:
                 if work == "storage":

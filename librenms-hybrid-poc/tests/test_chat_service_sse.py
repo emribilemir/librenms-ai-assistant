@@ -60,6 +60,46 @@ class SseServiceTests(unittest.TestCase):
         detail = self.client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
         self.assertEqual(detail["messages"][-1]["content"], "Güvenli yanıt")
 
+    def test_approved_answer_uses_multiple_lossless_delta_frames(self):
+        answer = (
+            "Cihaz erişilebilir durumda. İki yönetimsel olarak açık port bağlantı "
+            "durumunda down görünüyor. Aktif kritik alarm bulunmuyor."
+        )
+
+        class LongAnswerAdapter(CompletedAdapter):
+            def run(self, content, observer, is_cancelled):
+                result = super().run(content, observer, is_cancelled)
+                result["answer"] = answer
+                return result
+
+        client = TestClient(
+            create_app(
+                os.path.join(self.directory.name, "chunks.sqlite3"),
+                secret=SECRET,
+                adapter=LongAnswerAdapter(),
+            )
+        )
+        headers = bearer()
+        thread = client.post("/v1/threads", headers=headers, json={}).json()
+
+        response = client.post(
+            f"/v1/threads/{thread['id']}/runs",
+            headers=headers,
+            json={"client_message_id": "chunks", "content": "durum nedir?"},
+        )
+        frames = [frame for frame in response.text.split("\n\n") if frame]
+        deltas = [
+            json.loads(frame.split("data: ", 1)[1])["delta"]
+            for frame in frames
+            if frame.startswith("event: answer.delta\n")
+        ]
+
+        self.assertGreater(len(deltas), 1)
+        self.assertEqual("".join(deltas), answer)
+        self.assertTrue(frames[-1].startswith("event: completed\n"))
+        detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertEqual(detail["messages"][-1]["content"], answer)
+
     def test_duplicate_id_returns_conflict_without_stream(self):
         headers = bearer()
         thread = self.client.post("/v1/threads", headers=headers, json={}).json()
