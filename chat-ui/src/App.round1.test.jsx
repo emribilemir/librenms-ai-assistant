@@ -8,6 +8,33 @@ import { AssistantChatStore, createInitialState } from "./store";
 const currentMetrics = { planner_ms: 2, resolver_ms: 3, backend_ms: 4, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 6, total_ms: 8 };
 const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
 
+test("empty history keeps the composer writable and creates a thread on first send", async () => {
+  const api = makeApi({
+    createThread: jest.fn().mockResolvedValue({ id: "new-thread", title: "" }),
+    runThread: jest.fn(async (_thread, client, _content, _token, _signal, onEvent) => {
+      onEvent("run.started", { run_id: "new-run", client_message_id: client });
+      onEvent("completed", { run_id: "new-run", status: "completed", used_fallback: false, metrics: currentMetrics });
+    }),
+    getThread: jest.fn().mockResolvedValue({ id: "new-thread", title: "First question", messages: [], runs: [] }),
+  });
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+
+  const composer = screen.getByLabelText("Ask about network state");
+  expect(composer).toBeEnabled();
+  fireEvent.change(composer, { target: { value: "Is the core switch up?" } });
+  fireEvent.click(screen.getByRole("button", { name: "Start investigation" }));
+
+  await waitFor(() => expect(api.createThread).toHaveBeenCalledWith("plugin-token"));
+  expect(api.runThread).toHaveBeenCalledWith(
+    "new-thread",
+    expect.any(String),
+    "Is the core switch up?",
+    "plugin-token",
+    expect.any(AbortSignal),
+    expect.any(Function),
+  );
+});
+
 test("mounted App binds the supplied reducer store to the transcript and refreshes the deterministic title after completion", async () => {
   const chatStore = new AssistantChatStore(createInitialState({ threads: [{ id: "a", title: "" }], selectedThreadId: "a", messages: { a: [{ id: "saved", role: "assistant", content: "Existing observed result" }] } }));
   const api = makeApi({ listThreads: jest.fn().mockResolvedValue([{ id: "a", title: "" }]), runThread: jest.fn(async (_thread, client, _content, _token, _signal, onEvent) => { onEvent("run.started", { run_id: "r", client_message_id: client }); onEvent("answer.delta", { run_id: "r", message_id: "m", delta: "Validated result" }); onEvent("completed", { run_id: "r", status: "completed", message_id: "m", used_fallback: false, metrics: currentMetrics }); }), getThread: jest.fn().mockResolvedValue({ id: "a", title: "Core uplink degraded", messages: [{ id: "m", role: "assistant", content: "Validated result" }], runs: [] }) });
