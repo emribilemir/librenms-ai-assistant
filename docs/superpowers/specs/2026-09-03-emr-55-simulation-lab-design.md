@@ -102,6 +102,7 @@ The manifest has a version, target definitions, and scenario records. Each scena
     "kind": "snmprec-values",
     "values": [{"semantic": "ifOperStatus", "index": 2, "value": 2}]
   },
+  "expected_snmp": [{"semantic": "ifOperStatus", "index": 2, "value": 2}],
   "poll_mode": "poller",
   "expected_librenms_surface": [{"kind": "port", "ifIndex": 2, "ifOperStatus": "down"}],
   "expected_api_evidence": [{"resource": "device_ports", "selector": {"ifIndex": 2}}],
@@ -112,6 +113,8 @@ The manifest has a version, target definitions, and scenario records. Each scena
 ```
 
 Manifest validation rejects unknown keys, duplicate IDs, unknown devices, paths, raw OIDs outside the semantic catalog, shell strings, unsupported actions, oversized values, and scenarios without a reset state. A semantic catalog maps approved names to exact OIDs and types inside the runner; manifest authors do not provide arbitrary filesystem destinations or commands.
+
+Every mutation scenario must declare `expected_snmp`; apply/reset verification is derived from this explicit contract rather than inferred from the requested mutation.
 
 The initial manifest contains at least these repeatable scenarios:
 
@@ -136,6 +139,8 @@ The runner supports exactly four actions:
 - `poll <scenario-id>`
 - `observe <scenario-id>`
 - `reset <scenario-id>`
+
+Scenario state follows the fixed lifecycle `baseline -> applied -> polled -> observed -> ai_verified -> reset`. The state machine explicitly allows `baseline -> observe`, treats `baseline -> reset` as a safe no-op, rejects repeated apply with `409 scenario_already_applied`, and permits reset from applied or failed state. `manual_recovery_required` permits only recovery/status operations. Applying or selecting a different scenario while any scenario is not reset fails with `409 reset_required`.
 
 The actual forced SSH command carries a small versioned JSON request on standard input; the public FastAPI schema still exposes the four fixed actions. The runner returns bounded JSON events and safe log excerpts on standard output. Standard error is mapped to stable error codes and is not forwarded raw to the browser.
 
@@ -183,7 +188,7 @@ Backend enforcement is independent of UI visibility. Every `/v1/lab` request mus
 
 Development auth requires both the existing explicit development mode and `AI_LAB_DEV_AUTH=1`. No development token, SSH key, LibreNMS API token, or shared secret enters the production bundle or repository.
 
-Lab mutation endpoints use a separate per-user active-run registry and return `409` for concurrent mutation attempts. Read-only Assistant runs may continue while the lab is idle, but mutation and evidence capture for a scenario are serialized to preserve causal proof.
+Lab mutation endpoints use a per-user run registry for ownership plus one global lab mutation lock because all administrators share the same VM, fixtures, responder, and LibreNMS state. Any concurrent mutation or scenario switch returns `409 lab_busy` or `409 reset_required`. Read-only Assistant runs may continue, but mutation and evidence capture for a scenario are globally serialized to preserve causal proof.
 
 ## 8. Public lab API and event contract
 
@@ -193,6 +198,7 @@ All paths are below the existing authenticated `/v1` application:
 - `GET /v1/lab/status` returns enabled state, runner reachability, manifest agreement, active scenario, and recovery state.
 - `POST /v1/lab/runs` accepts `{scenario_id, action}` and returns SSE.
 - `GET /v1/lab/runs/{id}` returns a bounded result for refresh and acceptance collection.
+- `POST /v1/lab/runs/{id}/ai-check` runs the manifest example question through the existing Mac-side hybrid pipeline; AI validation is never a VM runner action.
 - `GET /v1/lab/artifacts/{id}.json|md` is local-development-only and returns a generated acceptance artifact owned by the requesting admin.
 
 Lab run summaries are persisted in a separate SQLite database configured by `AI_LAB_DATABASE`; they are not added to the chat history schema. The database stores the owner subject, scenario/action, status, timestamps, stable error fields, manifest SHA, and bounded sanitized result JSON. It does not store SSH output, raw LibreNMS payloads, model prompts, credentials, or full grounding traces. WAL, foreign keys, busy timeout, per-query owner filtering, and a schema version follow the existing chat store conventions. Artifact downloads are generated from these sanitized records.
@@ -215,6 +221,8 @@ lab.run.completed
 Failures emit `error {stage, code, retryable, message}` followed by `lab.run.completed` with failed status. No fake timers or optimistic stage completion is shown. Heartbeats use the existing SSE convention.
 
 The FastAPI lab service coordinates the boundaries: apply/reset and SNMP verification come from the runner, poll/discovery come from its fixed wrappers, and LibreNMS/API/AI observations are collected on the Mac through existing Python interfaces. The browser receives one ordered stream and cannot select a lower-level command.
+
+LibreNMS updates are eventually consistent after discovery/poller completion. Evidence collection therefore uses bounded probes configured with a maximum attempt count and interval, with scenario-specific values capped by service-wide limits. Exhaustion produces the stable retryable error code `evidence_timeout`; the UI never advances a proof stage based on elapsed time alone.
 
 ## 9. Evidence model
 
@@ -323,6 +331,8 @@ Implementation follows test-driven development.
 
 Standalone Playwright uses the real lab API with a deterministic fake transport and temporary fixtures. Authorized UTM acceptance then proves apply → SNMP verify → discovery/poller → LibreNMS evidence → AI answer → reset for at least eight manifest scenarios. Every live scenario must leave the baseline restored, the SNMPSIM service healthy, and `/opt/librenms` core `git status` clean.
 
+The frozen minimum live set is: device up-to-down, device down-to-up, port admin-up/oper-up, port admin-up/oper-down, port down-to-up transition, port alias change, location change, and uptime reset. Each begins from independently verified baseline state. One-down-port-among-many and event-producing transition remain additional targets; alert acceptance is capability-gated.
+
 ## 13. Rollout and rollback
 
 Rollout is deliberately staged:
@@ -351,8 +361,21 @@ EMR-55 is complete only when:
 - an example AI question produces an answer plus sanitized structured proof;
 - current state and historical transition claims are tested separately;
 - at least eight scenarios produce JSON and Markdown PASS/FAIL records;
-- reset is repeatable and failed runs provide a recovery path;
+- reset is repeatable and failed runs provide a recovery path; a run is always FAIL when reset or baseline-health verification fails, even if mutation, evidence, and AI checks passed;
 - the validation guide and root README support a new developer and the Murat Bey demo;
 - no secret, personal path, generated artifact, or raw trace is committed;
 - all existing and new offline suites pass;
 - authorized UTM acceptance finishes with the baseline restored and LibreNMS core clean.
+
+## 15. Linear implementation split
+
+EMR-55 remains the parent epic. Implementation and review gates follow the frozen child-task dependency graph:
+
+1. EMR-58 / EMR-55A — manifest, semantic catalog, deterministic SHA, and state contract;
+2. EMR-59 / EMR-55B — VM runner, managed SNMPSIM, restricted SSH, reversible state;
+3. EMR-60 / EMR-55C — FastAPI lab router, authorization, transport, SSE, global lock, and separate run store;
+4. EMR-61 / EMR-55D — normalized evidence, AI validation, and artifacts;
+5. EMR-62 / EMR-55E — admin-only React Lab and proof experience;
+6. EMR-63 / EMR-55F — authorized UTM matrix, rollback drill, validation guide, and README.
+
+EMR-58 completes first. EMR-59 and EMR-60 may then proceed independently. EMR-61 requires EMR-58 and EMR-60; EMR-62 requires EMR-60 and can use the fake transport. EMR-63 begins only after EMR-59, EMR-61, and EMR-62 have passed their review gates.
