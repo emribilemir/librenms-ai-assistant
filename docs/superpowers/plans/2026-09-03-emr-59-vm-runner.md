@@ -205,7 +205,7 @@ git diff --check
 
 - [x] Security-review the complete EMR-59 diff. Critical/Important findings block push.
 - [x] Confirm no secrets, private keys, absolute personal paths, VM-generated state, baseline copies, or artifacts are tracked.
-- [ ] Commit docs and push `codex/librenms-ai-assistant`; leave the worktree intact for EMR-60/61/62/63.
+- [x] Commit docs and push `codex/librenms-ai-assistant`; leave the worktree intact for EMR-60/61/62/63.
 
 Verification note: Simulation (94), frontend (48 + production build), and plugin
 (9) gates passed fresh. The unchanged hybrid/backend suite executed 120 tests
