@@ -132,10 +132,10 @@ class RunnerStorage:
     def clear_target_cache(self, target: Target) -> tuple[str, ...]
 ```
 
-- [ ] Write temp-directory tests for fixed path derivation, symlink rejection, traversal-proof target IDs, mode/owner verifier calls, nonblocking lock conflict, atomic replace, fsync, canonical state JSON, corrupt/stale/unknown state rejection, baseline capture-once, manifest SHA mismatch, exact restore set, and cache deletion restricted to the target's known DBM names.
-- [ ] Run storage tests RED.
-- [ ] Implement storage without recursive delete, caller globs, unresolved environment variables, or broad roots. Make owner verification injectable for offline tests and mandatory in production.
-- [ ] Run storage plus EMR-58 tests GREEN and commit `feat(simulation): persist runner state atomically`.
+- [x] Write temp-directory tests for fixed path derivation, symlink rejection, traversal-proof target IDs, mode/owner verifier calls, nonblocking lock conflict, atomic replace, fsync, canonical state JSON, corrupt/stale/unknown state rejection, baseline capture-once, manifest SHA mismatch, exact restore set, and cache deletion restricted to the target's known DBM names.
+- [x] Run storage tests RED.
+- [x] Implement storage without recursive delete, caller globs, unresolved environment variables, or broad roots. Make owner verification injectable for offline tests and mandatory in production.
+- [x] Run storage plus EMR-58 tests GREEN and commit `feat(simulation): persist runner state atomically`.
 
 ## Task 4: Fixed process adapter and output reducer
 
