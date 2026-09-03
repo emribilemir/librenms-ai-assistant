@@ -169,7 +169,7 @@ git commit -m "feat(simulation): add semantic OID catalog"
 - Produces: `public_manifest(manifest: Manifest) -> dict[str, object]`.
 - Produces: `ManifestValidationError(code: str, path: str)` whose string form begins with the stable code.
 
-- [ ] **Step 1: Write strict loader tests against hand-built valid and malicious inputs**
+- [x] **Step 1: Write strict loader tests against hand-built valid and malicious inputs**
 
 Create `simulation/tests/test_manifest.py`. Use a complete literal minimal manifest with one loopback target and one location scenario. Assert:
 
@@ -216,12 +216,12 @@ command
 reset_state
 ```
 
-- [ ] **Step 2: Run manifest tests and verify RED**
+- [x] **Step 2: Run manifest tests and verify RED**
 
 Run: `python3 -m unittest simulation.tests.test_manifest -v`  
 Expected: import failure because `simulation.manifest` does not exist.
 
-- [ ] **Step 3: Implement immutable records and exact schemas**
+- [x] **Step 3: Implement immutable records and exact schemas**
 
 Define these record shapes in `simulation/manifest.py`:
 
@@ -240,7 +240,7 @@ class Target:
 class SemanticValue:
     semantic: str
     index: int | None
-    value: int | str
+    value: int | str | bool
 
 @dataclass(frozen=True)
 class Scenario:
@@ -281,12 +281,12 @@ return hashlib.sha256(payload).hexdigest()
 
 Update `simulation/__init__.py` with all public manifest exports.
 
-- [ ] **Step 4: Run manifest and catalog tests and verify GREEN**
+- [x] **Step 4: Run manifest and catalog tests and verify GREEN**
 
 Run: `python3 -m unittest simulation.tests.test_catalog simulation.tests.test_manifest -v`  
 Expected: all catalog and manifest tests pass.
 
-- [ ] **Step 5: Commit the validated manifest API**
+- [x] **Step 5: Commit the validated manifest API**
 
 ```bash
 git add simulation/__init__.py simulation/manifest.py simulation/tests/test_manifest.py

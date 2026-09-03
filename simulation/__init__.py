@@ -6,10 +6,30 @@ from .catalog import (
     resolve_oid,
     validate_semantic_value,
 )
+from .manifest import (
+    Manifest,
+    ManifestValidationError,
+    Scenario,
+    SemanticValue,
+    Target,
+    load_manifest,
+    manifest_sha256,
+    public_manifest,
+    validate_manifest,
+)
 
 __all__ = [
     "SEMANTIC_CATALOG",
     "SemanticSpec",
+    "Manifest",
+    "ManifestValidationError",
+    "Scenario",
+    "SemanticValue",
+    "Target",
+    "load_manifest",
+    "manifest_sha256",
+    "public_manifest",
     "resolve_oid",
+    "validate_manifest",
     "validate_semantic_value",
 ]
