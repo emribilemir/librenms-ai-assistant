@@ -508,7 +508,7 @@ git add README.md simulation/README.md
 git commit -m "docs(simulation): document manifest contract"
 ```
 
-- [ ] **Step 5: Push the independently reviewable EMR-58 slice**
+- [x] **Step 5: Push the independently reviewable EMR-58 slice**
 
 ```bash
 git push origin codex/librenms-ai-assistant
