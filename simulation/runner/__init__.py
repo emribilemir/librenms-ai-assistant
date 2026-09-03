@@ -1,6 +1,8 @@
 """Restricted Simulation Lab runner contracts."""
 
 from .errors import RunnerError, RunnerEvent, RunnerResult
+from .core import LabRunner
+from .forced_command import build_runner_from_environment
 from .protocol import (
     ControlRequest,
     OperationRequest,
@@ -27,6 +29,8 @@ __all__ = [
     "ProcessResult",
     "PosixOwnershipPolicy",
     "MembershipRecord",
+    "LabRunner",
+    "build_runner_from_environment",
     "RunnerError",
     "RunnerEvent",
     "RunnerResult",

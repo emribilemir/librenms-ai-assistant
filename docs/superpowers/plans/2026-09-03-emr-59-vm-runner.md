@@ -148,7 +148,12 @@ class ProcessAdapter:
     def verify_snmp(self, target: Target, expected: tuple[SemanticValue, ...]) -> VerificationResult
     def run_poll(self, target: Target, mode: str) -> tuple[ProcessResult, ...]
 
-def run_fixed(argv: tuple[str, ...], timeout_s: int, allowed_prefixes: tuple[str, ...]) -> ProcessResult
+def run_fixed(
+    argv: tuple[str, ...],
+    timeout_s: int,
+    allowed_commands: tuple[tuple[str, ...], ...],
+    allowed_output_prefixes: tuple[str, ...],
+) -> ProcessResult
 ```
 
 - [x] Write fake-subprocess tests proving `shell=False`, new process group, exact executable arrays, allowlisted hostname from Target, poll mode order, no poll for `none`, timeout group termination, output byte/line caps, redaction of token/password/auth-like lines, nonzero/timeout stable codes, and endpoint-unreachable verification semantics.
@@ -168,12 +173,12 @@ def build_runner_from_environment() -> LabRunner
 def main() -> int
 ```
 
-- [ ] Write fake storage/process tests for status, apply (SNMP value and endpoint membership), poll, baseline observe, applied observe, reset from every allowed state, recover, SHA mismatch before lock, global busy, repeated/switch conflicts, exact event order, apply verification failure rollback, reset health failure, and rollback failure to manual recovery.
-- [ ] Add cancellation/exception tests proving terminal result exactly once and no raw exception/stdout/stderr/path leaks.
-- [ ] Run core tests RED.
-- [ ] Implement orchestration against EMR-58 `transition`, `failed`, and `recovery_required`, always passing the loaded manifest ID set.
-- [ ] Implement `forced_command.main`: read at most 4097 bytes, parse one request, stream bounded JSONL events, emit one terminal record, and use exit codes `0` success, `2` validation/conflict, `3` retryable/runtime, `4` recovery required.
-- [ ] Run all runner tests GREEN and commit `feat(simulation): orchestrate reversible lab runs`.
+- [x] Write fake storage/process tests for status, apply (SNMP value and endpoint membership), poll, baseline observe, applied observe, reset from every allowed state, recover, SHA mismatch before lock, global busy, repeated/switch conflicts, exact event order, apply verification failure rollback, reset health failure, and rollback failure to manual recovery.
+- [x] Add cancellation/exception tests proving terminal result exactly once and no raw exception/stdout/stderr/path leaks.
+- [x] Run core tests RED.
+- [x] Implement orchestration against EMR-58 `transition`, `failed`, and `recovery_required`, always passing the loaded manifest ID set.
+- [x] Implement `forced_command.main`: read at most 4097 bytes, parse one request, stream bounded JSONL events, emit one terminal record, and use exit codes `0` success, `2` validation/conflict, `3` retryable/runtime, `4` recovery required.
+- [x] Run all runner tests GREEN and commit `feat(simulation): orchestrate reversible lab runs`.
 
 ## Task 6: SNMPSIM service launcher and packaging contract
 

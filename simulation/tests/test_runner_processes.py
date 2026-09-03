@@ -24,17 +24,22 @@ class FakeProcess:
         self.timeout_once = timeout_once
         self.calls = 0
 
-    def communicate(self, timeout=None):
+    def launch(self, *args, **kwargs):
+        kwargs["stdout"].write(self.stdout)
+        kwargs["stderr"].write(self.stderr)
+        return self
+
+    def wait(self, timeout=None):
         self.calls += 1
         if self.timeout_once and self.calls == 1:
             raise subprocess.TimeoutExpired("fixed", timeout)
-        return self.stdout, self.stderr
+        return self.returncode
 
 
 class FixedProcessTests(unittest.TestCase):
     def test_uses_exact_argv_without_shell_and_starts_a_process_group(self):
         process = FakeProcess(stdout=b"Polling device\n")
-        with patch("simulation.runner.processes.subprocess.Popen", return_value=process) as popen:
+        with patch("simulation.runner.processes.subprocess.Popen", side_effect=process.launch) as popen:
             result = run_fixed(
                 ("/usr/bin/systemctl", "restart", "snmpsim-lab.service"),
                 30,
@@ -47,6 +52,8 @@ class FixedProcessTests(unittest.TestCase):
         self.assertIs(kwargs["shell"], False)
         self.assertIs(kwargs["start_new_session"], True)
         self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
+        self.assertIsNot(kwargs["stdout"], subprocess.PIPE)
+        self.assertIsNot(kwargs["stderr"], subprocess.PIPE)
 
     def test_rejects_commands_outside_the_exact_command_allowlist(self):
         with self.assertRaisesRegex(RunnerError, "command_not_allowed"):
@@ -63,7 +70,7 @@ class FixedProcessTests(unittest.TestCase):
         lines = [b"Password: hidden", b"Authorization bearer hidden"]
         lines.extend(f"Polling line {index}".encode() for index in range(100))
         process = FakeProcess(stdout=b"\n".join(lines) + b"\n")
-        with patch("simulation.runner.processes.subprocess.Popen", return_value=process):
+        with patch("simulation.runner.processes.subprocess.Popen", side_effect=process.launch):
             result = run_fixed(("/fixed",), 5, (("/fixed",),), ("Polling",))
         self.assertEqual(len(result.diagnostics), 20)
         self.assertTrue(all(line.startswith("Polling") for line in result.diagnostics))
@@ -72,7 +79,7 @@ class FixedProcessTests(unittest.TestCase):
     def test_timeout_terminates_the_whole_process_group(self):
         process = FakeProcess(timeout_once=True)
         with (
-            patch("simulation.runner.processes.subprocess.Popen", return_value=process),
+            patch("simulation.runner.processes.subprocess.Popen", side_effect=process.launch),
             patch("simulation.runner.processes.os.killpg") as killpg,
         ):
             result = run_fixed(("/fixed",), 5, (("/fixed",),), ())

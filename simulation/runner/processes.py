@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import tempfile
 from time import perf_counter
 from typing import Callable
 
@@ -74,35 +75,37 @@ def run_fixed(
         raise RunnerError("invalid_timeout")
 
     started = perf_counter()
-    try:
-        process = subprocess.Popen(
-            list(argv),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=False,
-            start_new_session=True,
-        )
-    except OSError as error:
-        raise RunnerError("process_start_failed", retryable=True) from error
-
     timed_out = False
-    try:
-        stdout, _stderr = process.communicate(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        timed_out = True
+    with tempfile.TemporaryFile() as stdout_stream, tempfile.TemporaryFile() as stderr_stream:
         try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+            process = subprocess.Popen(
+                list(argv),
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_stream,
+                stderr=stderr_stream,
+                shell=False,
+                start_new_session=True,
+            )
+        except OSError as error:
+            raise RunnerError("process_start_failed", retryable=True) from error
         try:
-            stdout, _stderr = process.communicate(timeout=2)
+            process.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
+            timed_out = True
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            stdout, _stderr = process.communicate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+        stdout_stream.seek(0)
+        stdout = stdout_stream.read(_MAX_CAPTURE_BYTES)
     duration_ms = max(0, round((perf_counter() - started) * 1000))
     exit_code = -1 if timed_out or process.returncode is None else process.returncode
     return ProcessResult(exit_code, duration_ms, _diagnostics(stdout, allowed_output_prefixes), timed_out)
