@@ -135,6 +135,20 @@ class LabRunnerTests(unittest.TestCase):
         self.assertEqual(result.code, "manifest_mismatch")
         self.assertEqual(storage.acquire_count, 0)
 
+    def test_core_revalidates_typed_request_membership_before_lock(self):
+        storage = FakeStorage()
+        hostile = (
+            OperationRequest(1, "unexpected", "location-change", SHA),
+            OperationRequest(1, "apply", "not-in-manifest", SHA),
+            ControlRequest(1, "unexpected", SHA),
+        )
+        for request in hostile:
+            with self.subTest(request=request):
+                result = self.build(storage).execute(request)
+                self.assertFalse(result.success)
+                self.assertIn(result.code, {"unsupported_action", "unsupported_control", "unknown_scenario"})
+        self.assertEqual(storage.acquire_count, 0)
+
     def test_status_is_locked_read_only_and_reports_current_state(self):
         storage = FakeStorage(ScenarioPhase.POLLED, "location-change")
         result = self.build(storage).execute(ControlRequest(1, "status", SHA))

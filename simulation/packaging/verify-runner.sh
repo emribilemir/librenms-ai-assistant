@@ -14,6 +14,7 @@ SUDOERS_FILE=/etc/sudoers.d/librenms-ai-lab
 /usr/bin/systemctl is-active --quiet snmpsim-lab.service
 [[ $(/usr/bin/stat -c '%U:%G:%a' "$SUDOERS_FILE") == root:root:440 ]]
 [[ $(/usr/bin/stat -c '%U:%G:%a' "$STATE_ROOT/state.json") == root:root:600 ]]
+[[ $(/usr/bin/stat -c '%U:%G:%a' "$STATE_ROOT/ssh/.ssh/authorized_keys") == root:root:600 ]]
 STATUS_OUTPUT=$(/usr/bin/python3 -I "$INSTALL_ROOT/local-status-entry.py")
 if [[ "$STATUS_OUTPUT" == *'"phase":"manual_recovery_required"'* ]]; then
   echo "manual_recovery_required" >&2

@@ -190,9 +190,9 @@ def main() -> int
 
 ## Task 7: Documentation, review, and complete regression gate
 
-- [ ] Document offline tests, exact installer/activation/verify/rollback sequence, prerequisites, ownership, SSH forced-command setup, recovery behavior, and explicit EMR-63 live authorization boundary.
-- [ ] Update root repository map without claiming the UTM runner is installed.
-- [ ] Run:
+- [x] Document offline tests, exact installer/activation/verify/rollback sequence, prerequisites, ownership, SSH forced-command setup, recovery behavior, and explicit EMR-63 live authorization boundary.
+- [x] Update root repository map without claiming the UTM runner is installed.
+- [x] Run:
 
 ```bash
 python3 -m unittest discover -s simulation/tests -p 'test_*.py' -v
@@ -203,9 +203,17 @@ bash -n simulation/packaging/*.sh
 git diff --check
 ```
 
-- [ ] Security-review the complete EMR-59 diff. Critical/Important findings block push.
-- [ ] Confirm no secrets, private keys, absolute personal paths, VM-generated state, baseline copies, or artifacts are tracked.
+- [x] Security-review the complete EMR-59 diff. Critical/Important findings block push.
+- [x] Confirm no secrets, private keys, absolute personal paths, VM-generated state, baseline copies, or artifacts are tracked.
 - [ ] Commit docs and push `codex/librenms-ai-assistant`; leave the worktree intact for EMR-60/61/62/63.
+
+Verification note: Simulation (94), frontend (48 + production build), and plugin
+(9) gates passed fresh. The unchanged hybrid/backend suite executed 120 tests
+successfully; its four localhost-server cases were denied by the Codex sandbox
+at socket bind. The same unchanged 124-test baseline passed before EMR-59, and
+`git diff 814720a -- librenms-hybrid-poc chat-ui integrations/librenms/AiAssistant`
+is empty. Debian-only `systemd-analyze`, `sshd` and live process handoff remain
+the explicit EMR-63 acceptance boundary.
 
 ## Acceptance evidence
 

@@ -152,6 +152,20 @@ class ProcessAdapterTests(unittest.TestCase):
         )
         self.assertTrue(result.success)
 
+    def test_snmp_probe_requests_raw_timeticks_for_numeric_semantics(self):
+        calls = []
+
+        def invoke(argv, timeout, allowed, prefixes):
+            calls.append(argv)
+            return ProcessResult(0, 1, ("300",), False)
+
+        result = ProcessAdapter(LAYOUT, invoke=invoke).verify_snmp(
+            TARGET,
+            (SemanticValue("sysUpTime", None, 300),),
+        )
+        self.assertTrue(result.success)
+        self.assertIn("-Oqvt", calls[0])
+
 
 if __name__ == "__main__":
     unittest.main()

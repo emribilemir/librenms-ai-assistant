@@ -189,7 +189,7 @@ class ProcessAdapter:
             "1",
             "-r",
             "0",
-            "-Oqv",
+            "-Oqvt",
             f"udp:{target.agent_address}:{target.agent_port}",
             oid,
         )

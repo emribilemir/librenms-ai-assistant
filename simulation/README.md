@@ -1,7 +1,9 @@
 # Simulation Lab contracts
 
-Bu dizin, EMR-55 Simulation Lab'in güvenlik sınırını ve senaryo kaynağını
-tanımlar. EMR-58 kapsamında VM runner, HTTP API ve React arayüzü içermez.
+Bu dizin, EMR-55 Simulation Lab'in güvenlik sınırını, senaryo kaynağını ve
+EMR-59 kapsamında hazırlanmış kısıtlı VM runner paketini tanımlar. Runner
+depolanmış ve offline doğrulanmıştır; UTM'ye kurulması/aktive edilmesi EMR-63
+canlı kabul adımına kadar yapılmaz.
 
 ## Tek kaynak
 
@@ -68,10 +70,88 @@ API/runner tüketicileri şu stabil kodları korur:
 - `unknown_scenario`: canonical manifestte bulunmayan kimlik;
 - `invalid_error_code`: kararsız/free-form hata kodu.
 
+## Kısıtlı VM runner
+
+`runner/` içindeki servis yalnız şu public işlemleri kabul eder:
+
+- `apply`, `poll`, `observe`, `reset`: canonical manifestte bulunan bir
+  `scenario_id` ile;
+- `status`, `recover`: ayrı control mesajı olarak.
+
+İstek en fazla 4096 byte tek JSON nesnesidir. Her istekte canonical manifest
+SHA bulunur. Browser/Mac API tarafından executable, shell, path, IP, hostname,
+OID, SNMP tipi veya mutation değeri gönderilemez. Bunların tamamı doğrulanmış
+manifest, semantic katalog ve sabit VM layout'undan türetilir.
+
+Her işlem global nonblocking lock alır. Fixture ve membership dosyaları sibling
+temporary file + `fsync` + atomic replace ile yazılır. Subprocess çağrıları tam
+argv allowlist'i, `shell=False`, process-group timeout/termination ve bounded
+temporary output kullanır. Raw stderr veya exception metni transporta çıkmaz.
+
+Apply sonrası SNMP doğrulaması başarısızsa captured baseline otomatik geri
+yüklenir. Restore, service health veya baseline reachability kanıtlanamazsa
+persisted state `manual_recovery_required` olur; yeni mutationlar yalnız
+`recover` başarıyla bitince açılır.
+
+Forced SSH hattının sonucu JSONL'dir. Exit kodları:
+
+| Kod | Anlam |
+|---|---|
+| `0` | Başarılı işlem/control |
+| `2` | Geçersiz istek, conflict veya retry edilmemesi gereken hata |
+| `3` | Retry edilebilir runtime/transport hatası |
+| `4` | Elle recovery gereken baseline problemi |
+
+## Paketleme ve canlı kurulum sınırı
+
+`packaging/install-runner.sh` yalnız sabit hedeflere runner kopyalar, önceki
+managed dosyaları yedekler, dedicated `librenms-ai-lab` hesabının forced key ve
+tek-command sudo kuralını kurar ve baseline'ı capture eder. Çalışan legacy
+SNMPSIM sürecini durdurmaz; unit'i enable/start etmez.
+
+Canlı EMR-63 rollout sırası aşağıdaki gibidir. Buradaki komutlar ancak VM
+değişikliği açıkça onaylandığında kullanılmalıdır:
+
+```bash
+# Repo VM'de erişilebilir bir staging dizinindeyken, yalnız public key verilir.
+sudo bash simulation/packaging/install-runner.sh /absolute/path/lab-runner.pub
+
+# Installer başarılı olduktan sonra explicit handoff.
+sudo /opt/librenms-ai-lab/runner/simulation/packaging/activate-runner.sh
+
+# Unit, sudoers, sshd, SHA, ownership, service ve runner state kontrolü.
+sudo /opt/librenms-ai-lab/runner/simulation/packaging/verify-runner.sh
+```
+
+Shared secret, LibreNMS API tokenı, private SSH key veya model credential bu
+paketin girdisi değildir. Public key tek satırlık `ssh-ed25519` dosyası olarak
+verilir ve repoya eklenmez.
+
+Rollback, captured fixture/membership baseline'ını geri yükler, managed unit'i
+disable eder ve önceki sabit launcher'ı yeniden başlatır:
+
+```bash
+sudo /opt/librenms-ai-lab/runner/simulation/packaging/rollback-runner.sh
+```
+
+Managed yüzeyler `/opt/librenms-ai-lab`, `/var/lib/librenms-ai-lab`,
+`/opt/snmpsim-lab`, `/etc/systemd/system/snmpsim-lab.service`, tek sudoers
+dosyası ve dedicated hesabın `authorized_keys` dosyasıyla sınırlıdır.
+`/opt/librenms` kaynak ağacına yazılmaz; yalnız manifestteki hostname ile
+LibreNMS discovery/poller entrypointleri çağrılabilir.
+
 ## Test
 
 ```bash
 python3 -m unittest discover -s simulation/tests -p 'test_*.py' -v
 ```
 
-Bu testler VM'ye, LibreNMS'e, Ollama'ya veya ağa bağlanmaz.
+Bu testler VM'ye, LibreNMS'e, Ollama'ya veya ağa bağlanmaz. Paket shell
+dosyalarının syntax'ı ayrıca şöyle doğrulanır:
+
+```bash
+bash -n simulation/packaging/*.sh
+```
+
+`systemd-analyze verify`, `sshd -t`, canlı service/reachability ve otomatik
+legacy rollback kontrolleri Debian VM'deki EMR-63 kabul adımına aittir.

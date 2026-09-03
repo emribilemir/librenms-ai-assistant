@@ -239,10 +239,27 @@ class LabRunner:
             return self._observe(state, scenario)
         return self._reset(state, scenario, recover=False)
 
+    def _validate_request(self, request: OperationRequest | ControlRequest) -> RunnerError | None:
+        if not isinstance(request, (OperationRequest, ControlRequest)):
+            return RunnerError("request_shape_invalid")
+        if type(request.version) is not int or request.version != 1:
+            return RunnerError("unsupported_version")
+        if isinstance(request, OperationRequest):
+            if request.action not in {"apply", "poll", "observe", "reset"}:
+                return RunnerError("unsupported_action")
+            if request.scenario_id not in self.scenarios:
+                return RunnerError("unknown_scenario")
+        elif request.control not in {"status", "recover"}:
+            return RunnerError("unsupported_control")
+        if request.manifest_sha256 != self.sha:
+            return RunnerError("manifest_mismatch")
+        return None
+
     def execute(self, request: OperationRequest | ControlRequest) -> RunnerResult:
         state: ScenarioState | None = None
-        if request.manifest_sha256 != self.sha:
-            return self._result(state, success=False, error=RunnerError("manifest_mismatch"))
+        validation_error = self._validate_request(request)
+        if validation_error is not None:
+            return self._result(state, success=False, error=validation_error)
         try:
             self._check_cancelled("request")
             with self.storage.acquire():

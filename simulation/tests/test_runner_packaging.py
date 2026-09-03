@@ -78,6 +78,9 @@ class PackagingContractTests(unittest.TestCase):
         self.assertIn(f'restrict,command="/usr/bin/sudo -n {exact}"', installer)
         self.assertIn('PUBLIC_KEY_FILE="$1"', installer)
         self.assertIn("ssh-ed25519", installer)
+        self.assertIn("ssh-keygen -l -f", installer)
+        self.assertIn('[[ ! -L "$AUTHORIZED_KEYS" ]]', installer)
+        self.assertIn('chown root:root "$AUTHORIZED_KEYS"', installer)
         self.assertNotIn("ssh-ed25519 AAAA", installer)
 
     def test_installer_is_staged_inert_and_captures_baseline(self):

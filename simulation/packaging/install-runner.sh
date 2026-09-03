@@ -16,7 +16,7 @@ STATE_ROOT=/var/lib/librenms-ai-lab
 LAB_ROOT=/opt/snmpsim-lab
 SERVICE_FILE=/etc/systemd/system/snmpsim-lab.service
 SUDOERS_FILE=/etc/sudoers.d/librenms-ai-lab
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+SCRIPT_DIR=$(cd -- "$(/usr/bin/dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 SOURCE_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd -P)
 BACKUP_ROOT="$STATE_ROOT/install-backup"
 SSH_ROOT="$STATE_ROOT/ssh"
@@ -31,10 +31,24 @@ IFS= read -r PUBLIC_KEY < "$PUBLIC_KEY_FILE" || true
   echo "only one ssh-ed25519 public key is accepted" >&2
   exit 2
 }
-[[ $(wc -l < "$PUBLIC_KEY_FILE") -eq 1 ]] || {
+[[ $(/usr/bin/wc -l < "$PUBLIC_KEY_FILE") -eq 1 ]] || {
   echo "public key file must contain exactly one line" >&2
   exit 2
 }
+/usr/bin/ssh-keygen -l -f "$PUBLIC_KEY_FILE" >/dev/null || {
+  echo "public key validation failed" >&2
+  exit 2
+}
+
+reject_symlink() {
+  [[ ! -L "$1" ]] || {
+    echo "managed path must not be a symlink" >&2
+    exit 3
+  }
+}
+for managed in "$INSTALL_ROOT" "$STATE_ROOT" "$SERVICE_FILE" "$SUDOERS_FILE" "$SSH_ROOT" "$SSH_ROOT/.ssh" "$AUTHORIZED_KEYS"; do
+  reject_symlink "$managed"
+done
 
 for required in "$LAB_ROOT/devices.txt" "$LAB_ROOT/devices-up.txt" "$SOURCE_ROOT/scenarios.json"; do
   [[ -f "$required" && ! -L "$required" ]] || {
@@ -43,18 +57,19 @@ for required in "$LAB_ROOT/devices.txt" "$LAB_ROOT/devices-up.txt" "$SOURCE_ROOT
   }
 done
 
-getent group librenms-ai-lab >/dev/null || /usr/sbin/groupadd --system librenms-ai-lab
-id -u librenms-ai-lab >/dev/null 2>&1 || /usr/sbin/useradd \
+/usr/bin/getent group librenms-ai-lab >/dev/null || /usr/sbin/groupadd --system librenms-ai-lab
+/usr/bin/id -u librenms-ai-lab >/dev/null 2>&1 || /usr/sbin/useradd \
   --system --gid librenms-ai-lab --home-dir "$SSH_ROOT" --shell /bin/sh librenms-ai-lab
 
 /usr/bin/install -d -o root -g root -m 0755 "$INSTALL_ROOT" "$STATE_ROOT"
 /usr/bin/install -d -o root -g root -m 0700 "$BACKUP_ROOT"
-/usr/bin/install -d -o librenms-ai-lab -g librenms-ai-lab -m 0700 "$SSH_ROOT" "$SSH_ROOT/.ssh"
+/usr/bin/install -d -o root -g root -m 0755 "$SSH_ROOT"
+/usr/bin/install -d -o root -g root -m 0700 "$SSH_ROOT/.ssh"
 
 STAMP=$(/usr/bin/date -u +%Y%m%dT%H%M%SZ)
 for existing in "$SERVICE_FILE" "$SUDOERS_FILE" "$AUTHORIZED_KEYS"; do
   if [[ -e "$existing" && ! -L "$existing" ]]; then
-    /usr/bin/cp -a -- "$existing" "$BACKUP_ROOT/$(basename -- "$existing").$STAMP.backup"
+    /usr/bin/cp -a -- "$existing" "$BACKUP_ROOT/$(/usr/bin/basename -- "$existing").$STAMP.backup"
   fi
 done
 
@@ -83,6 +98,10 @@ done
 if [[ -d "$INSTALL_ROOT/runner" && ! -L "$INSTALL_ROOT/runner" ]]; then
   /usr/bin/mv -- "$INSTALL_ROOT/runner" "$BACKUP_ROOT/runner.$STAMP.backup"
 fi
+[[ ! -e "$INSTALL_ROOT/runner" && ! -L "$INSTALL_ROOT/runner" ]] || {
+  echo "managed runner destination is unsafe" >&2
+  exit 3
+}
 /usr/bin/mv -- "$STAGE" "$INSTALL_ROOT/runner"
 STAGE="$INSTALL_ROOT/.stage.complete"
 
@@ -98,8 +117,9 @@ for entry in runner-entry.py snmpsim-service-entry.py baseline-capture-entry.py 
 done
 /usr/bin/install -o root -g root -m 0644 "$INSTALL_ROOT/runner/simulation/systemd/snmpsim-lab.service" "$SERVICE_FILE"
 /usr/bin/install -o root -g root -m 0440 "$INSTALL_ROOT/runner/simulation/packaging/librenms-ai-lab.sudoers" "$SUDOERS_FILE"
+[[ ! -L "$AUTHORIZED_KEYS" ]] || { echo "authorized_keys destination is unsafe" >&2; exit 3; }
 printf 'restrict,command="/usr/bin/sudo -n /usr/bin/python3 -I /opt/librenms-ai-lab/runner-entry.py" %s\n' "$PUBLIC_KEY" > "$AUTHORIZED_KEYS"
-/usr/bin/chown librenms-ai-lab:librenms-ai-lab "$AUTHORIZED_KEYS"
+/usr/bin/chown root:root "$AUTHORIZED_KEYS"
 /usr/bin/chmod 0600 "$AUTHORIZED_KEYS"
 
 /usr/sbin/visudo -cf "$SUDOERS_FILE"
