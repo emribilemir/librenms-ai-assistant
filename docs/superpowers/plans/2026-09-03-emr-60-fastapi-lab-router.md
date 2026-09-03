@@ -41,13 +41,13 @@ own SQLite database and never enter chat history.
 
 ## Task 1: Admin identity claim and plugin signer
 
-- [ ] Add failing Python auth tests for boolean `lab`, missing-claim fail-closed
+- [x] Add failing Python auth tests for boolean `lab`, missing-claim fail-closed
   behavior on lab routes, non-boolean rejection, and dual development flags.
-- [ ] Add failing plugin contract tests proving `lab` comes only from the
+- [x] Add failing plugin contract tests proving `lab` comes only from the
   authenticated user's admin role and reaches the signed payload/config.
-- [ ] Implement `Identity.lab`, verifier validation, plugin `hasRole('admin')`
+- [x] Implement `Identity.lab`, verifier validation, plugin `hasRole('admin')`
   signing, and backward-compatible non-lab chat auth.
-- [ ] Run auth/plugin regression tests and commit
+- [x] Run auth/plugin regression tests and commit
   `feat(simulation): authorize admin lab identities`.
 
 ## Task 2: Separate lab SQLite store and global run lease

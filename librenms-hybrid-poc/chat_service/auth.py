@@ -9,7 +9,7 @@ import hmac
 import json
 import re
 import time
-from typing import Callable
+from typing import Callable, Mapping
 
 
 class AuthError(ValueError):
@@ -20,6 +20,17 @@ class AuthError(ValueError):
 class Identity:
     sub: str
     name: str
+    lab: bool = False
+
+
+def development_identity(environment: Mapping[str, str]) -> Identity | None:
+    if environment.get("AI_DEV_AUTH") != "1":
+        return None
+    return Identity(
+        "development",
+        "Development",
+        lab=environment.get("AI_LAB_DEV_AUTH") == "1",
+    )
 
 
 _BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -65,9 +76,12 @@ class IdentityVerifier:
             raise AuthError("invalid token")
         if payload["iss"] != "librenms" or payload["aud"] != "ai-assistant":
             raise AuthError("invalid token")
+        lab = payload.get("lab", False)
+        if not isinstance(lab, bool):
+            raise AuthError("invalid token")
         if expires != issued + 3600:
             raise AuthError("invalid token")
         now = self._clock()
         if issued > now + 30 or expires <= now:
             raise AuthError("invalid token")
-        return Identity(sub=sub, name=name)
+        return Identity(sub=sub, name=name, lab=lab)
