@@ -92,9 +92,17 @@ class ManifestValidationTests(unittest.TestCase):
         raw["scenarios"][0]["poll_mode"] = "everything"
         self.assert_error(raw, "unsupported_poll_mode")
 
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["scenarios"][0]["poll_mode"] = []
+        self.assert_error(raw, "unsupported_poll_mode")
+
     def test_rejects_unsupported_mutations_and_control_material(self):
         raw = copy.deepcopy(VALID_MANIFEST)
         raw["scenarios"][0]["mutation"]["kind"] = "script"
+        self.assert_error(raw, "unsupported_mutation_kind")
+
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["scenarios"][0]["mutation"]["kind"] = []
         self.assert_error(raw, "unsupported_mutation_kind")
 
         for key, value, code in (
@@ -123,6 +131,17 @@ class ManifestValidationTests(unittest.TestCase):
         raw = copy.deepcopy(VALID_MANIFEST)
         raw["scenarios"][0]["mutation"]["values"][0]["value"] = "x" * 129
         self.assert_error(raw, "semantic_value_invalid")
+
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["scenarios"][0]["mutation"]["values"] = [
+            {"semantic": "endpointReachable", "index": None, "value": True}
+        ]
+        self.assert_error(raw, "semantic_value_invalid")
+
+    def test_rejects_boolean_manifest_version(self):
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["version"] = True
+        self.assert_error(raw, "unsupported_version")
 
     def test_requires_endpoint_membership_for_unreachable_device(self):
         raw = copy.deepcopy(VALID_MANIFEST)

@@ -251,12 +251,12 @@ def _scenario(value: object, path: str, target_ids: set[str]) -> Scenario:
     if raw.get("reset_state") != "baseline":
         _error("reset_state_required", f"{path}.reset_state")
     poll_mode = raw["poll_mode"]
-    if poll_mode not in _POLL_MODES:
+    if not isinstance(poll_mode, str) or poll_mode not in _POLL_MODES:
         _error("unsupported_poll_mode", f"{path}.poll_mode")
 
     mutation = _object(raw["mutation"], f"{path}.mutation", {"kind", "values", "active"}, {"kind"})
     kind = mutation["kind"]
-    if kind not in _MUTATION_KINDS:
+    if not isinstance(kind, str) or kind not in _MUTATION_KINDS:
         _error("unsupported_mutation_kind", f"{path}.mutation.kind")
     mutation_values: tuple[SemanticValue, ...]
     endpoint_active: bool | None
@@ -267,6 +267,8 @@ def _scenario(value: object, path: str, target_ids: set[str]) -> Scenario:
             _semantic_value(item, f"{path}.mutation.values[{index}]", control=True)
             for index, item in enumerate(values)
         )
+        if any(SEMANTIC_CATALOG[item.semantic].oid is None for item in mutation_values):
+            _error("semantic_value_invalid", f"{path}.mutation.values")
         endpoint_active = None
     else:
         _keys(mutation, f"{path}.mutation", {"kind", "active"})
@@ -375,7 +377,7 @@ def _canonical(targets: tuple[Target, ...], scenarios: tuple[Scenario, ...]) -> 
 def validate_manifest(raw: object) -> Manifest:
     _scan_forbidden_keys(raw)
     root = _object(raw, "$", {"version", "targets", "scenarios"})
-    if root["version"] != 1:
+    if isinstance(root["version"], bool) or not isinstance(root["version"], int) or root["version"] != 1:
         _error("unsupported_version", "$.version")
     targets = tuple(
         _target(item, f"$.targets[{index}]")
