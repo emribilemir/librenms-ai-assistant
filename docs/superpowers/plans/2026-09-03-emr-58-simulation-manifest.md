@@ -52,7 +52,7 @@
 - Produces: `validate_semantic_value(name: str, index: int | None, value: object) -> None`.
 - Consumed by: Task 2 manifest validation and later EMR-59 runner mutation/verification.
 
-- [ ] **Step 1: Write catalog tests that name each security boundary**
+- [x] **Step 1: Write catalog tests that name each security boundary**
 
 Create `simulation/tests/test_catalog.py` with these literal cases:
 
@@ -102,12 +102,12 @@ class SemanticCatalogTests(unittest.TestCase):
             validate_semantic_value("endpointReachable", None, 1)
 ```
 
-- [ ] **Step 2: Run the catalog tests and verify RED**
+- [x] **Step 2: Run the catalog tests and verify RED**
 
 Run: `python3 -m unittest simulation.tests.test_catalog -v`  
 Expected: import failure because `simulation.catalog` does not exist.
 
-- [ ] **Step 3: Implement the closed semantic catalog**
+- [x] **Step 3: Implement the closed semantic catalog**
 
 Create `simulation/catalog.py` with exactly these approved semantics:
 
@@ -141,12 +141,12 @@ Implement `resolve_oid` so virtual semantics raise `virtual_semantic`, indexed s
 
 Export these interfaces from `simulation/__init__.py`.
 
-- [ ] **Step 4: Run the catalog tests and verify GREEN**
+- [x] **Step 4: Run the catalog tests and verify GREEN**
 
 Run: `python3 -m unittest simulation.tests.test_catalog -v`  
 Expected: 3 tests pass.
 
-- [ ] **Step 5: Commit the semantic boundary**
+- [x] **Step 5: Commit the semantic boundary**
 
 ```bash
 git add simulation/__init__.py simulation/catalog.py simulation/tests/test_catalog.py
