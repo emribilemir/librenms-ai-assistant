@@ -151,10 +151,10 @@ class ProcessAdapter:
 def run_fixed(argv: tuple[str, ...], timeout_s: int, allowed_prefixes: tuple[str, ...]) -> ProcessResult
 ```
 
-- [ ] Write fake-subprocess tests proving `shell=False`, new process group, exact executable arrays, allowlisted hostname from Target, poll mode order, no poll for `none`, timeout group termination, output byte/line caps, redaction of token/password/auth-like lines, nonzero/timeout stable codes, and endpoint-unreachable verification semantics.
-- [ ] Run process tests RED.
-- [ ] Implement only fixed binaries: `/usr/bin/systemctl`, `/usr/sbin/runuser`, LibreNMS discovery/poller, and `/usr/bin/snmpget`. Normalize SNMP output by semantic type and never return raw stderr.
-- [ ] Run process tests GREEN and commit `feat(simulation): add fixed runner processes`.
+- [x] Write fake-subprocess tests proving `shell=False`, new process group, exact executable arrays, allowlisted hostname from Target, poll mode order, no poll for `none`, timeout group termination, output byte/line caps, redaction of token/password/auth-like lines, nonzero/timeout stable codes, and endpoint-unreachable verification semantics.
+- [x] Run process tests RED.
+- [x] Implement only fixed binaries: `/usr/bin/systemctl`, `/usr/sbin/runuser`, LibreNMS discovery/poller, and `/usr/bin/snmpget`. Normalize SNMP output by semantic type and never return raw stderr.
+- [x] Run process tests GREEN and commit `feat(simulation): add fixed runner processes`.
 
 ## Task 5: Runner orchestration and rollback
 

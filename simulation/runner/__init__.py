@@ -8,6 +8,7 @@ from .protocol import (
     encode_terminal,
     parse_request,
 )
+from .processes import ProcessAdapter, ProcessResult, VerificationResult, run_fixed
 from .snmprec import (
     MembershipRecord,
     SnmpRecord,
@@ -22,6 +23,8 @@ __all__ = [
     "ControlRequest",
     "OperationRequest",
     "OwnershipPolicy",
+    "ProcessAdapter",
+    "ProcessResult",
     "PosixOwnershipPolicy",
     "MembershipRecord",
     "RunnerError",
@@ -30,6 +33,7 @@ __all__ = [
     "RunnerLayout",
     "RunnerStorage",
     "SnmpRecord",
+    "VerificationResult",
     "apply_semantic_values",
     "encode_event",
     "encode_terminal",
@@ -37,4 +41,5 @@ __all__ = [
     "parse_membership",
     "parse_snmprec",
     "set_endpoint_active",
+    "run_fixed",
 ]
