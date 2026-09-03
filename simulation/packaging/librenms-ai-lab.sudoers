@@ -1,0 +1,2 @@
+Defaults:librenms-ai-lab !requiretty
+librenms-ai-lab ALL=(root) NOPASSWD: /usr/bin/python3 -I /opt/librenms-ai-lab/runner-entry.py

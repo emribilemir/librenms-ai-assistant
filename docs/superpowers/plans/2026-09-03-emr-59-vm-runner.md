@@ -182,11 +182,11 @@ def main() -> int
 
 ## Task 6: SNMPSIM service launcher and packaging contract
 
-- [ ] Write packaging tests that inspect exact service, sudoers, shell scripts, and launcher. Require no user input in service command, manifest-backed endpoints, `User=librenms`, `NoNewPrivileges=true`, `PrivateTmp=true`, `ProtectSystem=strict`, bounded `ReadWritePaths`, no shell `eval`, dedicated account `librenms-ai-lab`, forced `restrict,command=...` authorized key, one exact sudo command, `sshd -t`/`systemd-analyze verify`, backups, SHA checks, activation rollback, and no `/opt/librenms` source writes.
-- [ ] Run packaging tests and `bash -n simulation/packaging/*.sh` RED.
-- [ ] Implement launcher and static packaging assets. `install-runner.sh` stages/version-checks/backups but does not stop the legacy process or enable/start the service. `activate-runner.sh` is the only handoff point and restores the previous `/opt/snmpsim-lab/run-up-only.sh` flow if service verification fails.
-- [ ] Make all destination roots constants and reject alternate broad roots. Public-key material is supplied as a file at install time and is never committed.
-- [ ] Run packaging/unit tests GREEN and commit `feat(simulation): package restricted VM runner`.
+- [x] Write packaging tests that inspect exact service, sudoers, shell scripts, and launcher. Require no user input in service command, manifest-backed endpoints, `User=librenms`, `NoNewPrivileges=true`, `PrivateTmp=true`, `ProtectSystem=strict`, bounded `ReadWritePaths`, no shell `eval`, dedicated account `librenms-ai-lab`, forced `restrict,command=...` authorized key, one exact sudo command, `sshd -t`/`systemd-analyze verify`, backups, SHA checks, activation rollback, and no `/opt/librenms` source writes.
+- [x] Run packaging tests and `bash -n simulation/packaging/*.sh` RED.
+- [x] Implement launcher and static packaging assets. `install-runner.sh` stages/version-checks/backups but does not stop the legacy process or enable/start the service. `activate-runner.sh` is the only handoff point and restores the previous `/opt/snmpsim-lab/run-up-only.sh` flow if service verification fails.
+- [x] Make all destination roots constants and reject alternate broad roots. Public-key material is supplied as a file at install time and is never committed.
+- [x] Run packaging/unit tests GREEN and commit `feat(simulation): package restricted VM runner`.
 
 ## Task 7: Documentation, review, and complete regression gate
 
