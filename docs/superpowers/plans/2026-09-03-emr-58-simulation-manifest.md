@@ -453,7 +453,7 @@ git commit -m "feat(simulation): enforce scenario lifecycle"
 - Documents: state transition/error mapping and canonical SHA deployment check.
 - Does not claim: a deployed runner, enabled API, finished UI, or passing live UTM scenarios.
 
-- [ ] **Step 1: Write consumer documentation with executable examples**
+- [x] **Step 1: Write consumer documentation with executable examples**
 
 Document this exact loading pattern:
 
@@ -470,7 +470,7 @@ Document that EMR-59 receives the privileged immutable records, EMR-60 compares 
 
 Add a concise root README repository-map entry pointing to `simulation/` as “validated contracts and scenarios; runner/UI follow in EMR-59/62.”
 
-- [ ] **Step 2: Run the complete EMR-58 verification set**
+- [x] **Step 2: Run the complete EMR-58 verification set**
 
 Run:
 
@@ -484,7 +484,7 @@ git diff --check
 
 Expected: Simulation tests pass; existing Python reports 124 tests passing; frontend reports 7 suites / 48 tests and Vite build success; plugin reports 9 tests passing; diff check has no output.
 
-- [ ] **Step 3: Review the EMR-58 acceptance checklist against evidence**
+- [x] **Step 3: Review the EMR-58 acceptance checklist against evidence**
 
 Confirm from test output and source review:
 
@@ -498,7 +498,7 @@ Confirm from test output and source review:
 - public projection is sanitized;
 - no VM, API, DB, UI, secret, personal path, or generated artifact was introduced.
 
-- [ ] **Step 4: Commit the EMR-58 documentation and verification record**
+- [x] **Step 4: Commit the EMR-58 documentation and verification record**
 
 ```bash
 git add README.md simulation/README.md

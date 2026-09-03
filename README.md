@@ -83,6 +83,7 @@ lab-j9772a-01'de ne sorun var?
 | [`docs/lab/`](docs/lab/) | Ayrıntılı tarihsel LibreNMS ve SNMPSim lab notları |
 | [`docs/superpowers/specs/`](docs/superpowers/specs/) | Onaylanmış mimari tasarım belgeleri |
 | [`docs/superpowers/plans/`](docs/superpowers/plans/) | Uygulama planları |
+| [`simulation/`](simulation/) | Doğrulanmış Simulation Lab kontratları ve senaryoları; runner/UI EMR-59/62'de takip eder |
 
 ### Önemli dosyalar
 
