@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from simulation.catalog import SEMANTIC_CATALOG
 from simulation.manifest import (
     ManifestValidationError,
     load_manifest,
@@ -181,6 +182,56 @@ class ManifestValidationTests(unittest.TestCase):
             validate_manifest(raw)
         self.assertEqual(caught.exception.code, code)
         self.assertTrue(str(caught.exception).startswith(code))
+
+
+class ProductionManifestTests(unittest.TestCase):
+    manifest_path = Path(__file__).resolve().parents[1] / "scenarios.json"
+
+    def test_declares_the_frozen_scenario_set(self):
+        manifest = load_manifest(self.manifest_path)
+        self.assertEqual(
+            {scenario.id for scenario in manifest.scenarios},
+            {
+                "device-up-to-down",
+                "device-down-to-up",
+                "port-admin-up-oper-up",
+                "port-admin-up-oper-down",
+                "port-down-to-up-transition",
+                "port-alias-change",
+                "location-change",
+                "uptime-reset",
+                "single-down-port",
+                "event-producing-port-transition",
+            },
+        )
+        self.assertEqual({target.id for target in manifest.targets}, {"lab-j9772a-01", "lab-j9775a-01"})
+
+    def test_every_scenario_has_explicit_observation_and_answer_contracts(self):
+        manifest = load_manifest(self.manifest_path)
+        for scenario in manifest.scenarios:
+            with self.subTest(scenario=scenario.id):
+                self.assertTrue(scenario.example_questions)
+                self.assertTrue(scenario.expected_api_evidence)
+                self.assertTrue(scenario.expected_librenms_surface)
+                self.assertTrue(scenario.expected_answer_semantics)
+                self.assertTrue(scenario.expected_snmp)
+                self.assertEqual(scenario.reset_state, "baseline")
+                for semantic_value in (*scenario.mutation_values, *scenario.expected_snmp):
+                    self.assertIn(semantic_value.semantic, SEMANTIC_CATALOG)
+
+    def test_device_down_uses_endpoint_membership_not_an_oid(self):
+        manifest = load_manifest(self.manifest_path)
+        scenario = next(item for item in manifest.scenarios if item.id == "device-up-to-down")
+        self.assertEqual(scenario.mutation_kind, "endpoint_membership")
+        self.assertIs(scenario.endpoint_active, False)
+        self.assertEqual(scenario.expected_snmp[0].semantic, "endpointReachable")
+        self.assertIs(scenario.expected_snmp[0].value, False)
+
+    def test_manifest_identity_is_stable_across_loads(self):
+        first = manifest_sha256(load_manifest(self.manifest_path))
+        second = manifest_sha256(load_manifest(self.manifest_path))
+        self.assertRegex(first, r"^[0-9a-f]{64}$")
+        self.assertEqual(first, second)
 
 
 if __name__ == "__main__":

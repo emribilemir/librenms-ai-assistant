@@ -144,7 +144,7 @@ Export these interfaces from `simulation/__init__.py`.
 - [x] **Step 4: Run the catalog tests and verify GREEN**
 
 Run: `python3 -m unittest simulation.tests.test_catalog -v`  
-Expected: 3 tests pass.
+Expected: 4 tests pass.
 
 - [x] **Step 5: Commit the semantic boundary**
 
@@ -304,7 +304,7 @@ git commit -m "feat(simulation): validate scenario manifests"
 - Produces: committed manifest version `1` with target IDs `lab-j9772a-01` and `lab-j9775a-01`.
 - Produces: exact scenario IDs consumed later by runner/API/UI/docs.
 
-- [ ] **Step 1: Add failing production-manifest contract tests**
+- [x] **Step 1: Add failing production-manifest contract tests**
 
 Load `simulation/scenarios.json` relative to the test file and assert this literal scenario-ID set:
 
@@ -325,12 +325,12 @@ Load `simulation/scenarios.json` relative to the test file and assert this liter
 
 Assert every scenario has at least one example question, expected API evidence, expected LibreNMS surface, answer semantic, and explicit expected SNMP entry. Assert the device-down mutation kind is `endpoint_membership` with `endpoint_active is False`; assert no scenario semantic name is absent from `SEMANTIC_CATALOG`. Assert manifest SHA equals a 64-character lowercase hexadecimal value and is stable over two loads.
 
-- [ ] **Step 2: Run the production manifest test and verify RED**
+- [x] **Step 2: Run the production manifest test and verify RED**
 
 Run: `python3 -m unittest simulation.tests.test_manifest -v`  
 Expected: file-not-found failure for `simulation/scenarios.json`.
 
-- [ ] **Step 3: Create the production manifest with exact scenario semantics**
+- [x] **Step 3: Create the production manifest with exact scenario semantics**
 
 Create two targets:
 
@@ -358,12 +358,12 @@ Represent endpoint reachability in `expected_snmp` with the Task 1 non-OID virtu
 
 Use bounded Turkish descriptions and example questions already supported by the hybrid pipeline. Evidence records contain only resource names and selectors such as `ifIndex`, not API tokens, URLs with credentials, SQL, or commands.
 
-- [ ] **Step 4: Run all Simulation contract tests and verify GREEN**
+- [x] **Step 4: Run all Simulation contract tests and verify GREEN**
 
 Run: `python3 -m unittest discover -s simulation/tests -p 'test_*.py' -v`  
 Expected: all tests pass and load the committed ten-scenario manifest.
 
-- [ ] **Step 5: Commit the scenario source of truth**
+- [x] **Step 5: Commit the scenario source of truth**
 
 ```bash
 git add simulation/catalog.py simulation/scenarios.json simulation/tests/test_catalog.py simulation/tests/test_manifest.py
