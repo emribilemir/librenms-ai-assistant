@@ -104,10 +104,10 @@ def parse_membership(payload: bytes, manifest: Manifest) -> tuple[MembershipReco
 def set_endpoint_active(active_payload: bytes, inventory_payload: bytes, target: Target, active: bool) -> bytes
 ```
 
-- [ ] Write tests using exact UTM line shapes. Cover duplicate/malformed OIDs, unknown types, invalid UTF-8, missing catalog OID, type mismatch, duplicate requested semantics, virtual mutation rejection, CR/LF/NUL injection, deterministic newline preservation, duplicate membership, unknown inventory target, idempotent activation/deactivation, and stable ordering.
-- [ ] Run the new test module RED.
-- [ ] Implement pure byte transforms. Never accept caller paths; exact OID/type comes from `resolve_oid` and values re-run `validate_semantic_value`.
-- [ ] Run catalog/manifest/SNMPREC tests GREEN and commit `feat(simulation): add reversible fixture transforms`.
+- [x] Write tests using exact UTM line shapes. Cover duplicate/malformed OIDs, unknown types, invalid UTF-8, missing catalog OID, type mismatch, duplicate requested semantics, virtual mutation rejection, CR/LF/NUL injection, deterministic newline preservation, duplicate membership, unknown inventory target, idempotent activation/deactivation, and stable ordering.
+- [x] Run the new test module RED.
+- [x] Implement pure byte transforms. Never accept caller paths; exact OID/type comes from `resolve_oid` and values re-run `validate_semantic_value`.
+- [x] Run catalog/manifest/SNMPREC tests GREEN and commit `feat(simulation): add reversible fixture transforms`.
 
 ## Task 3: Atomic storage, persistent state, and global lock
 
