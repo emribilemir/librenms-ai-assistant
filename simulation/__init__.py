@@ -17,6 +17,14 @@ from .manifest import (
     public_manifest,
     validate_manifest,
 )
+from .state import (
+    ScenarioPhase,
+    ScenarioState,
+    StateTransitionError,
+    failed,
+    recovery_required,
+    transition,
+)
 
 __all__ = [
     "SEMANTIC_CATALOG",
@@ -24,12 +32,18 @@ __all__ = [
     "Manifest",
     "ManifestValidationError",
     "Scenario",
+    "ScenarioPhase",
+    "ScenarioState",
     "SemanticValue",
     "Target",
+    "StateTransitionError",
+    "failed",
     "load_manifest",
     "manifest_sha256",
     "public_manifest",
+    "recovery_required",
     "resolve_oid",
+    "transition",
     "validate_manifest",
     "validate_semantic_value",
 ]

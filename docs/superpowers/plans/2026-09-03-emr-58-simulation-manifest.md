@@ -384,7 +384,7 @@ git commit -m "feat(simulation): define initial lab scenarios"
 - Produces: `StateTransitionError(code: str, current: ScenarioPhase, action: str)`.
 - Consumed by: EMR-59 persistent runner state and EMR-60 API conflict mapping.
 
-- [ ] **Step 1: Write the state-table tests**
+- [x] **Step 1: Write the state-table tests**
 
 Create literal table-driven tests covering:
 
@@ -394,9 +394,12 @@ allowed = (
     ("reset", "apply", "applied"),
     ("applied", "poll", "polled"),
     ("applied", "observe", "observed"),
+    ("applied", "reset", "reset"),
     ("polled", "observe", "observed"),
+    ("polled", "reset", "reset"),
     ("baseline", "observe", "observed"),
     ("observed", "ai_check", "ai_verified"),
+    ("observed", "reset", "reset"),
     ("failed", "reset", "reset"),
     ("ai_verified", "reset", "reset"),
     ("manual_recovery_required", "recover", "reset"),
@@ -405,12 +408,12 @@ allowed = (
 
 Assert `baseline + reset` is a safe no-op preserving baseline. Assert `baseline + observe` requires a known nonempty scenario ID and later transitions preserve it until reset clears it. Assert repeated apply raises `scenario_already_applied`; applying another scenario from any non-reset active state raises `reset_required`; mutation during `manual_recovery_required` raises `manual_recovery_required`; invalid action/order raises `invalid_transition`. Test `failed(state, error_code)` independently from applied and polled states, and assert empty error codes are rejected.
 
-- [ ] **Step 2: Run state tests and verify RED**
+- [x] **Step 2: Run state tests and verify RED**
 
 Run: `python3 -m unittest simulation.tests.test_state -v`  
 Expected: import failure because `simulation.state` does not exist.
 
-- [ ] **Step 3: Implement a pure transition table**
+- [x] **Step 3: Implement a pure transition table**
 
 Use a `str, Enum` phase type and an explicit `(phase, action) -> next_phase` dictionary. Handle conflict codes before table lookup:
 
@@ -426,12 +429,12 @@ if state.phase is ScenarioPhase.MANUAL_RECOVERY_REQUIRED and action not in {"rec
 
 Update `simulation/__init__.py` exports.
 
-- [ ] **Step 4: Run state and all Simulation tests and verify GREEN**
+- [x] **Step 4: Run state and all Simulation tests and verify GREEN**
 
 Run: `python3 -m unittest discover -s simulation/tests -p 'test_*.py' -v`  
 Expected: all catalog, manifest, production manifest, and state tests pass.
 
-- [ ] **Step 5: Commit the lifecycle contract**
+- [x] **Step 5: Commit the lifecycle contract**
 
 ```bash
 git add simulation/__init__.py simulation/state.py simulation/tests/test_state.py
