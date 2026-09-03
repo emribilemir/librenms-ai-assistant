@@ -20,8 +20,9 @@ browser_safe_payload = public_manifest(manifest)
 
 `load_manifest` bilinmeyen alanları, serbest OID'leri, path/command girdilerini,
 shell sözdizimini, tanımsız semantic değerleri ve resetsiz senaryoları fail-closed
-reddeder. Hash, doğrulanmış canonical JSON üzerinden hesaplandığı için dosya
-formatından ve key sırasından bağımsızdır.
+reddeder. Hash, doğrulanmış kayıtlardan bir kez üretilen immutable canonical JSON
+bytes üzerinden hesaplandığı için dosya formatından ve key sırasından bağımsızdır.
+Duplicate JSON key ve `NaN`/`Infinity` sabitleri parse aşamasında reddedilir.
 
 ## Privileged ve public sınırı
 
@@ -49,6 +50,10 @@ ama OID'ye çözümlenemez ve SNMPREC dosyasına yazılmaz.
 | `applied`, `polled`, `observed`, `ai_verified`, `failed` | `reset` | `reset` |
 | `manual_recovery_required` | `recover` | `reset` |
 
+Her `transition`, `failed` ve `recovery_required` çağrısı `known_scenario_ids`
+olarak yüklenmiş manifestteki canonical ID kümesini alır. Yeni veya persisted
+bir state bu kümede olmayan senaryoya referans verirse fail-closed davranır.
+
 `baseline + reset` ve her state'teki `status` güvenli no-op'tur. `reset`, aktif
 senaryo ve son hata bilgisini temizler. Hata state'i istemci action'ı değildir;
 yalnız `failed()` ve `recovery_required()` yardımcıları tarafından üretilir.
@@ -60,6 +65,7 @@ API/runner tüketicileri şu stabil kodları korur:
 - `manual_recovery_required`: otomatik baseline dönüşü tamamlanamadı;
 - `invalid_transition`: lifecycle sırası geçersiz;
 - `invalid_scenario_id`: eksik veya biçimi geçersiz kimlik;
+- `unknown_scenario`: canonical manifestte bulunmayan kimlik;
 - `invalid_error_code`: kararsız/free-form hata kodu.
 
 ## Test

@@ -73,10 +73,27 @@ class ManifestValidationTests(unittest.TestCase):
             path.write_text(json.dumps(VALID_MANIFEST), encoding="utf-8")
             self.assertEqual(load_manifest(path).scenarios[0].id, "location-change")
 
+    def test_raw_json_rejects_duplicate_keys_and_non_finite_numbers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "scenarios.json"
+            path.write_text('{"version":1,"version":1,"targets":[],"scenarios":[]}', encoding="utf-8")
+            with self.assertRaisesRegex(ManifestValidationError, "duplicate_json_key"):
+                load_manifest(path)
+
+            raw = json.dumps(VALID_MANIFEST).replace('"Murat Bey Demo Lab"', "NaN", 1)
+            path.write_text(raw, encoding="utf-8")
+            with self.assertRaisesRegex(ManifestValidationError, "non_finite_number"):
+                load_manifest(path)
+
     def test_rejects_unknown_keys(self):
         raw = copy.deepcopy(VALID_MANIFEST)
         raw["surprise"] = True
         self.assert_error(raw, "unknown_key")
+
+    def test_rejects_float_agent_port(self):
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["targets"][0]["agent_port"] = 1611.0
+        self.assert_error(raw, "invalid_agent_port")
 
     def test_rejects_duplicate_scenario_ids(self):
         raw = copy.deepcopy(VALID_MANIFEST)
@@ -166,7 +183,8 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertNotEqual(first, manifest_sha256(validate_manifest(changed)))
 
     def test_public_projection_exposes_only_browser_safe_fields(self):
-        result = public_manifest(validate_manifest(copy.deepcopy(VALID_MANIFEST)))
+        manifest = validate_manifest(copy.deepcopy(VALID_MANIFEST))
+        result = public_manifest(manifest)
         scenario = result["scenarios"][0]
         for field in (
             "id",
@@ -195,6 +213,39 @@ class ManifestValidationTests(unittest.TestCase):
             "reset_state",
         ):
             self.assertNotIn(forbidden, serialized)
+
+        self.assertIsInstance(manifest.canonical, bytes)
+        with self.assertRaises((AttributeError, TypeError)):
+            manifest.scenarios[0].expected_librenms_surface[0].kind = "changed"
+
+    def test_rejects_nested_surface_leaks_and_malformed_selectors(self):
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["scenarios"][0]["expected_librenms_surface"][0]["value"] = {
+            "agent_address": "127.0.0.99",
+            "fixture": "secret-fixture",
+        }
+        self.assert_error(raw, "invalid_surface")
+
+        for field, value in (("field", []), ("status", [])):
+            raw = copy.deepcopy(VALID_MANIFEST)
+            surface = raw["scenarios"][0]["expected_librenms_surface"][0]
+            if field == "status":
+                surface.clear()
+                surface.update({"kind": "device", "status": value, "reachable": True})
+            else:
+                surface[field] = value
+            with self.subTest(field=field):
+                self.assert_error(raw, "invalid_surface")
+
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["scenarios"][0]["expected_api_evidence"] = [
+            {"resource": "device_ports", "selector": {"ifIndex": -1}}
+        ]
+        self.assert_error(raw, "invalid_selector")
+
+        raw = copy.deepcopy(VALID_MANIFEST)
+        raw["scenarios"][0]["expected_api_evidence"][0]["selector"]["hostname"] = "bad host"
+        self.assert_error(raw, "invalid_selector")
 
     def assert_error(self, raw, code):
         with self.assertRaises(ManifestValidationError) as caught:

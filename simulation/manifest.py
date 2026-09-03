@@ -1,6 +1,5 @@
 """Strict, dependency-free Simulation Lab manifest validation."""
 
-from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 import ipaddress
@@ -55,6 +54,33 @@ class SemanticValue:
 
 
 @dataclass(frozen=True)
+class SurfaceExpectation:
+    kind: str
+    field: str | None = None
+    value: int | str | None = None
+    if_index: int | None = None
+    if_admin_status: str | None = None
+    if_oper_status: str | None = None
+    if_alias: str | None = None
+    status: str | None = None
+    reachable: bool | None = None
+    event_type: str | None = None
+
+
+@dataclass(frozen=True)
+class EvidenceSelector:
+    hostname: str | None = None
+    if_index: int | None = None
+    event_type: str | None = None
+
+
+@dataclass(frozen=True)
+class EvidenceExpectation:
+    resource: str
+    selector: EvidenceSelector
+
+
+@dataclass(frozen=True)
 class Scenario:
     id: str
     name: str
@@ -66,8 +92,8 @@ class Scenario:
     endpoint_active: bool | None
     expected_snmp: tuple[SemanticValue, ...]
     poll_mode: str
-    expected_librenms_surface: tuple[dict[str, object], ...]
-    expected_api_evidence: tuple[dict[str, object], ...]
+    expected_librenms_surface: tuple[SurfaceExpectation, ...]
+    expected_api_evidence: tuple[EvidenceExpectation, ...]
     example_questions: tuple[str, ...]
     expected_answer_semantics: tuple[str, ...]
     reset_state: str
@@ -78,7 +104,7 @@ class Manifest:
     version: int
     targets: tuple[Target, ...]
     scenarios: tuple[Scenario, ...]
-    canonical: dict[str, object]
+    canonical: bytes
 
 
 def _error(code: str, path: str) -> None:
@@ -167,7 +193,11 @@ def _target(value: object, path: str) -> Target:
         _error("invalid_agent_address", f"{path}.agent_address")
     if parsed_address.version != 4 or not parsed_address.is_loopback:
         _error("invalid_agent_address", f"{path}.agent_address")
-    if raw["agent_port"] != 1611:
+    if (
+        isinstance(raw["agent_port"], bool)
+        or not isinstance(raw["agent_port"], int)
+        or raw["agent_port"] != 1611
+    ):
         _error("invalid_agent_port", f"{path}.agent_port")
     if not isinstance(raw["baseline_active"], bool):
         _error("invalid_type", f"{path}.baseline_active")
@@ -188,7 +218,13 @@ def _target(value: object, path: str) -> Target:
     )
 
 
-def _surface(value: object, path: str) -> dict[str, object]:
+def _positive_index(value: object, path: str, code: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 4096:
+        _error(code, path)
+    return value
+
+
+def _surface(value: object, path: str) -> SurfaceExpectation:
     raw = _object(
         value,
         path,
@@ -206,25 +242,106 @@ def _surface(value: object, path: str) -> dict[str, object]:
         },
         {"kind"},
     )
-    _control_text(raw["kind"], f"{path}.kind")
-    return deepcopy(raw)
+    kind = _control_text(raw["kind"], f"{path}.kind")
+    if kind == "device" and "field" in raw:
+        if set(raw) != {"kind", "field", "value"}:
+            _error("invalid_surface", path)
+        field = raw["field"]
+        if not isinstance(field, str) or field not in {"location", "uptime"}:
+            _error("invalid_surface", f"{path}.field")
+        surface_value = raw["value"]
+        if field == "location":
+            if not isinstance(surface_value, str) or not surface_value or len(surface_value.encode("utf-8")) > 128:
+                _error("invalid_surface", f"{path}.value")
+        elif isinstance(surface_value, bool) or not isinstance(surface_value, int) or surface_value < 0:
+            _error("invalid_surface", f"{path}.value")
+        return SurfaceExpectation(kind, field=field, value=surface_value)
+
+    if kind == "device":
+        if set(raw) != {"kind", "status", "reachable"}:
+            _error("invalid_surface", path)
+        if (
+            not isinstance(raw["status"], str)
+            or raw["status"] not in {"up", "down"}
+            or not isinstance(raw["reachable"], bool)
+        ):
+            _error("invalid_surface", path)
+        return SurfaceExpectation(kind, status=raw["status"], reachable=raw["reachable"])
+
+    if kind == "port":
+        allowed = {"kind", "ifIndex", "ifAdminStatus", "ifOperStatus", "ifAlias"}
+        if not {"kind", "ifIndex"} <= set(raw) or set(raw) - allowed or len(raw) < 3:
+            _error("invalid_surface", path)
+        if_index = _positive_index(raw["ifIndex"], f"{path}.ifIndex", "invalid_surface")
+        for key in ("ifAdminStatus", "ifOperStatus"):
+            if key in raw and (
+                not isinstance(raw[key], str) or raw[key] not in {"up", "down"}
+            ):
+                _error("invalid_surface", f"{path}.{key}")
+        if_alias = raw.get("ifAlias")
+        if if_alias is not None and (
+            not isinstance(if_alias, str) or not if_alias or len(if_alias.encode("utf-8")) > 128
+        ):
+            _error("invalid_surface", f"{path}.ifAlias")
+        return SurfaceExpectation(
+            kind,
+            if_index=if_index,
+            if_admin_status=raw.get("ifAdminStatus"),
+            if_oper_status=raw.get("ifOperStatus"),
+            if_alias=if_alias,
+        )
+
+    if kind == "event":
+        if set(raw) != {"kind", "ifIndex", "event_type"}:
+            _error("invalid_surface", path)
+        return SurfaceExpectation(
+            kind,
+            if_index=_positive_index(raw["ifIndex"], f"{path}.ifIndex", "invalid_surface"),
+            event_type=_control_text(raw["event_type"], f"{path}.event_type"),
+        )
+
+    _error("invalid_surface", f"{path}.kind")
 
 
-def _evidence(value: object, path: str) -> dict[str, object]:
+def _evidence(value: object, path: str) -> EvidenceExpectation:
     raw = _object(value, path, {"resource", "selector"})
-    _control_text(raw["resource"], f"{path}.resource")
+    resource = _control_text(raw["resource"], f"{path}.resource")
     selector = _object(
         raw["selector"],
         f"{path}.selector",
-        {"hostname", "ifIndex", "field", "status", "event_type"},
+        {"hostname", "ifIndex", "event_type"},
         set(),
     )
-    for key, item in selector.items():
-        if isinstance(item, str):
-            _text(item, f"{path}.selector.{key}", maximum=128)
-        elif isinstance(item, bool) or not isinstance(item, int):
-            _error("invalid_type", f"{path}.selector.{key}")
-    return deepcopy(raw)
+    if resource == "device":
+        if set(selector) != {"hostname"}:
+            _error("invalid_selector", f"{path}.selector")
+        hostname = selector["hostname"]
+        if not isinstance(hostname, str) or _HOSTNAME.fullmatch(hostname) is None:
+            _error("invalid_selector", f"{path}.selector.hostname")
+        return EvidenceExpectation(resource, EvidenceSelector(hostname=hostname))
+    if resource == "device_ports":
+        if set(selector) != {"ifIndex"}:
+            _error("invalid_selector", f"{path}.selector")
+        return EvidenceExpectation(
+            resource,
+            EvidenceSelector(
+                if_index=_positive_index(selector["ifIndex"], f"{path}.selector.ifIndex", "invalid_selector")
+            ),
+        )
+    if resource == "device_events":
+        if set(selector) != {"ifIndex", "event_type"}:
+            _error("invalid_selector", f"{path}.selector")
+        event_type = selector["event_type"]
+        if not isinstance(event_type, str) or _LABEL.fullmatch(event_type) is None:
+            _error("invalid_selector", f"{path}.selector.event_type")
+        return EvidenceExpectation(
+            resource,
+            EvidenceSelector(
+                if_index=_positive_index(selector["ifIndex"], f"{path}.selector.ifIndex", "invalid_selector"),
+                event_type=event_type,
+            ),
+        )
+    _error("invalid_selector", f"{path}.resource")
 
 
 def _scenario(value: object, path: str, target_ids: set[str]) -> Scenario:
@@ -334,7 +451,35 @@ def _semantic_primitive(value: SemanticValue) -> dict[str, object]:
     return {"semantic": value.semantic, "index": value.index, "value": value.value}
 
 
-def _canonical(targets: tuple[Target, ...], scenarios: tuple[Scenario, ...]) -> dict[str, object]:
+def _surface_primitive(surface: SurfaceExpectation) -> dict[str, object]:
+    result: dict[str, object] = {"kind": surface.kind}
+    fields = (
+        ("field", surface.field),
+        ("value", surface.value),
+        ("ifIndex", surface.if_index),
+        ("ifAdminStatus", surface.if_admin_status),
+        ("ifOperStatus", surface.if_oper_status),
+        ("ifAlias", surface.if_alias),
+        ("status", surface.status),
+        ("reachable", surface.reachable),
+        ("event_type", surface.event_type),
+    )
+    result.update((key, value) for key, value in fields if value is not None)
+    return result
+
+
+def _evidence_primitive(evidence: EvidenceExpectation) -> dict[str, object]:
+    selector: dict[str, object] = {}
+    if evidence.selector.hostname is not None:
+        selector["hostname"] = evidence.selector.hostname
+    if evidence.selector.if_index is not None:
+        selector["ifIndex"] = evidence.selector.if_index
+    if evidence.selector.event_type is not None:
+        selector["event_type"] = evidence.selector.event_type
+    return {"resource": evidence.resource, "selector": selector}
+
+
+def _canonical_primitive(targets: tuple[Target, ...], scenarios: tuple[Scenario, ...]) -> dict[str, object]:
     return {
         "version": 1,
         "targets": [
@@ -363,8 +508,12 @@ def _canonical(targets: tuple[Target, ...], scenarios: tuple[Scenario, ...]) -> 
                 ),
                 "expected_snmp": [_semantic_primitive(v) for v in scenario.expected_snmp],
                 "poll_mode": scenario.poll_mode,
-                "expected_librenms_surface": deepcopy(list(scenario.expected_librenms_surface)),
-                "expected_api_evidence": deepcopy(list(scenario.expected_api_evidence)),
+                "expected_librenms_surface": [
+                    _surface_primitive(surface) for surface in scenario.expected_librenms_surface
+                ],
+                "expected_api_evidence": [
+                    _evidence_primitive(evidence) for evidence in scenario.expected_api_evidence
+                ],
                 "example_questions": list(scenario.example_questions),
                 "expected_answer_semantics": list(scenario.expected_answer_semantics),
                 "reset_state": scenario.reset_state,
@@ -393,27 +542,46 @@ def validate_manifest(raw: object) -> Manifest:
     scenario_ids = [scenario.id for scenario in scenarios]
     if len(scenario_ids) != len(set(scenario_ids)):
         _error("duplicate_scenario_id", "$.scenarios")
-    canonical = _canonical(targets, scenarios)
+    canonical = json.dumps(
+        _canonical_primitive(targets, scenarios),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
     return Manifest(1, targets, scenarios, canonical)
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            _error("duplicate_json_key", f"$.{key}")
+        result[key] = value
+    return result
+
+
+def _reject_non_finite(value: str) -> None:
+    _error("non_finite_number", f"$.{value}")
 
 
 def load_manifest(path: str | Path) -> Manifest:
     source = Path(path)
     try:
-        raw = json.loads(source.read_text(encoding="utf-8"))
+        raw = json.loads(
+            source.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_non_finite,
+        )
+    except ManifestValidationError:
+        raise
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ManifestValidationError("manifest_read_failed", str(source)) from error
     return validate_manifest(raw)
 
 
 def manifest_sha256(manifest: Manifest) -> str:
-    payload = json.dumps(
-        manifest.canonical,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return hashlib.sha256(manifest.canonical).hexdigest()
 
 
 def public_manifest(manifest: Manifest) -> dict[str, object]:
@@ -437,8 +605,12 @@ def public_manifest(manifest: Manifest) -> dict[str, object]:
                 "device": scenario.device,
                 "precondition": scenario.precondition,
                 "poll_mode": scenario.poll_mode,
-                "expected_librenms_surface": deepcopy(list(scenario.expected_librenms_surface)),
-                "expected_api_evidence": deepcopy(list(scenario.expected_api_evidence)),
+                "expected_librenms_surface": [
+                    _surface_primitive(surface) for surface in scenario.expected_librenms_surface
+                ],
+                "expected_api_evidence": [
+                    _evidence_primitive(evidence) for evidence in scenario.expected_api_evidence
+                ],
                 "example_questions": list(scenario.example_questions),
                 "expected_answer_semantics": list(scenario.expected_answer_semantics),
             }

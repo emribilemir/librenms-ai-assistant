@@ -162,7 +162,7 @@ git commit -m "feat(simulation): add semantic OID catalog"
 
 **Interfaces:**
 - Consumes: `SEMANTIC_CATALOG`, `resolve_oid`, and `validate_semantic_value` from Task 1.
-- Produces: immutable `Target`, `SemanticValue`, `Scenario`, and `Manifest` dataclasses.
+- Produces: immutable `Target`, `SemanticValue`, `SurfaceExpectation`, `EvidenceSelector`, `EvidenceExpectation`, `Scenario`, and `Manifest` dataclasses.
 - Produces: `load_manifest(path: str | Path) -> Manifest`.
 - Produces: `validate_manifest(raw: object) -> Manifest`.
 - Produces: `manifest_sha256(manifest: Manifest) -> str`.
@@ -254,8 +254,8 @@ class Scenario:
     endpoint_active: bool | None
     expected_snmp: tuple[SemanticValue, ...]
     poll_mode: str
-    expected_librenms_surface: tuple[dict[str, object], ...]
-    expected_api_evidence: tuple[dict[str, object], ...]
+    expected_librenms_surface: tuple[SurfaceExpectation, ...]
+    expected_api_evidence: tuple[EvidenceExpectation, ...]
     example_questions: tuple[str, ...]
     expected_answer_semantics: tuple[str, ...]
     reset_state: str
@@ -265,18 +265,17 @@ class Manifest:
     version: int
     targets: tuple[Target, ...]
     scenarios: tuple[Scenario, ...]
-    canonical: dict[str, object]
+    canonical: bytes
 ```
 
 Use exact key sets at every object level. Target IDs, fixture IDs, hostnames, scenario IDs, semantic labels, and evidence selectors use bounded regex/length checks. Agent addresses must be loopback IPv4 and the initial agent port must equal `1611`. Mutation kinds are exactly `snmprec_values` and `endpoint_membership`; the latter has only `active: bool` and no values.
 
 Reject any dictionary key named `command`, `shell`, `path`, `file`, `executable`, `argv`, or `oid` at any depth before domain conversion. Also reject strings containing shell control syntax only in mutation/control objects; natural-language descriptions and example questions remain ordinary bounded text.
 
-Canonicalize from the validated domain back to one stable primitive dictionary and compute:
+Validate surface/evidence records as discriminated typed schemas so arbitrary nested values cannot cross into the public projection. Reject duplicate JSON keys and non-finite numeric constants while loading. Canonicalize from the validated domain back to one stable primitive dictionary, serialize once with `allow_nan=False`, store immutable bytes, and compute:
 
 ```python
-payload = json.dumps(manifest.canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-return hashlib.sha256(payload).hexdigest()
+return hashlib.sha256(manifest.canonical).hexdigest()
 ```
 
 Update `simulation/__init__.py` with all public manifest exports.
@@ -380,7 +379,7 @@ git commit -m "feat(simulation): define initial lab scenarios"
 **Interfaces:**
 - Produces: `ScenarioPhase` values `baseline`, `applied`, `polled`, `observed`, `ai_verified`, `reset`, `failed`, and `manual_recovery_required`.
 - Produces: `ScenarioState(phase, scenario_id, manifest_sha256, last_error_code=None)`.
-- Produces: `transition(state: ScenarioState, action: str, scenario_id: str | None = None) -> ScenarioState`.
+- Produces: `transition(state: ScenarioState, action: str, scenario_id: str | None = None, *, known_scenario_ids: Collection[str]) -> ScenarioState`.
 - Produces: `StateTransitionError(code: str, current: ScenarioPhase, action: str)`.
 - Consumed by: EMR-59 persistent runner state and EMR-60 API conflict mapping.
 
@@ -406,7 +405,7 @@ allowed = (
 )
 ```
 
-Assert `baseline + reset` is a safe no-op preserving baseline. Assert `baseline + observe` requires a known nonempty scenario ID and later transitions preserve it until reset clears it. Assert repeated apply raises `scenario_already_applied`; applying another scenario from any non-reset active state raises `reset_required`; mutation during `manual_recovery_required` raises `manual_recovery_required`; invalid action/order raises `invalid_transition`. Test `failed(state, error_code)` independently from applied and polled states, and assert empty error codes are rejected.
+Assert `baseline + reset` is a safe no-op preserving baseline. Assert `baseline + observe` requires membership in the supplied canonical manifest scenario-ID set and later transitions preserve it until reset clears it. Assert persisted states whose scenario is absent from that set fail closed with `unknown_scenario`. Assert repeated apply raises `scenario_already_applied`; applying another scenario from any non-reset active state raises `reset_required`; mutation during `manual_recovery_required` raises `manual_recovery_required`; invalid action/order raises `invalid_transition`. Test `failed(state, error_code)` independently from applied and polled states, and assert empty error codes are rejected. Constructor invariants reject invalid phase/ID/SHA/error combinations.
 
 - [x] **Step 2: Run state tests and verify RED**
 
@@ -496,6 +495,10 @@ Confirm from test output and source review:
 - state conflicts use stable codes;
 - canonical SHA is deterministic;
 - public projection is sanitized;
+- nested surface/evidence records use typed schemas and cannot smuggle privileged keys;
+- raw JSON rejects duplicate keys and non-finite numbers;
+- canonical bytes and nested records are immutable;
+- lifecycle transitions verify scenario membership against the loaded manifest;
 - no VM, API, DB, UI, secret, personal path, or generated artifact was introduced.
 
 - [x] **Step 4: Commit the EMR-58 documentation and verification record**
