@@ -82,10 +82,10 @@ def encode_event(event: RunnerEvent) -> bytes
 def encode_terminal(result: RunnerResult) -> bytes
 ```
 
-- [ ] Write tests for maximum 4096 bytes, UTF-8/JSON errors, duplicate keys, NaN/Infinity, exact root keys, exact version, SHA equality, exact four operations, exact two controls, manifest scenario membership, trailing JSON, and hostile command/path/OID fields.
-- [ ] Run `python3 -m unittest simulation.tests.test_runner_protocol -v` and verify RED from missing module.
-- [ ] Implement typed requests plus `RunnerError(code, retryable=False, stage=None)` and immutable `RunnerEvent`/`RunnerResult`. Errors expose stable codes and bounded allowlisted diagnostic fields only.
-- [ ] Run protocol tests GREEN and commit `feat(simulation): add runner protocol`.
+- [x] Write tests for maximum 4096 bytes, UTF-8/JSON errors, duplicate keys, NaN/Infinity, exact root keys, exact version, SHA equality, exact four operations, exact two controls, manifest scenario membership, trailing JSON, and hostile command/path/OID fields.
+- [x] Run `python3 -m unittest simulation.tests.test_runner_protocol -v` and verify RED from missing module.
+- [x] Implement typed requests plus `RunnerError(code, retryable=False, stage=None)` and immutable `RunnerEvent`/`RunnerResult`. Errors expose stable codes and bounded allowlisted diagnostic fields only.
+- [x] Run protocol tests GREEN and commit `feat(simulation): add runner protocol`.
 
 ## Task 2: Strict SNMPREC and membership transformations
 
