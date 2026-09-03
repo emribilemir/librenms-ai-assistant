@@ -11,7 +11,6 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { Activity, ArrowRight, Check, ChevronDown, Copy, Square } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
-import { RunMetrics } from "./RunMetrics";
 import styles from "./AssistantThread.module.css";
 
 // Structure adapted from assistant-ui's official Perplexity Clone example.
@@ -43,7 +42,6 @@ function UserMessage() {
 
 function AssistantMessage() {
   const usedFallback = useAuiState((state) => Boolean(state.message.metadata?.custom?.usedFallback));
-  const metrics = useAuiState((state) => state.message.metadata?.custom?.metrics || null);
   return (
     <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
       <div className={styles.assistantBody}>
@@ -51,7 +49,6 @@ function AssistantMessage() {
         <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: PipelineReasoning, Empty: () => null }} />
         <div className={styles.messageTools}>
           <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
-          {metrics && <RunMetrics metrics={metrics} />}
         </div>
       </div>
     </MessagePrimitive.Root>

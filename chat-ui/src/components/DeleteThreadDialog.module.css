@@ -1,1 +1,28 @@
-.backdrop { align-items: center; background: rgb(22 35 30 / .42); display: flex; inset: 0; justify-content: center; position: fixed; z-index: 4; }.dialog { background: #f5f7f4; border: 1px solid #718178; box-shadow: 0 16px 48px rgb(22 35 30 / .28); max-width: 430px; padding: 24px; width: calc(100% - 36px); }.dialog h2 { margin-top: 0; }.dialog div { display: flex; gap: 8px; justify-content: flex-end; }.dialog button { background: white; border: 1px solid #718178; border-radius: 4px; min-height: 38px; padding: 0 12px; }.dialog button:last-child { background: #b42318; border-color: #8c1e16; color: white; }
+.backdrop {
+  align-items: center;
+  background: rgb(8 11 14 / .7);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 40;
+}
+
+.dialog {
+  background: #2b3035;
+  border: 1px solid #4b545c;
+  border-radius: 12px;
+  box-shadow: 0 22px 60px rgb(0 0 0 / .48);
+  color: #edf0f2;
+  max-width: 430px;
+  padding: 22px;
+  width: calc(100% - 36px);
+}
+
+.dialog h2 { color: #f6f7f8; font-size: 18px; margin: 0 0 8px; }
+.dialog p { color: #aeb6bd; font-size: 13px; line-height: 1.55; margin: 0 0 20px; overflow-wrap: anywhere; }
+.dialog div { display: flex; gap: 8px; justify-content: flex-end; }
+.dialog button { background: #353b41; border: 1px solid #59636c; border-radius: 8px; color: #edf0f2; font: inherit; font-size: 12px; min-height: 38px; padding: 0 13px; }
+.dialog button:hover { background: #41484f; border-color: #707b85; }
+.dialog button:last-child { background: #c8202b; border-color: #df3540; color: #fff; }
+.dialog button:last-child:hover { background: #dc2935; }

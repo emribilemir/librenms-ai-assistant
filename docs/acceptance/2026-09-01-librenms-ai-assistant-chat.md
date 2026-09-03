@@ -8,20 +8,20 @@ Environment: ephemeral loopback-only standalone fixture (`127.0.0.1`), local SQL
 | Check | Command | Result |
 | --- | --- | --- |
 | RED acceptance baseline | `cd chat-ui && npx playwright test e2e/standalone.spec.js --project=chromium` before the Playwright configuration existed | Failed as expected: `Project(s) "chromium" not found`; preserved at `e2e-artifacts/red/playwright-red.txt`. |
-| Standalone browser acceptance | `cd chat-ui && npx playwright test e2e/standalone.spec.js --project=chromium` | PASS — 10 tests in 12.1 s. |
-| Python regression | `.venv/bin/python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v` | PASS — 124 tests in 1.775 s. |
-| Frontend unit test and build | `cd chat-ui && npm test -- --runInBand && npm run build` | PASS — 7 suites / 49 tests; Vite 8 production build completed. |
+| Standalone browser acceptance | `cd chat-ui && npx playwright test e2e/standalone.spec.js --project=chromium` | PASS — 11 tests in 12.8 s. |
+| Python regression | `.venv/bin/python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v` | PASS — 124 tests in 2.277 s. |
+| Frontend unit test and build | `cd chat-ui && npm test -- --runInBand && npm run build` | PASS — 7 suites / 48 tests; Vite 8 production build completed. |
 | Plugin contracts | `.venv/bin/python3 -m unittest discover -s integrations/librenms/AiAssistant/tests -p 'test_*.py' -v` | PASS — 9 tests. |
 | Authorized UTM deployment smoke | Asset SHA-256, `/plugin/AiAssistant`, `/ai-api/v1/threads`, and signed `/ai-api/v1/suggestions` checks | PASS — deployed bundle matches the local build; plugin redirects anonymous requests to login; proxy returns the expected 401 auth boundary; signed live suggestions return current LibreNMS devices. |
 | Authenticated UTM browser suite | `cd chat-ui && npx playwright test e2e/utm.spec.js --project=utm` | NOT RUN — 9 authored scenarios require supplied signed-in primary and secondary browser storage states. |
 
-The standalone tests cover the assistant-ui thread-list adapter, saved thread create/select/delete confirmation, collapsible history rail, no-match progress, retryable failure and retry, fallback labeling and metric disclosure, cancellation before later stage/answer, keyboard focus, polite live region, responsive drawer, progressive validated answer chunks, and real conversation scrolling. They use role and label locators with assertion-driven synchronization. The fallback run verifies persisted component timings of 7 + 11 + 13 + 17 = `total_ms` 48; `total_ms` is not itself included in that sum. The retryable path visibly reaches `librenms running`, then is released through a test-only local server barrier before its terminal backend error, so no browser timer is used to manufacture the ordering.
+The standalone tests cover the assistant-ui thread-list adapter, saved thread create/select/delete confirmation, collapsible history rail, full-height unclipped starter surface, dark-theme delete dialog, no-match progress, retryable failure and retry, fallback labeling and its single process disclosure, cancellation before later stage/answer, keyboard focus, polite live region, responsive drawer, progressive validated answer chunks, and real conversation scrolling. They use role and label locators with assertion-driven synchronization. The fallback run verifies persisted component timings of 7 + 11 + 13 + 17 while the disclosure uses the real end-to-end `total_ms`; unavailable model timing is not invented. The retryable path visibly reaches `librenms running`, then is released through a test-only local server barrier before its terminal backend error, so no browser timer is used to manufacture the ordering.
 
 ## Browser evidence
 
 The ignored local Playwright report is at `e2e-artifacts/playwright/report/`. The final-run screenshots are:
 
-- `e2e-artifacts/playwright/test-results/standalone-labels-a-valida-5cd30--complete-metric-disclosure-chromium/fallback-metrics.png`
+- `e2e-artifacts/playwright/test-results/standalone-labels-a-valida-405ce-s-single-process-disclosure-chromium/fallback-metrics.png`
 - `e2e-artifacts/playwright/test-results/standalone-cancelling-a-re-332df-er-stages-and-answer-output-chromium/cancelled-run.png`
 
 These are local evidence artifacts, intentionally excluded from the repository.

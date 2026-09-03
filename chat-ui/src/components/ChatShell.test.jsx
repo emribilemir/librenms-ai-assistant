@@ -3,7 +3,6 @@ import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui
 import { AssistantThread } from "./AssistantThread";
 import { DeleteThreadDialog } from "./DeleteThreadDialog";
 import { ChatTranscript } from "./ChatTranscript";
-import { RunMetrics } from "./RunMetrics";
 import { ThreadDrawer } from "./ThreadDrawer";
 import { ThreadList } from "./ThreadList";
 import { AssistantChatStore } from "../store";
@@ -27,15 +26,6 @@ test("delete dialog traps tab focus, closes on Escape, and restores its trigger"
   fireEvent.keyDown(confirm, { key: "Tab" }); expect(cancel).toHaveFocus();
   fireEvent.keyDown(cancel, { key: "Escape" });
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(); await require("@testing-library/react").waitFor(() => expect(screen.getByRole("button", { name: "Delete Core" })).toHaveFocus());
-});
-
-test("metrics are expandable and expose their accessible disclosure state", () => {
-  render(<RunMetrics metrics={{ planner_ms: 8, resolver_ms: null, backend_ms: 12, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 20, total_ms: 25 }} />);
-  const disclosure = screen.getByRole("button", { name: /Çalışma ayrıntıları/i });
-  expect(disclosure).toHaveAttribute("aria-expanded", "false");
-  fireEvent.click(disclosure);
-  expect(disclosure).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByText("planner_ms")).toBeVisible();
 });
 
 test("narrow drawer uses named native controls with visible focus styling", () => {
@@ -173,14 +163,17 @@ test("saved conversations are rendered and switched by assistant-ui thread-list 
   await waitFor(() => expect(switchThread).toHaveBeenCalledWith("edge"));
 });
 
-test("completed assistant answers own a compact expandable timing disclosure", () => {
+test("completed assistant answers keep stage and timing details in one reasoning disclosure", () => {
   const runtimeStore = {
     messages: [{
       id: "answer",
       role: "assistant",
-      content: [{ type: "text", text: "Observed result" }],
+      content: [
+        { type: "reasoning", text: "Soruyu sınıflandırdı · 8 ms\nCihazı çözümledi · 11 ms\nLibreNMS verisini okudu · 14 ms\nYanıtı doğruladı · 17 ms" },
+        { type: "text", text: "Observed result" },
+      ],
       createdAt: new Date(),
-      metadata: { custom: { metrics: { planner_ms: 8, resolver_ms: 11, backend_ms: 14, synthesis_ms: 17, time_to_first_token_ms: 21, time_to_first_visible_chunk_ms: 29, total_ms: 58 } } },
+      metadata: { custom: { metrics: { planner_ms: 8, resolver_ms: 11, backend_ms: 14, synthesis_ms: 17, time_to_first_token_ms: 21, time_to_first_visible_chunk_ms: 29, total_ms: 2058 } } },
     }],
     convertMessage: (message) => message,
     isRunning: false,
@@ -193,9 +186,13 @@ test("completed assistant answers own a compact expandable timing disclosure", (
   }
 
   render(<Fixture />);
-  const disclosure = screen.getByRole("button", { name: /Çalışma ayrıntıları/i });
+  const disclosure = screen.getByRole("button", { name: /İşlem ayrıntıları/i });
   expect(disclosure).toHaveAttribute("aria-expanded", "false");
-  expect(disclosure).toHaveTextContent("58 ms");
+  expect(disclosure).toHaveTextContent("2.06 sn");
+  expect(screen.queryByText("Çalışma ayrıntıları")).not.toBeInTheDocument();
+  fireEvent.click(disclosure);
+  expect(screen.getByText("İlk model yanıtı 21 ms")).toBeVisible();
+  expect(screen.getByText("Ekrana aktarım 29 ms")).toBeVisible();
 });
 
 test("live SSE stages appear as an expanded assistant-ui reasoning disclosure inside the assistant message", () => {

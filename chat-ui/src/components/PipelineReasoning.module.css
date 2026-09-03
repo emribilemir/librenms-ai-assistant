@@ -11,6 +11,9 @@
 .marker { background: #78828b; border-radius: 50%; height: 5px; margin-left: -19px; width: 5px; }
 .steps li[data-running] { color: #e7eaed; }
 .steps li[data-running] .marker { animation: pulse 1.25s ease-in-out infinite; background: #d9232e; box-shadow: 0 0 0 4px rgba(217, 35, 46, .13); }
+.telemetry { align-items: center; color: #7f8992; display: flex; flex-wrap: wrap; font: 500 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; gap: 5px 13px; margin: 1px 0 5px 24px; min-height: 0; overflow: hidden; }
+.telemetry span { position: relative; }
+.telemetry span + span::before { background: #59636c; border-radius: 50%; content: ""; height: 3px; left: -8px; position: absolute; top: 6px; width: 3px; }
 .shimmer { animation: shimmer 1.8s linear infinite; background: linear-gradient(90deg, #8d969f 18%, #fff 48%, #8d969f 78%); background-clip: text; background-size: 220% 100%; color: transparent; }
 @keyframes shimmer { to { background-position: -220% 0; } }
 @keyframes pulse { 50% { opacity: .45; transform: scale(.82); } }

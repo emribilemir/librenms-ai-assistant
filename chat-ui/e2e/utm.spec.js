@@ -195,7 +195,7 @@ test.describe("authorized UTM acceptance", () => {
     }
   });
 
-  test("labels a curated fallback result and exposes the real metric disclosure", async ({ browser }) => {
+  test("labels a curated fallback result and exposes one process disclosure", async ({ browser }) => {
     skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_FALLBACK_QUERY", "AI_UTM_FALLBACK_EXPECTED_TEXT", "AI_UTM_FALLBACK_THREAD_TITLE");
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
     try {
@@ -203,10 +203,11 @@ test.describe("authorized UTM acceptance", () => {
       await ask(page, process.env.AI_UTM_FALLBACK_QUERY);
       await expect(page.getByText(process.env.AI_UTM_FALLBACK_EXPECTED_TEXT, { exact: true })).toBeVisible();
       await expect(page.getByText("Doğrulanmış güvenli yanıt")).toBeVisible();
-      const disclosure = page.getByRole("button", { name: /Çalışma ayrıntıları/ });
+      const disclosure = page.getByRole("button", { name: /İşlem ayrıntıları/ });
       await disclosure.click();
       await expect(disclosure).toHaveAttribute("aria-expanded", "true");
-      await expect(page.getByText("total_ms", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Yanıt aktarım süreleri")).toBeVisible();
+      await expect(page.getByText("Çalışma ayrıntıları")).toHaveCount(0);
       assertCoherentMetrics(await persistedRunFor(page, process.env.AI_UTM_FALLBACK_THREAD_TITLE));
     } finally {
       await context.close();

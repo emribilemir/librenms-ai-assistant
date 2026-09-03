@@ -1,15 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-const metrics = [
-  "planner_ms",
-  "resolver_ms",
-  "backend_ms",
-  "synthesis_ms",
-  "time_to_first_token_ms",
-  "time_to_first_visible_chunk_ms",
-  "total_ms",
-];
-
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.__LIBRENMS_AI_ASSISTANT__ = { token: "standalone-development" };
@@ -63,6 +53,18 @@ test("builds assistant-ui starter prompts from currently up devices", async ({ p
   await expect(page.getByText("lab-j9775a-01 cihazının mevcut durumunu göster.")).toBeVisible();
   await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
   await expect(page.getByRole("button", { name: /lab-offline-01/i })).toHaveCount(0);
+});
+
+test("fills the available conversation height without clipping starter prompts", async ({ page }) => {
+  const [threadBox, mainBox] = await Promise.all([
+    page.locator('[data-assistant-ui="thread"]').boundingBox(),
+    page.locator("#investigation-main").boundingBox(),
+  ]);
+  expect(Math.abs((threadBox.y + threadBox.height) - (mainBox.y + mainBox.height))).toBeLessThanOrEqual(1);
+  const suggestions = page.getByLabel("Canlı cihaz önerileri");
+  await expect(suggestions).toBeInViewport();
+  const suggestionBox = await suggestions.boundingBox();
+  expect(suggestionBox.y + suggestionBox.height).toBeLessThanOrEqual(threadBox.y + threadBox.height);
 });
 
 test("collapses the assistant-ui history rail without taking space from the conversation", async ({ page }) => {
@@ -125,6 +127,8 @@ test("creates, selects, and deletes a saved thread only after confirmation", asy
   await page.getByRole("menuitem", { name: "Sohbeti sil" }).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveCSS("background-color", "rgb(43, 48, 53)");
+  await expect(dialog).toHaveCSS("color", "rgb(237, 240, 242)");
   await expect(dialog.getByRole("button", { name: "Sohbeti tut" })).toBeFocused();
   await dialog.getByRole("button", { name: "Sohbeti tut" }).click();
   await expect(dialog).toBeHidden();
@@ -166,28 +170,27 @@ test("shows a retryable backend failure and allows a real retried stream to succ
   await expect(page.getByRole("button", { name: "Yeniden dene" })).toHaveCount(0);
 });
 
-test("labels a validated fallback answer and exposes its complete metric disclosure", async ({ page }, testInfo) => {
+test("labels a validated fallback answer and keeps telemetry in its single process disclosure", async ({ page }, testInfo) => {
   await createThread(page);
   await ask(page, "fallback investigation evidence");
   await expect(page.getByText("Safe evidence fallback summary.")).toBeVisible();
   await expect(page.getByText("Doğrulanmış güvenli yanıt")).toBeVisible();
-  const disclosure = page.getByRole("button", { name: /Çalışma ayrıntıları/ });
+  const disclosure = page.getByRole("button", { name: /İşlem ayrıntıları/ });
   await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   await disclosure.click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "true");
-  for (const metric of metrics) await expect(page.getByText(metric, { exact: true })).toBeVisible();
-  for (const value of ["7 ms", "11 ms", "13 ms", "17 ms"]) await expect(page.getByText(value, { exact: true })).toBeVisible();
+  await expect(page.getByText("Soruyu sınıflandırdı · 7 ms", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cihazı çözümledi · 11 ms", { exact: true })).toBeVisible();
+  await expect(page.getByText("LibreNMS verisini okudu · 13 ms", { exact: true })).toBeVisible();
+  await expect(page.getByText("Yanıtı doğruladı · 17 ms", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Yanıt aktarım süreleri")).toBeVisible();
+  await expect(page.getByText(/Ekrana aktarım/)).toBeVisible();
+  await expect(page.getByText("Çalışma ayrıntıları")).toHaveCount(0);
   const persistedRun = await persistedRunFor(page, "fallback investigation evidence");
   expect(persistedRun).toMatchObject({ planner_ms: 7, resolver_ms: 11, backend_ms: 13, synthesis_ms: 17 });
   expect(persistedRun.total_ms).toBeGreaterThanOrEqual(48);
   expect(persistedRun.total_ms).toBeGreaterThanOrEqual(persistedRun.time_to_first_visible_chunk_ms);
-  const totalMetric = page.locator("dl > div").filter({ hasText: "total_ms" });
-  await expect(totalMetric.getByText(`${persistedRun.total_ms} ms`, { exact: true })).toBeVisible();
-  const [totalBox, shellBox] = await Promise.all([
-    totalMetric.boundingBox(),
-    page.locator("#root > div").boundingBox(),
-  ]);
-  expect(totalBox.y + totalBox.height).toBeLessThanOrEqual(shellBox.y + shellBox.height);
+  await expect(disclosure).toContainText(`${persistedRun.total_ms} ms`);
   await page.screenshot({ path: testInfo.outputPath("fallback-metrics.png"), fullPage: true });
 });
 

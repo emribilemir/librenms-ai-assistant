@@ -21,7 +21,7 @@ function ThreadItem() {
     <ThreadListItemPrimitive.Root className={styles.item} data-slot="aui_thread-list-item">
       <ThreadListItemPrimitive.Trigger className={styles.thread} data-slot="aui_thread-list-item-trigger">
         {thread.isRunning && <LoaderCircle className={styles.running} size={14} aria-hidden="true" />}
-        <span className={styles.title} data-slot="aui_thread-list-item-title"><ThreadListItemPrimitive.Title fallback="Yeni sohbet" /></span>
+        <span className={styles.title} title={thread.title || "Yeni sohbet"} data-slot="aui_thread-list-item-title"><ThreadListItemPrimitive.Title fallback="Yeni sohbet" /></span>
         {thread.isRunning && <span className={styles.srOnly}>Çalışıyor</span>}
       </ThreadListItemPrimitive.Trigger>
       <ThreadListItemMorePrimitive.Root>
