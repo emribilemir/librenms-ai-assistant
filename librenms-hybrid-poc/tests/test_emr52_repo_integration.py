@@ -66,6 +66,24 @@ EVENTS = [
     },
 ]
 
+LIVE_ALERT = {
+    "hostname": HOST,
+    "id": 88,
+    "device_id": 1,
+    "rule_id": 4,
+    "state": 1,
+    "alerted": 0,
+    "open": 1,
+    "note": "",
+    "timestamp": "2026-08-31 14:57:32",
+    "info": "[]",
+    "severity": "critical",
+    "name": "Port status up/down",
+    "proc": None,
+    "notes": None,
+    "alert_id": 88,
+}
+
 
 class Resolver:
     @staticmethod
@@ -228,6 +246,27 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("Port 2", result["final_answer"])
         self.assertIn("DOWN", result["final_answer"])
         self.assertFalse(result["synthesis_llm_called"])
+
+
+class AlertFormatterTests(unittest.TestCase):
+    def test_real_librenms_payload_renders_alert_name(self):
+        text = hybrid_poc._format_alerts_text(HOST, [LIVE_ALERT])
+
+        self.assertIn("88: Port status up/down", text)
+        self.assertNotIn("88: None", text)
+
+    def test_missing_name_uses_legacy_rule_fallback(self):
+        alert = dict(LIVE_ALERT, name=None, rule="Legacy alert rule")
+
+        text = hybrid_poc._format_alerts_text(HOST, [alert])
+
+        self.assertIn("88: Legacy alert rule", text)
+
+    def test_empty_alerts_preserves_existing_message(self):
+        self.assertEqual(
+            hybrid_poc._format_alerts_text(HOST, []),
+            f"{HOST} üzerinde aktif alarm bulunmuyor.",
+        )
 
 
 if __name__ == "__main__":

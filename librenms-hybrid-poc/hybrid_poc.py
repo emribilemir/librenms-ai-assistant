@@ -694,8 +694,9 @@ def _format_alerts_text(hostname, alerts):
         return f"{hostname} üzerinde aktif alarm bulunmuyor."
     lines = []
     for a in alerts:
+        alert_name = a.get("name") or a.get("rule") or "adı mevcut değil"
         lines.append(
-            f"{a.get('alert_id')}: {a.get('rule')} "
+            f"{a.get('alert_id')}: {alert_name} "
             f"(severity={a.get('severity')}, state={a.get('state')})"
         )
     return f"{hostname} aktif alarmları:\n" + "\n".join(lines)
