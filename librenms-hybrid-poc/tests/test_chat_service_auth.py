@@ -5,7 +5,7 @@ import json
 import time
 import unittest
 
-from chat_service.auth import AuthError, IdentityVerifier, development_identity
+from chat_service.auth import AuthError, IdentityVerifier
 
 
 SECRET = b"0123456789abcdef0123456789abcdef"
@@ -37,22 +37,6 @@ class IdentityVerifierTests(unittest.TestCase):
     def test_accepts_well_signed_required_claims(self):
         identity = self.verifier.verify(token(claims(iat=self.now, exp=self.now + 3600)))
         self.assertEqual((identity.sub, identity.name), ("user-1", "Ada"))
-        self.assertIs(identity.lab, False)
-
-    def test_accepts_only_boolean_lab_claim_and_preserves_it(self):
-        admin = self.verifier.verify(
-            token(claims(iat=self.now, exp=self.now + 3600, lab=True))
-        )
-        operator = self.verifier.verify(
-            token(claims(iat=self.now, exp=self.now + 3600, lab=False))
-        )
-        self.assertIs(admin.lab, True)
-        self.assertIs(operator.lab, False)
-        for invalid in (1, 0, "true", None, [], {}):
-            with self.subTest(invalid=invalid), self.assertRaises(AuthError):
-                self.verifier.verify(
-                    token(claims(iat=self.now, exp=self.now + 3600, lab=invalid))
-                )
 
     def test_rejects_tampered_signature_and_missing_claims(self):
         with self.assertRaises(AuthError):
@@ -72,15 +56,3 @@ class IdentityVerifierTests(unittest.TestCase):
             self.verifier.verify(token(claims(iat=self.now - 3600, exp=self.now)))
         with self.assertRaises(AuthError):
             self.verifier.verify(token(claims(iat=self.now, exp=self.now + 3599)))
-
-    def test_development_lab_identity_requires_both_explicit_flags(self):
-        self.assertIsNone(development_identity({}))
-        self.assertIsNone(development_identity({"AI_LAB_DEV_AUTH": "1"}))
-        chat_only = development_identity({"AI_DEV_AUTH": "1"})
-        self.assertIsNotNone(chat_only)
-        self.assertIs(chat_only.lab, False)
-        lab_admin = development_identity(
-            {"AI_DEV_AUTH": "1", "AI_LAB_DEV_AUTH": "1"}
-        )
-        self.assertIsNotNone(lab_admin)
-        self.assertIs(lab_admin.lab, True)

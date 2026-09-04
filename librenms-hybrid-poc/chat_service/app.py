@@ -12,7 +12,7 @@ import time
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
-from .auth import AuthError, IdentityVerifier, development_identity
+from .auth import AuthError, Identity, IdentityVerifier
 from .logging import RestrictedJsonLogger
 from .pipeline_adapter import PipelineAdapter
 from .runs import ActiveRunRegistry, RunConflictError
@@ -51,10 +51,8 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     app = FastAPI()
 
     def identity(authorization: str | None):
-        if authorization is None:
-            development = development_identity(os.environ)
-            if development is not None:
-                return development
+        if authorization is None and os.environ.get("AI_DEV_AUTH") == "1":
+            return Identity("development", "Development")
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(401, "authentication required")
         try:

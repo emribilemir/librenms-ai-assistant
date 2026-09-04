@@ -83,7 +83,6 @@ lab-j9772a-01'de ne sorun var?
 | [`docs/lab/`](docs/lab/) | Ayrıntılı tarihsel LibreNMS ve SNMPSim lab notları |
 | [`docs/superpowers/specs/`](docs/superpowers/specs/) | Onaylanmış mimari tasarım belgeleri |
 | [`docs/superpowers/plans/`](docs/superpowers/plans/) | Uygulama planları |
-| [`simulation/`](simulation/) | Doğrulanmış Simulation Lab manifesti, lifecycle, kısıtlı VM runner ve inert kurulum/rollback paketi |
 
 ### Önemli dosyalar
 
@@ -136,6 +135,10 @@ SNMPSim -> LibreNMS discovery/poller -> LibreNMS API -> Hybrid PoC
 
 macOS/UTM yalnız doğrulanmış referans ortamdır; zorunlu değildir. Eşdeğer bir
 Linux sunucu veya VM ve herhangi bir SSH istemcisi kullanılabilir.
+
+Yerel demo yolu ayrı bir Lab API'si, SQLite run store'u, SSH transport katmanı
+veya admin kontrol paneli içermez; mevcut read-only Assistant akışından
+bağımsız birkaç yerel fixture/komutla sınırlı tutulur.
 
 ## Yerel Ollama ile PoC harness'i
 
@@ -191,7 +194,6 @@ gerçek İSBAK operasyon verisi olarak yorumlanmamalıdır.
 3 Eylül 2026 tarihinde, güncel doğrulama çalışma ağacında:
 
 - değişmeyen Python hybrid/chat regression baseline: **124/124 başarılı**
-- Simulation Lab manifest/runner/packaging suite: **94/94 başarılı**
 - chat frontend: **48/48 başarılı** ve production build başarılı
 - LibreNMS local plugin contract suite: **9/9 başarılı**
 - resolver fixture self-test: **47/47 başarılı**
@@ -217,8 +219,6 @@ olarak saklanmalıdır.
 - Investigation kalitesi, backend'in sağladığı veri ve event-window coverage'ı
   ile sınırlıdır.
 - Kanıtlanmış kök neden yoksa sonuç `root_cause unknown` sınırında kalır.
-- Simulation runner depoda offline doğrulanmıştır fakat canlı UTM kurulumu ve
-  mutation kabulü EMR-63 tamamlanana kadar yapılmış sayılmaz.
 
 ## Sonraki yön
 

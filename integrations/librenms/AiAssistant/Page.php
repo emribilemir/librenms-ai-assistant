@@ -52,7 +52,6 @@ class Page extends PageHook
             'aud' => 'ai-assistant',
             'iat' => $iat,
             'exp' => $iat + 3600,
-            'lab' => $user->hasRole('admin'),
         ];
         $encoded = $this->base64UrlEncode(json_encode(
             $payload,

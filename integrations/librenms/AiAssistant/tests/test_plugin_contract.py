@@ -54,7 +54,7 @@ class AiAssistantPluginContractTests(unittest.TestCase):
     def test_page_signs_the_exact_v1_identity_contract(self) -> None:
         """Changing claims, TTL, HMAC input, or secret length breaks service authentication."""
         page = read("Page.php")
-        for claim in ("'sub'", "'name'", "'iss' => 'librenms'", "'aud' => 'ai-assistant'", "'iat'", "'exp' => $iat + 3600", "'lab' => $user->hasRole('admin')"):
+        for claim in ("'sub'", "'name'", "'iss' => 'librenms'", "'aud' => 'ai-assistant'", "'iat'", "'exp' => $iat + 3600"):
             self.assertIn(claim, page)
         self.assertIn('return "v1.$encoded.$signature"', page)
         self.assertIn("hash_hmac('sha256', $encoded, $secret, true)", page)
@@ -66,14 +66,13 @@ class AiAssistantPluginContractTests(unittest.TestCase):
         """A signer drift must make an independently built plugin token unverifiable."""
         secret = b"0123456789abcdefghijklmnopqrstuv"
         issued = 1_700_000_000
-        payload = {"sub": "42", "name": "NOC Operator", "iss": "librenms", "aud": "ai-assistant", "iat": issued, "exp": issued + 3600, "lab": True}
+        payload = {"sub": "42", "name": "NOC Operator", "iss": "librenms", "aud": "ai-assistant", "iat": issued, "exp": issued + 3600}
         encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()).rstrip(b"=")
         signature = base64.urlsafe_b64encode(hmac.new(secret, encoded, hashlib.sha256).digest()).rstrip(b"=")
         token = f"v1.{encoded.decode()}.{signature.decode()}"
 
         identity = IdentityVerifier(secret, clock=lambda: issued).verify(token)
         self.assertEqual((identity.sub, identity.name), ("42", "NOC Operator"))
-        self.assertIs(identity.lab, True)
 
     def test_settings_two_phase_contract_keeps_configured_status_without_returning_secret(self) -> None:
         """The 26.8.1 SettingsHook invokes data twice, so final view data must stay configured."""
