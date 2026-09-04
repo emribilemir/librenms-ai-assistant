@@ -1,4 +1,4 @@
-import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getSuggestions, getThread, listThreads, readEventStream, runThread } from "./api";
+import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getDemoScenarios, getSuggestions, getThread, listThreads, readEventStream, resetDemo, runDemoScenario, runThread } from "./api";
 
 test("uses only the relative production API base with no embedded identity", async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "thread-a" }) });
@@ -29,6 +29,26 @@ test("loads authenticated live suggestions", async () => {
       }),
     }),
   );
+});
+
+test("demo requests send only the bounded scenario id and an empty reset body", async () => {
+  global.fetch = jest.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ scenarios: [{ id: "port-down" }] }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ scenario_id: "port-down" }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ scenario_id: "reset" }) });
+
+  await expect(getDemoScenarios("token")).resolves.toEqual([{ id: "port-down" }]);
+  await runDemoScenario("port-down", "token");
+  await resetDemo("token");
+
+  expect(global.fetch.mock.calls[1]).toEqual([
+    "/ai-api/v1/demo/scenarios",
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ scenario_id: "port-down" }) }),
+  ]);
+  expect(global.fetch.mock.calls[2]).toEqual([
+    "/ai-api/v1/demo/reset",
+    expect.objectContaining({ method: "POST", body: "{}" }),
+  ]);
 });
 
 test("parses fetch SSE events and forwards exact event names", async () => {

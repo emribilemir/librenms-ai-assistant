@@ -1,21 +1,26 @@
 {
   "port-down": {
+    "label": "Port Down",
     "expected": "Port 2 admin=up oper=down",
     "example_ai_question": "lab-j9772a-01 port 2 ne durumda?"
   },
   "port-up": {
+    "label": "Port Up",
     "expected": "Port 2 admin=up oper=up",
     "example_ai_question": "lab-j9772a-01 port 2 ne durumda?"
   },
   "location-change": {
+    "label": "Location Change",
     "expected": "Device location=EMR-55 Demo Lab",
     "example_ai_question": "lab-j9772a-01'in konumu neresi?"
   },
   "device-down-up": {
+    "label": "Device Down/Up",
     "expected": "Device transitions down and returns up",
     "example_ai_question": "lab-j9772a-01 en son ne zaman down oldu?"
   },
   "port-down-up-event": {
+    "label": "Generate Port Event",
     "expected": "A new Port 2 ifOperStatus transition event is recorded",
     "example_ai_question": "lab-j9772a-01 son eventlerini göster"
   }

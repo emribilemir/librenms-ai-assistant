@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
+from pathlib import Path
 import sys
 import threading
 import time
@@ -18,6 +20,46 @@ from .pipeline_adapter import PipelineAdapter
 from .runs import ActiveRunRegistry, RunConflictError
 from .store import ChatStore, ConflictError, NotFoundError
 from .suggestions import build_suggestions
+
+
+DEMO_SCENARIO_IDS = (
+    "port-down",
+    "port-up",
+    "location-change",
+    "device-down-up",
+    "port-down-up-event",
+)
+
+
+def load_simulation_runner():
+    path = Path(__file__).resolve().parents[2] / "simulation" / "run.py"
+    spec = importlib.util.spec_from_file_location("emr55_simulation_runner", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("simulation runner is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def bounded_demo_result(result, scenario_id):
+    events = []
+    for event in (result.get("events") or [])[:4]:
+        events.append(
+            {
+                "event_id": event.get("event_id"),
+                "timestamp": event.get("timestamp"),
+                "message": str(event.get("message") or "")[:500],
+            }
+        )
+    return {
+        "scenario_id": scenario_id,
+        "snmp_state_changed": bool(result.get("snmp_state_changed")),
+        "librenms_completed": bool(result.get("librenms_completed")),
+        "verified": str(result.get("verified") or "")[:500],
+        "events": events,
+        "example_question": str(result.get("example_question") or "")[:500],
+    }
 
 
 def _sse(event, data):
@@ -49,6 +91,9 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     registry = ActiveRunRegistry()
     logger = logger or RestrictedJsonLogger(sys.stderr)
     app = FastAPI()
+    demo_mode = os.environ.get("AI_DEMO_MODE") == "1"
+    demo_runner = load_simulation_runner() if demo_mode else None
+    demo_lock = threading.Lock()
 
     def identity(authorization: str | None):
         if authorization is None and os.environ.get("AI_DEV_AUTH") == "1":
@@ -96,6 +141,70 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 },
             ) from None
         return {"suggestions": build_suggestions(devices)}
+
+    if demo_mode:
+        @app.get("/v1/demo/scenarios")
+        async def list_demo_scenarios(authorization: str | None = Header(default=None)):
+            identity(authorization)
+            metadata = demo_runner.load_scenarios()
+            return {
+                "scenarios": [
+                    {
+                        "id": scenario_id,
+                        "label": metadata[scenario_id]["label"],
+                        "example_question": metadata[scenario_id]["example_ai_question"],
+                    }
+                    for scenario_id in DEMO_SCENARIO_IDS
+                ]
+            }
+
+        @app.post("/v1/demo/scenarios")
+        async def run_demo_scenario(request: Request, authorization: str | None = Header(default=None)):
+            identity(authorization)
+            try:
+                body = await request.json()
+            except json.JSONDecodeError:
+                raise HTTPException(400, "malformed JSON") from None
+            if not isinstance(body, dict) or set(body) != {"scenario_id"}:
+                raise HTTPException(400, "request must contain only scenario_id")
+            scenario_id = body.get("scenario_id")
+            if not isinstance(scenario_id, str) or scenario_id not in DEMO_SCENARIO_IDS:
+                raise HTTPException(422, "unsupported scenario_id")
+            if not demo_lock.acquire(blocking=False):
+                raise HTTPException(409, "a demo action is already running")
+            try:
+                result = await asyncio.to_thread(demo_runner.execute_scenario, scenario_id)
+                return bounded_demo_result(result, scenario_id)
+            except Exception:
+                raise HTTPException(
+                    503,
+                    {"code": "demo_scenario_failed", "message": "Scenario could not be completed."},
+                ) from None
+            finally:
+                demo_lock.release()
+
+        @app.post("/v1/demo/reset")
+        async def reset_demo(authorization: str | None = Header(default=None)):
+            identity(authorization)
+            if not demo_lock.acquire(blocking=False):
+                raise HTTPException(409, "a demo action is already running")
+            try:
+                result = await asyncio.to_thread(demo_runner.reset_baseline)
+                return {
+                    "scenario_id": "reset",
+                    "snmp_state_changed": bool(result.get("changed")),
+                    "librenms_completed": True,
+                    "verified": "Baseline restored",
+                    "events": [],
+                    "example_question": "",
+                }
+            except Exception:
+                raise HTTPException(
+                    503,
+                    {"code": "demo_reset_failed", "message": "Lab reset could not be completed."},
+                ) from None
+            finally:
+                demo_lock.release()
 
     @app.get("/v1/threads/{thread_id}")
     async def get_thread(thread_id: str, authorization: str | None = Header(default=None)):
