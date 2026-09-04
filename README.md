@@ -81,8 +81,6 @@ lab-j9772a-01'de ne sorun var?
 | [`docs/history/`](docs/history/) | Tarihsel inceleme ve düzeltme raporları |
 | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Opsiyonel Debian, SSH, sudo ve SNMPSim kurulum rehberi |
 | [`docs/lab/`](docs/lab/) | Ayrıntılı tarihsel LibreNMS ve SNMPSim lab notları |
-| [`docs/superpowers/specs/`](docs/superpowers/specs/) | Onaylanmış mimari tasarım belgeleri |
-| [`docs/superpowers/plans/`](docs/superpowers/plans/) | Uygulama planları |
 
 ### Önemli dosyalar
 
@@ -229,7 +227,5 @@ latency ölçülüp optimize edilecektir.
 
 ## Tasarım belgeleri
 
-- [Semantic planner, deterministic core ve RAG tasarımı](docs/superpowers/specs/2026-08-26-semantic-planner-deterministic-core-rag-design.md)
-- [Semantic planner core uygulama planı](docs/superpowers/plans/2026-08-26-semantic-planner-core.md)
 - [Planner/catalog/resolver sahiplik incelemesi](docs/history/LIBRENMS_PLANNER_CATALOG_RESOLVER_OWNERSHIP_REVIEW.md)
 - [Planner v2 düzeltme raporu](docs/history/PLANNER_V2_FIX_REPORT.md)
