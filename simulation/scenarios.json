@@ -12,7 +12,7 @@
   "location-change": {
     "label": "Location Change",
     "expected": "Device location=EMR-55 Demo Lab",
-    "example_ai_question": "lab-j9772a-01'in konumu neresi?"
+    "example_ai_question": "lab-j9772a-01'in location bilgisi ne?"
   },
   "device-down-up": {
     "label": "Device Down/Up",
