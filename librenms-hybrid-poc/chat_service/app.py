@@ -232,7 +232,10 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                         logger.write(user_id=user.sub, thread_id=thread_id, run_id=started["id"], route="/v1/threads/{id}/runs", stage="storage", error_code="visible_metric_unavailable")
                     except Exception:
                         pass
-                yield _sse("completed", {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics})
+                completed = {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics}
+                if result.get("navigation_targets"):
+                    completed["navigation_targets"] = result["navigation_targets"]
+                yield _sse("completed", completed)
             except Exception:
                 if work == "storage":
                     stage, code, message = "storage", "storage_failed", "Sonuç kaydedilemedi."

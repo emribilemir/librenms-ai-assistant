@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from librenms_backend import LibreNMSBackend
 
+from .navigation import build_navigation_targets
+
 
 _METRICS = ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms")
 
@@ -60,11 +62,15 @@ class PipelineAdapter:
             }
         trace = result.get("grounding_trace") or {}
         timing = result.get("timing_ms", {})
-        return {
+        response = {
             "answer": result.get("final_answer") or result.get("answer") or "İşlem desteklenmiyor.",
             "used_fallback": bool(trace.get("fallback_reason")),
             "metrics": self._metrics(timing if timing else result.get("metrics", {})),
         }
+        navigation_targets = build_navigation_targets(result)
+        if navigation_targets:
+            response["navigation_targets"] = navigation_targets
+        return response
 
     @staticmethod
     def _error(stage, code=None):

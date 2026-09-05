@@ -53,7 +53,7 @@ export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCance
       role: message.role,
       content,
       createdAt: new Date(),
-      metadata: { custom: { usedFallback: Boolean(message.usedFallback), metrics: publicMetrics(run) } },
+      metadata: { custom: { usedFallback: Boolean(message.usedFallback), metrics: publicMetrics(run), navigationTargets: message.navigationTargets } },
     };
   }, [state.runs, state.runHistory, threadId]);
   const runtimeStore = useMemo(() => ({
