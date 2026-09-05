@@ -13,6 +13,14 @@ export async function getSuggestions(token) {
   const payload = await (await request("/suggestions", token)).json();
   return Array.isArray(payload.suggestions) ? payload.suggestions : [];
 }
+export async function getDemoScenarios(token) {
+  const payload = await (await request("/demo/scenarios", token)).json();
+  return Array.isArray(payload.scenarios) ? payload.scenarios : [];
+}
+export async function runDemoScenario(scenarioId, token) {
+  return (await request("/demo/scenarios", token, { method: "POST", body: JSON.stringify({ scenario_id: scenarioId }) })).json();
+}
+export async function resetDemo(token) { return (await request("/demo/reset", token, { method: "POST", body: "{}" })).json(); }
 export async function getThread(threadId, token) { return (await request(`/threads/${encodeURIComponent(threadId)}`, token)).json(); }
 export async function createThread(token) { return (await request("/threads", token, { method: "POST", body: "{}" })).json(); }
 export async function deleteThread(threadId, token) { await request(`/threads/${encodeURIComponent(threadId)}`, token, { method: "DELETE" }); }

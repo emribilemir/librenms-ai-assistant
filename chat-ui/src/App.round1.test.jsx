@@ -22,7 +22,85 @@ import { ApiError } from "./api";
 import { AssistantChatStore, createInitialState } from "./store";
 
 const currentMetrics = { planner_ms: 2, resolver_ms: 3, backend_ms: 4, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 6, total_ms: 8 };
-const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+const demoScenarios = [
+  { id: "port-down", label: "Port Down", example_question: "Port down?" },
+  { id: "port-up", label: "Port Up", example_question: "Port up?" },
+  { id: "location-change", label: "Location Change", example_question: "Where?" },
+  { id: "device-down-up", label: "Device Down/Up", example_question: "Last down?" },
+  { id: "port-down-up-event", label: "Generate Port Event", example_question: "Events?" },
+];
+const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDemoScenarios: jest.fn().mockResolvedValue([]), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+
+test("demo mode off keeps all simulation UI hidden", async () => {
+  const api = makeApi();
+
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+
+  await waitFor(() => expect(api.getDemoScenarios).toHaveBeenCalledWith("plugin-token"));
+  expect(screen.queryByRole("button", { name: "Demo Controls" })).not.toBeInTheDocument();
+});
+
+test("demo mode on opens the bounded drawer and triggers all five scenarios", async () => {
+  const api = makeApi({
+    getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
+    runDemoScenario: jest.fn((scenarioId) => Promise.resolve({
+      scenario_id: scenarioId,
+      snmp_state_changed: true,
+      librenms_completed: true,
+      verified: `${scenarioId} verified`,
+      example_question: "Ask the device",
+    })),
+  });
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Demo Controls" }));
+
+  expect(screen.getByRole("dialog", { name: "Demo Controls" })).toBeVisible();
+  expect(screen.getByText((_, element) => element.textContent === "Target: lab-j9772a-01")).toBeVisible();
+  for (const scenario of demoScenarios) {
+    fireEvent.click(screen.getByRole("button", { name: scenario.label }));
+    await waitFor(() => expect(api.runDemoScenario).toHaveBeenCalledWith(scenario.id, "plugin-token"));
+  }
+  expect(api.runDemoScenario).toHaveBeenCalledTimes(5);
+});
+
+test("demo drawer blocks duplicate clicks and renders success, failure and reset", async () => {
+  let finishScenario;
+  const pending = new Promise((resolve) => { finishScenario = resolve; });
+  const api = makeApi({
+    getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
+    runDemoScenario: jest.fn().mockReturnValue(pending),
+    resetDemo: jest.fn().mockResolvedValue({
+      snmp_state_changed: true,
+      librenms_completed: true,
+      verified: "Baseline restored",
+    }),
+  });
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Demo Controls" }));
+  const portDown = screen.getByRole("button", { name: "Port Down" });
+  fireEvent.click(portDown);
+  fireEvent.click(portDown);
+
+  expect(api.runDemoScenario).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Running Port Down…")).toBeVisible();
+  await act(async () => finishScenario({
+    scenario_id: "port-down",
+    snmp_state_changed: true,
+    librenms_completed: true,
+    verified: "Port 2 is now down",
+    example_question: "lab-j9772a-01 port 2 ne durumda?",
+  }));
+  expect(await screen.findByText("✓ Port 2 is now down")).toBeVisible();
+  expect(screen.getByText(/lab-j9772a-01 port 2 ne durumda/)).toBeVisible();
+
+  fireEvent.click(screen.getByRole("button", { name: "Reset Lab" }));
+  expect(await screen.findByText("✓ Baseline restored")).toBeVisible();
+  expect(api.resetDemo).toHaveBeenCalledWith("plugin-token");
+
+  api.runDemoScenario.mockRejectedValueOnce(new ApiError(503));
+  fireEvent.click(screen.getByRole("button", { name: "Port Up" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Scenario could not be completed");
+});
 
 test("loads live suggestions into ExternalStoreRuntime", async () => {
   const suggestions = [{

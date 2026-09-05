@@ -433,20 +433,41 @@ def load_scenarios():
     )
 
 
+def execute_scenario(scenario_id):
+    scenarios = load_scenarios()
+    if scenario_id not in SCENARIO_RUNNERS or scenario_id not in scenarios:
+        raise ValueError(f"unsupported scenario: {scenario_id}")
+    preflight()
+    changed, verified, events = SCENARIO_RUNNERS[scenario_id](api_backend())
+    return {
+        "scenario_id": scenario_id,
+        "snmp_state_changed": bool(changed),
+        "librenms_completed": True,
+        "verified": verified,
+        "events": [
+            {
+                "event_id": event.get("event_id"),
+                "timestamp": event.get("timestamp"),
+                "message": event.get("message"),
+            }
+            for event in events
+        ],
+        "example_question": scenarios[scenario_id]["example_ai_question"],
+    }
+
+
 def main(argv=None):
     scenarios = load_scenarios()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", choices=scenarios)
     args = parser.parse_args(argv)
-    preflight()
-    backend = api_backend()
-    changed, verified, events = SCENARIO_RUNNERS[args.scenario](backend)
+    result = execute_scenario(args.scenario)
     metadata = scenarios[args.scenario]
     print(f"Scenario: {args.scenario}")
-    print(f"SNMP state changed: {'yes' if changed else 'no'}")
+    print(f"SNMP state changed: {'yes' if result['snmp_state_changed'] else 'no'}")
     print("LibreNMS poll/discovery completed: yes")
-    print(f"Verified: {verified}")
-    for event in events:
+    print(f"Verified: {result['verified']}")
+    for event in result["events"]:
         print(f"Event: {event_line(event)}")
     print(f"Example AI question: {metadata['example_ai_question']}")
     print("Reset: available (python3 simulation/reset.py)")

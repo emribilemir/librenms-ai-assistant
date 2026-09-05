@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,6 +116,50 @@ class ScenarioManifestTests(unittest.TestCase):
         for scenario in scenarios.values():
             self.assertTrue(scenario["example_ai_question"])
             self.assertTrue(scenario["expected"])
+
+    def test_execute_scenario_reuses_the_existing_runner_and_bounds_result(self):
+        event = {
+            "event_id": 42,
+            "timestamp": "2026-09-04 12:00:00",
+            "message": "ifOperStatus: up -> down",
+            "ignored": "not exposed",
+        }
+        with (
+            patch.object(simulation_run, "preflight") as preflight,
+            patch.object(simulation_run, "api_backend", return_value="backend"),
+            patch.dict(
+                simulation_run.SCENARIO_RUNNERS,
+                {"port-down": lambda backend: (True, f"{backend} verified", [event])},
+                clear=True,
+            ),
+            patch.object(
+                simulation_run,
+                "load_scenarios",
+                return_value={
+                    "port-down": {"example_ai_question": "Port 2 ne durumda?"}
+                },
+            ),
+        ):
+            result = simulation_run.execute_scenario("port-down")
+
+        preflight.assert_called_once_with()
+        self.assertEqual(
+            result,
+            {
+                "scenario_id": "port-down",
+                "snmp_state_changed": True,
+                "librenms_completed": True,
+                "verified": "backend verified",
+                "events": [
+                    {
+                        "event_id": 42,
+                        "timestamp": "2026-09-04 12:00:00",
+                        "message": "ifOperStatus: up -> down",
+                    }
+                ],
+                "example_question": "Port 2 ne durumda?",
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@
   height: calc(100dvh - var(--ai-shell-offset, 190px));
   min-height: 590px;
   overflow: hidden;
+  position: relative;
 }
 .shell[data-sidebar-collapsed] { grid-template-columns: 56px minmax(0, 1fr); }
 .main { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
@@ -18,6 +19,8 @@
 .header h1 { color: #f3f5f7; font-size: 17px; font-weight: 540; margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status { color: #86cf9b; font-size: 11px; font-weight: 700; margin-left: auto; white-space: nowrap; }
 .status::before { background: #48b96a; border-radius: 50%; content: ""; display: inline-block; height: 7px; margin-right: 6px; width: 7px; }
+.demoEntry { background: transparent; border: 1px solid #56616a; border-radius: 4px; color: #b8c1c8; cursor: pointer; font-size: 11px; margin-left: auto; min-height: 30px; padding: 5px 9px; }
+.demoEntry + .status { margin-left: 0; }
 .menu { display: none; min-height: 36px; min-width: 36px; }
 .skip { background: #d9232e; color: #fff; left: 10px; padding: 9px 12px; position: fixed; top: -80px; z-index: 20; }
 .skip:focus { top: 10px; }

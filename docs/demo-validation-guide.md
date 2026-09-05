@@ -1,8 +1,9 @@
 # EMR-55 minimal simulation runner
 
 Bu CLI yalnız mevcut UTM içindeki `lab-j9772a-01` SNMPSIM fixture'ını ve
-LibreNMS `device_id=1` kaydını kullanır. Frontend, yeni API, run store veya
-genel amaçlı orchestration katmanı içermez.
+LibreNMS `device_id=1` kaydını kullanır. CLI ve dev-only web kontrolleri aynı
+runner fonksiyonunu çağırır; run store veya genel amaçlı orchestration katmanı
+içermez.
 
 ## Ön koşullar
 
@@ -68,3 +69,11 @@ port 2 ifOperStatus=down
 Reset, offline fixture adını geri getirir, gerekirse responder'ı tek instance
 olarak başlatır, exact OID değerlerini düzeltir, discovery ve poller çalıştırır
 ve sonucu gerçek LibreNMS API verisiyle doğrular.
+
+## Dev-only web kontrolleri
+
+Servisi `AI_DEMO_MODE=1` ile başlatınca chat header'ındaki düşük profilli
+`Demo Controls` girişi beş mevcut scenario'yu ve ayrı reset aksiyonunu açar.
+Flag kapalıyken giriş görünmez ve `/v1/demo/*` endpoint'leri kayıt edilmez.
+Browser yalnız allowlist'teki `scenario_id` değerini gönderir; mutation ve
+canlı doğrulama yukarıdaki mevcut runner tarafından yapılır.
