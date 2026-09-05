@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 from librenms_backend import LibreNMSBackend
 
+from .inspection import build_inspection
 from .navigation import build_navigation_targets
 
 
@@ -11,9 +14,14 @@ _METRICS = ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_
 
 
 class PipelineAdapter:
-    def __init__(self, orchestrator=None, device_source=None):
+    def __init__(self, orchestrator=None, device_source=None, include_inspection=None):
         self._orchestrator = orchestrator
         self._device_source = device_source
+        self._include_inspection = (
+            os.environ.get("AI_DEMO_MODE") == "1"
+            if include_inspection is None
+            else bool(include_inspection)
+        )
 
     def list_devices(self):
         source = self._device_source
@@ -70,6 +78,8 @@ class PipelineAdapter:
         navigation_targets = build_navigation_targets(result)
         if navigation_targets:
             response["navigation_targets"] = navigation_targets
+        if self._include_inspection:
+            response["inspection"] = build_inspection(result, navigation_targets)
         return response
 
     @staticmethod
