@@ -12,8 +12,10 @@ function restoredMessages(messages, history, currentMessages = []) {
   return messages.map((message) => {
     if (message.role !== "assistant") return message;
     const run = acceptedRuns[acceptedIndex++];
-    const navigationTargets = currentById.get(message.id)?.navigationTargets;
-    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback), ...(navigationTargets ? { navigationTargets } : {}) } : message;
+    const current = currentById.get(message.id);
+    const navigationTargets = current?.navigationTargets;
+    const inspection = current?.inspection;
+    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback), ...(navigationTargets ? { navigationTargets } : {}), ...(inspection ? { inspection } : {}) } : message;
   });
 }
 
@@ -99,7 +101,7 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
   if (event === "completed") {
     const messages = messagesFor(state, threadId).map((message) => {
       const isAnswer = data.message_id ? message.id === data.message_id : message.runId === data.run_id;
-      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback), ...(Array.isArray(data.navigation_targets) ? { navigationTargets: data.navigation_targets } : {}) } : message;
+      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback), ...(Array.isArray(data.navigation_targets) ? { navigationTargets: data.navigation_targets } : {}), ...(data.inspection && typeof data.inspection === "object" && !Array.isArray(data.inspection) ? { inspection: data.inspection } : {}) } : message;
     });
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { status: data.status, metrics: data.metrics, usedFallback: data.used_fallback, canRetry: data.status === "failed" && Boolean(state.runs[threadId]?.error?.retryable) });
   }

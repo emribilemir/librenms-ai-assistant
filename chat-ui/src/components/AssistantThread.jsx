@@ -11,6 +11,7 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Square } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
+import { ProcessingInspector } from "./ProcessingInspector";
 import styles from "./AssistantThread.module.css";
 
 // Structure adapted from assistant-ui's official Perplexity Clone example.
@@ -81,12 +82,14 @@ function UserMessage() {
 
 function AssistantMessage() {
   const usedFallback = useAuiState((state) => Boolean(state.message.metadata?.custom?.usedFallback));
+  const inspection = useAuiState((state) => state.message.metadata?.custom?.inspection);
   return (
     <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
       <div className={styles.assistantBody}>
         {usedFallback && <span className={styles.fallback}>Doğrulanmış güvenli yanıt</span>}
         <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: PipelineReasoning, Empty: () => null }} />
         <NavigationActions />
+        <ProcessingInspector value={inspection} />
         <div className={styles.messageTools}>
           <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
         </div>

@@ -87,11 +87,11 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     secret = secret if secret is not None else os.environ.get("AI_ASSISTANT_SHARED_SECRET", "").encode()
     verifier = IdentityVerifier(secret)
     store = ChatStore(database_path or os.environ.get("AI_CHAT_DB", "ai-chat.sqlite3"))
-    adapter = adapter or PipelineAdapter()
+    demo_mode = os.environ.get("AI_DEMO_MODE") == "1"
+    adapter = adapter or PipelineAdapter(include_inspection=demo_mode)
     registry = ActiveRunRegistry()
     logger = logger or RestrictedJsonLogger(sys.stderr)
     app = FastAPI()
-    demo_mode = os.environ.get("AI_DEMO_MODE") == "1"
     demo_runner = load_simulation_runner() if demo_mode else None
     demo_lock = threading.Lock()
 
@@ -344,6 +344,8 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 completed = {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics}
                 if result.get("navigation_targets"):
                     completed["navigation_targets"] = result["navigation_targets"]
+                if demo_mode and isinstance(result.get("inspection"), dict):
+                    completed["inspection"] = result["inspection"]
                 yield _sse("completed", completed)
             except Exception:
                 if work == "storage":

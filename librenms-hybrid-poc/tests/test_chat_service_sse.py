@@ -97,6 +97,63 @@ class SseServiceTests(unittest.TestCase):
         detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
         self.assertNotIn("navigation_targets", detail["messages"][-1])
 
+    def test_demo_mode_off_drops_adapter_inspection_from_completed_transport(self):
+        class InspectionAdapter(CompletedAdapter):
+            def run(self, content, observer, is_cancelled):
+                result = super().run(content, observer, is_cancelled)
+                result["inspection"] = {"route": "ports"}
+                return result
+
+        with patch.dict(os.environ, {"AI_DEMO_MODE": "0"}):
+            client = TestClient(create_app(
+                os.path.join(self.directory.name, "inspection-off.sqlite3"),
+                secret=SECRET,
+                adapter=InspectionAdapter(),
+            ))
+        headers = bearer()
+        thread = client.post("/v1/threads", headers=headers, json={}).json()
+        response = client.post(
+            f"/v1/threads/{thread['id']}/runs",
+            headers=headers,
+            json={"client_message_id": "inspection-off", "content": "durum nedir?"},
+        )
+        completed = json.loads([
+            line[6:] for line in response.text.splitlines() if line.startswith("data:")
+        ][-1])
+
+        self.assertNotIn("inspection", completed)
+
+    def test_demo_mode_on_carries_adapter_inspection_without_persisting_it(self):
+        inspection = {"route": "ports", "synthesis_llm_called": False}
+
+        class InspectionAdapter(CompletedAdapter):
+            def run(self, content, observer, is_cancelled):
+                result = super().run(content, observer, is_cancelled)
+                result["inspection"] = inspection
+                return result
+
+        with patch.dict(os.environ, {"AI_DEMO_MODE": "1"}):
+            client = TestClient(create_app(
+                os.path.join(self.directory.name, "inspection-on.sqlite3"),
+                secret=SECRET,
+                adapter=InspectionAdapter(),
+            ))
+        headers = bearer()
+        thread = client.post("/v1/threads", headers=headers, json={}).json()
+        response = client.post(
+            f"/v1/threads/{thread['id']}/runs",
+            headers=headers,
+            json={"client_message_id": "inspection-on", "content": "durum nedir?"},
+        )
+        completed = json.loads([
+            line[6:] for line in response.text.splitlines() if line.startswith("data:")
+        ][-1])
+
+        self.assertIn("inspection", completed)
+        self.assertEqual(completed["inspection"], inspection)
+        detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertNotIn("inspection", detail["messages"][-1])
+
     def test_approved_answer_uses_multiple_lossless_delta_frames(self):
         answer = (
             "Cihaz erişilebilir durumda. İki yönetimsel olarak açık port bağlantı "

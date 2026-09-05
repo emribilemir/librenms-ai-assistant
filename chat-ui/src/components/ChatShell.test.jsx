@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
 import { AssistantThread } from "./AssistantThread";
 import { DeleteThreadDialog } from "./DeleteThreadDialog";
@@ -104,6 +104,121 @@ test("assistant messages expose an assistant-ui copy action", () => {
 
   render(<Fixture />);
   expect(screen.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Nasıl işlendi?" })).not.toBeInTheDocument();
+});
+
+test("validated demo metadata opens a compact summary and JSON view from the same inspection", () => {
+  const inspection = {
+    planner: { request_type: "ports", intent: "device_ports" },
+    resolution: { hostname: "lab-j9772a-01", device_id: 1, port_id: 2, ifIndex: 2 },
+    route: "ports",
+    tools: [
+      { name: "get_device", args: { hostname: "lab-j9772a-01" } },
+      { name: "get_ports", args: { device_id: 1 } },
+    ],
+    findings: [{ type: "port_admin_up_oper_down", port_id: 2, ifIndex: "2", admin_status: "up", oper_status: "down" }],
+    synthesis_llm_called: false,
+    navigation_targets: [{ kind: "port", label: "Port detayını aç", entity_id: 2, href: "/device/1/port/port=2" }],
+  };
+  const runtimeStore = {
+    messages: [{
+      id: "answer",
+      role: "assistant",
+      content: [{ type: "text", text: "Port 2 down" }],
+      createdAt: new Date(),
+      metadata: { custom: { inspection } },
+    }],
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const disclosure = screen.getByRole("button", { name: "Nasıl işlendi?" });
+  expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("region", { name: "İşleme ayrıntıları" })).not.toBeInTheDocument();
+
+  fireEvent.click(disclosure);
+  const panel = screen.getByRole("region", { name: "İşleme ayrıntıları" });
+  expect(disclosure).toHaveAttribute("aria-expanded", "true");
+  expect(within(panel).getAllByText("ports", { selector: "dd" })).toHaveLength(2);
+  expect(within(panel).getByText("device_ports")).toBeVisible();
+  expect(within(panel).getByText("lab-j9772a-01")).toBeVisible();
+  expect(within(panel).getByText("get_ports")).toBeVisible();
+  expect(within(panel).getByText("Hayır")).toBeVisible();
+  expect(within(panel).getByText("/device/1/port/port=2")).toBeVisible();
+  expect(within(panel).queryByRole("link")).not.toBeInTheDocument();
+
+  const summaryTab = within(panel).getByRole("tab", { name: "Özet" });
+  const jsonTab = within(panel).getByRole("tab", { name: "JSON" });
+  expect(summaryTab).toHaveAttribute("aria-controls", within(panel).getByRole("tabpanel").id);
+  expect(jsonTab).toHaveAttribute("tabindex", "-1");
+  summaryTab.focus();
+  fireEvent.keyDown(summaryTab, { key: "ArrowRight" });
+  expect(jsonTab).toHaveFocus();
+  expect(jsonTab).toHaveAttribute("aria-selected", "true");
+  expect(panel.querySelector("pre")).toHaveTextContent(JSON.stringify(inspection, null, 2), { normalizeWhitespace: false });
+});
+
+test("malformed optional inspection sections are ignored by the frontend safety layer", () => {
+  const runtimeStore = {
+    messages: [{
+      id: "answer",
+      role: "assistant",
+      content: [{ type: "text", text: "Validated" }],
+      createdAt: new Date(),
+      metadata: { custom: { inspection: {
+        planner: null,
+        resolution: "invalid",
+        route: "ports",
+        tools: [null, { name: 7, args: { token: "secret" } }],
+        findings: "invalid",
+        navigation_targets: [null],
+        hidden_prompt: "do not render",
+      } } },
+    }],
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  fireEvent.click(screen.getByRole("button", { name: "Nasıl işlendi?" }));
+  const panel = screen.getByRole("region", { name: "İşleme ayrıntıları" });
+  expect(within(panel).getByText("ports", { selector: "dd" })).toBeVisible();
+  fireEvent.click(within(panel).getByRole("tab", { name: "JSON" }));
+  expect(within(panel).getByText(/"route": "ports"/, { selector: "pre" })).toBeVisible();
+  expect(within(panel).queryByText(/secret|hidden_prompt/)).not.toBeInTheDocument();
+});
+
+test("the external-store bridge carries completed inspection metadata into assistant messages", () => {
+  const inspection = { route: "atomic", tools: [], findings: [], synthesis_llm_called: false, navigation_targets: [] };
+  const store = new AssistantChatStore({
+    threads: [{ id: "a", title: "Core" }],
+    selectedThreadId: "a",
+    messages: { a: [{ id: "answer", role: "assistant", content: "Observed", runId: "r", inspection }] },
+    runs: { a: { id: "r", status: "completed", stages: {} } },
+    runHistory: { a: [] },
+    drawerOpen: false,
+  });
+
+  function Fixture() {
+    const runtime = useLibreNmsExternalStoreRuntime(store, "a", jest.fn(), jest.fn(), []);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  expect(screen.getByRole("button", { name: "Nasıl işlendi?" })).toBeVisible();
 });
 
 test("assistant messages render only validated relative LibreNMS navigation actions", () => {

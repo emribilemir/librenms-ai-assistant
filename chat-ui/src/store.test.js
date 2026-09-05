@@ -94,6 +94,25 @@ test("attaches completed navigation targets to the accepted message and preserve
   expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
 });
 
+test("attaches completed inspection to the accepted message and preserves it across in-memory refresh", () => {
+  const inspection = {
+    planner: { request_type: "ports", intent: "device_ports" },
+    route: "ports",
+    tools: [{ name: "get_ports", args: { device_id: 1 } }],
+    findings: [],
+    synthesis_llm_called: false,
+    navigation_targets: [],
+  };
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "Validated" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "completed", message_id: "m", used_fallback: false, inspection, metrics } });
+  expect(state.messages.a[0].inspection).toEqual(inspection);
+
+  state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Core", messages: [{ id: "m", role: "assistant", content: "Validated" }], runs: [{ id: "r", status: "completed" }] } });
+  expect(state.messages.a[0].inspection).toEqual(inspection);
+});
+
 test("does not render an answer delta until the server emits a validated delta", () => {
   let state = createInitialState({ selectedThreadId: "a" });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
