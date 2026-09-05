@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const mockUseExternalStoreRuntime = jest.fn(() => ({}));
-jest.mock("@assistant-ui/react", () => ({ AssistantRuntimeProvider: ({ children }) => children, useExternalStoreRuntime: (...args) => mockUseExternalStoreRuntime(...args) }));
+jest.mock("@assistant-ui/react", () => {
+  const actual = jest.requireActual("@assistant-ui/react");
+  return { ...actual, AssistantRuntimeProvider: ({ children }) => children, useExternalStoreRuntime: (...args) => mockUseExternalStoreRuntime(...args) };
+});
 jest.mock("./components/AssistantThread", () => {
   const React = require("react");
   return {

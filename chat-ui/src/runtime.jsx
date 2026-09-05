@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useExternalStoreRuntime } from "@assistant-ui/react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { createMessageQueue, useExternalStoreRuntime } from "@assistant-ui/react";
 
 const STAGE_COPY = {
   planner: { running: "Soruyu sınıflandırıyor", completed: "Soruyu sınıflandırdı" },
@@ -37,9 +37,51 @@ function publicMetrics(run) {
   return METRIC_KEYS.some((key) => metrics[key] != null) ? metrics : null;
 }
 
-export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCancel, suggestions = [], threadActions = {}) {
+function messageText(message) {
+  return (message.content || [])
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n\n");
+}
+
+export function createLibreNmsMessageQueue(onSend) {
+  let queue;
+  queue = createMessageQueue({
+    run: (message) => {
+      void Promise.resolve(onSend(messageText(message))).finally(() => queue.notifyIdle());
+    },
+  });
+  return queue;
+}
+
+export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCancel, suggestions = [], threadActions = {}, queueOptions = {}) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const messages = state.messages[threadId] || [];
+  const isRunning = state.runs[threadId]?.status === "running";
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
+  const queue = useMemo(() => {
+    const controller = createLibreNmsMessageQueue((content) => onSendRef.current(content));
+    if (isRunning) controller.notifyBusy();
+    return controller;
+    // Context changes intentionally replace the in-memory queue. A running
+    // request keeps its original controller, so its eventual settle cannot
+    // drain messages into the replacement conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueOptions.contextKey]);
+  useEffect(() => {
+    const controllerRef = queueOptions.controllerRef;
+    if (controllerRef) controllerRef.current = queue;
+    return () => {
+      queue.clear();
+      if (controllerRef?.current === queue) controllerRef.current = null;
+    };
+  }, [queue, queueOptions.controllerRef]);
+  const queueSnapshot = useSyncExternalStore(
+    queue.subscribe,
+    () => `${queue.adapter.steerItems.map((item) => item.id).join(",")}|${queue.adapter.items.map((item) => item.id).join(",")}`,
+    () => "",
+  );
   const convertMessage = useCallback((message) => {
     const liveRun = state.runs[threadId];
     const persistedRun = (state.runHistory[threadId] || []).find((run) => run.id === message.runId);
@@ -60,9 +102,10 @@ export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCance
     messages,
     convertMessage,
     suggestions,
-    isRunning: state.runs[threadId]?.status === "running",
+    isRunning,
     onNew: async (message) => onSend(message.content?.[0]?.text || ""),
     onCancel: async () => onCancel(),
+    queue: queue.adapter,
     adapters: {
       threadList: {
         threadId: threadId || undefined,
@@ -76,6 +119,6 @@ export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCance
         onSwitchToThread: threadActions.onSelect,
       },
     },
-  }), [messages, convertMessage, suggestions, state.runs, state.threads, threadId, onSend, onCancel, threadActions.onCreate, threadActions.onSelect]);
+  }), [messages, convertMessage, suggestions, isRunning, state.threads, threadId, onSend, onCancel, threadActions.onCreate, threadActions.onSelect, queue, queueSnapshot]);
   return useExternalStoreRuntime(runtimeStore);
 }

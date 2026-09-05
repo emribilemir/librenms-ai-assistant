@@ -45,9 +45,13 @@ class DeterministicPipelineAdapter:
     def __init__(self):
         self._attempts = defaultdict(int)
         self._retry_failure_release = threading.Event()
+        self._queue_release = threading.Event()
 
     def release_retryable_failure(self):
         self._retry_failure_release.set()
+
+    def release_queue_barrier(self):
+        self._queue_release.set()
 
     @staticmethod
     def list_devices():
@@ -91,6 +95,12 @@ class DeterministicPipelineAdapter:
             while not is_cancelled():
                 time.sleep(0.01)
             return {"cancelled": True, "metrics": metrics(planner=7)}
+
+        if "queue barrier" in question:
+            self._queue_release.clear()
+            while not self._queue_release.wait(0.02):
+                if is_cancelled():
+                    return {"cancelled": True, "metrics": metrics(planner=7)}
 
         if not self._stage(observer, is_cancelled, "resolver", 11):
             return {"cancelled": True, "metrics": metrics(planner=7)}
@@ -171,6 +181,12 @@ def main():
     def release_retryable_failure():
         """Test-only deterministic barrier; no production route is changed."""
         adapter.release_retryable_failure()
+        return Response(status_code=204)
+
+    @app.post("/__test__/release-queue-barrier", status_code=204)
+    def release_queue_barrier():
+        """Release the first request so browser tests can observe FIFO drain."""
+        adapter.release_queue_barrier()
         return Response(status_code=204)
 
     uvicorn.run(
