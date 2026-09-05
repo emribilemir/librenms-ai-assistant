@@ -60,6 +60,43 @@ class SseServiceTests(unittest.TestCase):
         detail = self.client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
         self.assertEqual(detail["messages"][-1]["content"], "Güvenli yanıt")
 
+    def test_completed_event_carries_optional_navigation_targets_without_persisting_them(self):
+        class NavigationAdapter(CompletedAdapter):
+            def run(self, content, observer, is_cancelled):
+                result = super().run(content, observer, is_cancelled)
+                result["navigation_targets"] = [{
+                    "kind": "device",
+                    "label": "LibreNMS'te cihazı aç",
+                    "entity_id": 1,
+                    "href": "/device/1",
+                }]
+                return result
+
+        client = TestClient(create_app(
+            os.path.join(self.directory.name, "navigation.sqlite3"),
+            secret=SECRET,
+            adapter=NavigationAdapter(),
+        ))
+        headers = bearer()
+        thread = client.post("/v1/threads", headers=headers, json={}).json()
+        response = client.post(
+            f"/v1/threads/{thread['id']}/runs",
+            headers=headers,
+            json={"client_message_id": "navigation", "content": "durum nedir?"},
+        )
+        completed = json.loads([
+            line[6:] for line in response.text.splitlines() if line.startswith("data:")
+        ][-1])
+
+        self.assertEqual(completed["navigation_targets"], [{
+            "kind": "device",
+            "label": "LibreNMS'te cihazı aç",
+            "entity_id": 1,
+            "href": "/device/1",
+        }])
+        detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertNotIn("navigation_targets", detail["messages"][-1])
+
     def test_approved_answer_uses_multiple_lossless_delta_frames(self):
         answer = (
             "Cihaz erişilebilir durumda. İki yönetimsel olarak açık port bağlantı "

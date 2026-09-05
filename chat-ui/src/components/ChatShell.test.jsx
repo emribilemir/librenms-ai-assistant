@@ -106,6 +106,40 @@ test("assistant messages expose an assistant-ui copy action", () => {
   expect(screen.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
 });
 
+test("assistant messages render only validated relative LibreNMS navigation actions", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "Port 2 down" }],
+    createdAt: new Date(),
+    metadata: { custom: { navigationTargets: [
+      { kind: "port", label: "Port detayını aç", entity_id: 41, href: "/device/7/port/port=41" },
+      { kind: "device", label: "Kötü link", entity_id: 7, href: "https://evil.example/device/7" },
+      { kind: "device", label: "Tutarsız kimlik", entity_id: 7, href: "/device/8" },
+      { kind: "unknown", label: "Bilinmeyen", entity_id: 7, href: "/device/7" },
+    ] } },
+  }];
+  const runtimeStore = {
+    messages,
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const action = screen.getByRole("link", { name: "Port detayını aç" });
+  expect(action).toHaveAttribute("href", "/device/7/port/port=41");
+  expect(action).toHaveAttribute("target", "_blank");
+  expect(screen.queryByRole("link", { name: "Kötü link" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Tutarsız kimlik" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Bilinmeyen" })).not.toBeInTheDocument();
+});
+
 test("assistant-ui keeps the copy action in the message layout while a validated answer is streaming", () => {
   const runtimeStore = {
     messages: [{

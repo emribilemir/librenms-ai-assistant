@@ -17,6 +17,11 @@
 .markdown :global(pre code) { background: transparent; color: inherit; padding: 0; }
 .markdown :global(a) { color: #e04b54; text-underline-offset: 3px; }
 .markdown :global(strong) { color: #fff; font-weight: 650; }
+.navigationActions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.navigationAction { align-items: center; background: #292f34; border: 1px solid #46515a; border-radius: 8px; color: #dce1e4; display: inline-flex; font-size: 12px; font-weight: 580; gap: 7px; line-height: 1; padding: 8px 10px; text-decoration: none; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
+.navigationAction:hover { background: #32393f; border-color: #69757e; color: #fff; }
+.navigationAction:focus-visible { outline: 2px solid #ef7a82; outline-offset: 2px; }
+.navigationAction svg { color: #d85a62; flex: none; }
 .messageTools { align-items: flex-start; display: flex; gap: 3px; min-height: 30px; padding-top: 4px; }
 .actionBar { display: flex; flex: none; }
 .messageAction { align-items: center; background: transparent; border: 0; border-radius: 50%; color: #919aa3; display: inline-flex; height: 32px; justify-content: center; transition: background-color 180ms ease, color 180ms ease, transform 120ms ease; width: 32px; }

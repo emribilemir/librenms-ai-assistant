@@ -6,12 +6,14 @@ export function createInitialState(seed = {}) {
 
 function messagesFor(state, threadId) { return state.messages[threadId] || []; }
 
-function restoredMessages(messages, history) {
+function restoredMessages(messages, history, currentMessages = []) {
   const acceptedRuns = history.filter((run) => run.status === "completed"); let acceptedIndex = 0;
+  const currentById = new Map(currentMessages.map((message) => [message.id, message]));
   return messages.map((message) => {
     if (message.role !== "assistant") return message;
     const run = acceptedRuns[acceptedIndex++];
-    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback) } : message;
+    const navigationTargets = currentById.get(message.id)?.navigationTargets;
+    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback), ...(navigationTargets ? { navigationTargets } : {}) } : message;
   });
 }
 
@@ -42,7 +44,7 @@ export function reduceAssistantChat(state, action) {
       } : currentRun;
       const thread = { ...action.thread }; delete thread.messages; delete thread.runs;
       const threads = state.threads.some((item) => item.id === thread.id) ? state.threads.map((item) => item.id === thread.id ? { ...item, ...thread } : item) : [thread, ...state.threads];
-      return { ...state, threads, selectedThreadId: action.preserveSelection ? state.selectedThreadId : action.thread.id, messages: { ...state.messages, [action.thread.id]: restoredMessages(action.thread.messages || [], history) }, runs: run ? { ...state.runs, [action.thread.id]: run } : state.runs, runHistory: { ...state.runHistory, [action.thread.id]: history } };
+      return { ...state, threads, selectedThreadId: action.preserveSelection ? state.selectedThreadId : action.thread.id, messages: { ...state.messages, [action.thread.id]: restoredMessages(action.thread.messages || [], history, messagesFor(state, action.thread.id)) }, runs: run ? { ...state.runs, [action.thread.id]: run } : state.runs, runHistory: { ...state.runHistory, [action.thread.id]: history } };
     }
     case "thread.deleted": {
       const threads = state.threads.filter((thread) => thread.id !== action.threadId);
@@ -97,7 +99,7 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
   if (event === "completed") {
     const messages = messagesFor(state, threadId).map((message) => {
       const isAnswer = data.message_id ? message.id === data.message_id : message.runId === data.run_id;
-      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback) } : message;
+      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback), ...(Array.isArray(data.navigation_targets) ? { navigationTargets: data.navigation_targets } : {}) } : message;
     });
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { status: data.status, metrics: data.metrics, usedFallback: data.used_fallback, canRetry: data.status === "failed" && Boolean(state.runs[threadId]?.error?.retryable) });
   }

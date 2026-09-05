@@ -173,6 +173,8 @@ class PortSelectionExecutionTests(unittest.TestCase):
         self.assertNotIn("Port 3:", trace["final_answer"])
         self.assertEqual(trace["tool_calls"][1]["args"], {"device_id": 1})
         self.assertFalse(trace["synthesis_llm_called"])
+        self.assertEqual(trace["navigation_context"]["device"]["device_id"], 1)
+        self.assertEqual(trace["navigation_context"]["ports"][0]["port_id"], 2)
 
     def test_down_ports_means_operationally_down(self):
         trace = self._run(

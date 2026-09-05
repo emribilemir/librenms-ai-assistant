@@ -9,7 +9,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { Activity, ArrowRight, Check, ChevronDown, Copy, Square } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Square } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
 import styles from "./AssistantThread.module.css";
 
@@ -32,6 +32,45 @@ function CopyAction() {
   );
 }
 
+const NAVIGATION_PATTERNS = {
+  device: /^\/device\/([1-9]\d*)$/,
+  port: /^\/device\/[1-9]\d*\/port\/port=([1-9]\d*)$/,
+  events: /^\/device\/([1-9]\d*)\/logs\/eventlog$/,
+  alerts: /^\/device\/([1-9]\d*)\/alerts$/,
+};
+
+function safeNavigationTargets(targets) {
+  if (!Array.isArray(targets)) return [];
+  return targets.filter((target) => {
+    if (
+      !target
+      || !Number.isInteger(target.entity_id)
+      || target.entity_id <= 0
+      || typeof target.label !== "string"
+      || target.label.length === 0
+      || target.label.length > 80
+      || typeof target.href !== "string"
+    ) return false;
+    const match = NAVIGATION_PATTERNS[target.kind]?.exec(target.href);
+    return Boolean(match && Number(match[1]) === target.entity_id);
+  }).slice(0, 3);
+}
+
+function NavigationActions() {
+  const navigationTargets = useAuiState((state) => state.message.metadata?.custom?.navigationTargets);
+  const targets = safeNavigationTargets(navigationTargets);
+  if (!targets.length) return null;
+  return (
+    <nav className={styles.navigationActions} aria-label="LibreNMS bağlantıları">
+      {targets.map((target) => (
+        <a key={`${target.kind}-${target.entity_id}-${target.href}`} className={styles.navigationAction} href={target.href} target="_blank" rel="noopener noreferrer">
+          {target.label}<ExternalLink size={13} aria-hidden="true" />
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 function UserMessage() {
   return (
     <MessagePrimitive.Root className={`${styles.message} ${styles.userMessage}`}>
@@ -47,6 +86,7 @@ function AssistantMessage() {
       <div className={styles.assistantBody}>
         {usedFallback && <span className={styles.fallback}>Doğrulanmış güvenli yanıt</span>}
         <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: PipelineReasoning, Empty: () => null }} />
+        <NavigationActions />
         <div className={styles.messageTools}>
           <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
         </div>

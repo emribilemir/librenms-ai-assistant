@@ -82,6 +82,18 @@ test("marks validated fallback answers for the transcript", () => {
   expect(state.messages.a[0].usedFallback).toBe(true);
 });
 
+test("attaches completed navigation targets to the accepted message and preserves them across refresh", () => {
+  const navigationTargets = [{ kind: "device", label: "LibreNMS'te cihazı aç", entity_id: 1, href: "/device/1" }];
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "Validated" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "completed", message_id: "m", used_fallback: false, navigation_targets: navigationTargets, metrics } });
+  expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
+
+  state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Core", messages: [{ id: "m", role: "assistant", content: "Validated" }], runs: [{ id: "r", status: "completed" }] } });
+  expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
+});
+
 test("does not render an answer delta until the server emits a validated delta", () => {
   let state = createInitialState({ selectedThreadId: "a" });
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });

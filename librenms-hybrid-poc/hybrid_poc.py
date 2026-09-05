@@ -1040,6 +1040,9 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
     structured_findings = None
     grounding_trace = None
     resolved_event_window = None
+    navigation_ports = []
+    navigation_alerts = []
+    navigation_events = []
     device = res.get("device") if isinstance(res, dict) else None
     hostname = device.get("hostname") if device else None
     def bk(fn, **kw):
@@ -1135,6 +1138,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         selected_ports = _select_ports(
             evidence["ports"], port_query=port_query, port_filters=port_filters
         )
+        navigation_ports = selected_ports
         if port_fact in ("speed", "description"):
             final_answer = utility_facts.format_ports_fact(
                 hostname, selected_ports, port_fact
@@ -1148,6 +1152,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         evidence["alerts"] = (
             bk("get_alerts", device_id=backend_did) if backend_did is not None else []
         )
+        navigation_alerts = evidence["alerts"]
         final_answer = _format_alerts_text(hostname, evidence["alerts"])
     elif route == "events":
         evidence["device"] = bk("get_device", hostname=hostname)
@@ -1166,6 +1171,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
             evidence["events"] = (
                 bk_events(backend_did) if backend_did is not None else []
             )
+            navigation_events = evidence["events"]
             final_answer = _format_events_text(hostname, evidence["events"])
         else:
             selected_port = None
@@ -1219,6 +1225,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
                         else None
                     ),
                 )
+                navigation_events = matching_events
 
                 if filters.get("mode") == "latest":
                     matching_events = matching_events[:1]
@@ -1243,6 +1250,7 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         structured_findings = investigation_grounding.build_investigation_evidence(
             evidence, resolved_event_window
         )
+        navigation_events = evidence["events"] or []
         complete_backend()
         timing["backend_ms"] = round(backend_total_ms, 2)
         if is_cancelled():
@@ -1276,6 +1284,9 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         structured_findings = investigation_grounding.build_investigation_evidence(
             evidence, resolved_event_window
         )
+        navigation_ports = evidence["ports"] or []
+        navigation_alerts = evidence["alerts"] or []
+        navigation_events = evidence["events"] or []
         complete_backend()
         timing["backend_ms"] = round(backend_total_ms, 2)
         if is_cancelled():
@@ -1318,6 +1329,12 @@ def orchestrate(query, inventory=None, backend=None, model=DEFAULT_MODEL,
         "llm_input": llm_input,
         "llm_output": llm_output,
         "final_answer": final_answer,
+        "navigation_context": {
+            "device": evidence.get("device"),
+            "ports": navigation_ports,
+            "alerts": navigation_alerts,
+            "events": navigation_events,
+        },
         "timing_ms": timing,
         "planner_failure": False,
         "planner_errors": planner_errors,
