@@ -20,3 +20,4 @@ if (!global.ResizeObserver) {
     disconnect() {}
   };
 }
+if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};

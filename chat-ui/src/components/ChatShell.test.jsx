@@ -162,6 +162,36 @@ test("assistant-ui keeps the copy action in the message layout while a validated
   expect(screen.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
 });
 
+test("running thread keeps the composer enabled and exposes removable queued follow-ups", async () => {
+  const send = jest.fn();
+  const store = new AssistantChatStore({
+    threads: [{ id: "a", title: "Core" }],
+    selectedThreadId: "a",
+    messages: { a: [{ id: "question", role: "user", content: "Çalışan soru" }] },
+    runs: { a: { id: "run-a", status: "running", stages: {} } },
+    runHistory: {},
+    drawerOpen: false,
+  });
+
+  function Fixture() {
+    const runtime = useLibreNmsExternalStoreRuntime(store, "a", send, jest.fn(), []);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+  expect(composer).toBeEnabled();
+  fireEvent.change(composer, { target: { value: "Bekleyen soru" } });
+  fireEvent.keyDown(composer, { key: "Enter", code: "Enter" });
+
+  expect(await screen.findByText("Bekleyen soru")).toBeVisible();
+  expect(send).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Çalışmayı iptal et" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Sıradaki soruyu kaldır: Bekleyen soru" }));
+  expect(screen.queryByText("Bekleyen soru")).not.toBeInTheDocument();
+  expect(send).not.toHaveBeenCalled();
+});
+
 test("saved conversations are rendered and switched by assistant-ui thread-list primitives", async () => {
   const switchThread = jest.fn();
   const createThread = jest.fn();
