@@ -8,24 +8,24 @@ from typing import Any
 
 PROMPTS = (
     (
-        "{hostname} durumunu kontrol et",
-        "Güncel cihaz durumu",
-        "{hostname} cihazının mevcut durumunu göster.",
+        "{hostname} açık mı?",
+        "Cihaz durumu",
+        "{hostname} açık mı?",
     ),
     (
-        "{hostname} portlarını incele",
+        "{hostname} port 2 ne durumda?",
+        "Port durumu",
+        "{hostname} port 2 ne durumda?",
+    ),
+    (
+        "{hostname}'in down portları hangileri?",
         "Down portlar",
-        "{hostname} üzerindeki down portları göster.",
+        "{hostname}'in down portları hangileri?",
     ),
     (
-        "{hostname} alarmlarını kontrol et",
+        "{hostname} üzerinde aktif alarm var mı?",
         "Aktif alarmlar",
-        "{hostname} için aktif alarmları göster.",
-    ),
-    (
-        "{hostname} olaylarını incele",
-        "Son olaylar",
-        "{hostname} cihazının son olaylarını göster.",
+        "{hostname} üzerinde aktif alarm var mı?",
     ),
 )
 

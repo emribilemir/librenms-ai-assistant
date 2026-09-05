@@ -46,14 +46,25 @@ class SuggestionGenerationTests(unittest.TestCase):
             {"hostname": "z-down", "status": 0},
             {"hostname": "b-up", "status": "up"},
             {"hostname": "a-up", "status": 1},
+            {"hostname": "lab-j9772a-01", "status": True},
+            {"hostname": "z-up", "status": "1"},
             {"hostname": "", "status": 1},
         ]
 
         result = build_suggestions(devices)
 
         self.assertEqual(
+            [item["prompt"] for item in result],
+            [
+                "a-up açık mı?",
+                "b-up port 2 ne durumda?",
+                "lab-j9772a-01'in down portları hangileri?",
+                "z-up üzerinde aktif alarm var mı?",
+            ],
+        )
+        self.assertEqual(
             [item["title"] for item in result],
-            ["a-up durumunu kontrol et", "b-up portlarını incele"],
+            [item["prompt"] for item in result],
         )
         self.assertTrue(all(item["prompt"] and item["label"] for item in result))
         self.assertTrue(all("z-down" not in item["prompt"] for item in result))
@@ -117,7 +128,7 @@ class SuggestionRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json()["suggestions"][0]["prompt"],
-            "lab-j9775a-01 cihazının mevcut durumunu göster.",
+            "lab-j9775a-01 açık mı?",
         )
 
     def test_returns_safe_503_without_upstream_details(self):

@@ -117,6 +117,20 @@ class ScenarioManifestTests(unittest.TestCase):
             self.assertTrue(scenario["example_ai_question"])
             self.assertTrue(scenario["expected"])
 
+        self.assertEqual(
+            {
+                scenario_id: scenario["example_ai_question"]
+                for scenario_id, scenario in scenarios.items()
+            },
+            {
+                "port-down": "lab-j9772a-01 port 2 ne durumda?",
+                "port-up": "lab-j9772a-01 port 2 ne durumda?",
+                "location-change": "lab-j9772a-01'in location bilgisi ne?",
+                "device-down-up": "lab-j9772a-01 en son ne zaman down oldu?",
+                "port-down-up-event": "lab-j9772a-01 son eventlerini göster",
+            },
+        )
+
     def test_execute_scenario_reuses_the_existing_runner_and_bounds_result(self):
         event = {
             "event_id": 42,
