@@ -1,4 +1,4 @@
-import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getDemoScenarios, getDevices, getSuggestions, getThread, listThreads, readEventStream, resetDemo, runDemoScenario, runThread } from "./api";
+import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getDemoMode, getDemoScenarios, getDevices, getSuggestions, getThread, listThreads, readEventStream, resetDemo, runDemoScenario, runThread, setDemoMode } from "./api";
 
 test("uses only the relative production API base with no embedded identity", async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "thread-a" }) });
@@ -69,6 +69,19 @@ test("demo requests send only the bounded scenario id and an empty reset body", 
   expect(global.fetch.mock.calls[2]).toEqual([
     "/ai-api/v1/demo/reset",
     expect.objectContaining({ method: "POST", body: "{}" }),
+  ]);
+});
+
+test("demo mode state reads and writes only its bounded boolean", async () => {
+  global.fetch = jest.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ allowed: true, enabled: false }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ allowed: true, enabled: true }) });
+
+  await expect(getDemoMode("token")).resolves.toEqual({ allowed: true, enabled: false });
+  await expect(setDemoMode(true, "token")).resolves.toEqual({ allowed: true, enabled: true });
+  expect(global.fetch.mock.calls[1]).toEqual([
+    "/ai-api/v1/demo-mode",
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ enabled: true }) }),
   ]);
 });
 

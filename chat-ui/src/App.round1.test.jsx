@@ -32,19 +32,36 @@ const demoScenarios = [
   { id: "device-down-up", label: "Device Down/Up", example_question: "Last down?" },
   { id: "port-down-up-event", label: "Generate Port Event", example_question: "Events?" },
 ];
-const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDevices: jest.fn().mockResolvedValue([]), getDemoScenarios: jest.fn().mockResolvedValue([]), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDevices: jest.fn().mockResolvedValue([]), getDemoMode: jest.fn().mockRejectedValue(new ApiError(404)), setDemoMode: jest.fn(), getDemoScenarios: jest.fn().mockResolvedValue([]), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
 
 test("demo mode off keeps all simulation UI hidden", async () => {
   const api = makeApi();
 
   render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
 
-  await waitFor(() => expect(api.getDemoScenarios).toHaveBeenCalledWith("plugin-token"));
+  await waitFor(() => expect(api.getDemoMode).toHaveBeenCalledWith("plugin-token"));
   expect(screen.queryByRole("button", { name: "Demo Controls" })).not.toBeInTheDocument();
+});
+
+test("allowed demo mode renders OFF and updates only after the backend confirms ON", async () => {
+  const api = makeApi({
+    getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: false }),
+    setDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
+    getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
+  });
+
+  render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
+
+  const toggle = await screen.findByRole("checkbox", { name: "Demo Mode" });
+  expect(toggle).not.toBeChecked();
+  fireEvent.click(toggle);
+  await waitFor(() => expect(api.setDemoMode).toHaveBeenCalledWith(true, "plugin-token"));
+  expect(await screen.findByRole("button", { name: "Demo Controls" })).toBeVisible();
 });
 
 test("demo mode on opens the bounded drawer and triggers all five scenarios", async () => {
   const api = makeApi({
+    getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
     getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
     runDemoScenario: jest.fn((scenarioId) => Promise.resolve({
       scenario_id: scenarioId,
@@ -70,6 +87,7 @@ test("demo drawer blocks duplicate clicks and renders success, failure and reset
   let finishScenario;
   const pending = new Promise((resolve) => { finishScenario = resolve; });
   const api = makeApi({
+    getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
     getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
     runDemoScenario: jest.fn().mockReturnValue(pending),
     resetDemo: jest.fn().mockResolvedValue({

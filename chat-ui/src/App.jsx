@@ -18,7 +18,7 @@ export default function App({ chatStore = defaultStore, identity = defaultIdenti
   const state = useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot, chatStore.getSnapshot);
   const [deleteTarget, setDeleteTarget] = useState(null); const [sessionExpired, setSessionExpired] = useState(false); const [suggestions, setSuggestions] = useState([]); const [suggestionsUnavailable, setSuggestionsUnavailable] = useState(false); const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [devices, setDevices] = useState([]); const [devicesUnavailable, setDevicesUnavailable] = useState(false); const [recentDevices, setRecentDevices] = useState([]);
-  const [demoScenarios, setDemoScenarios] = useState([]); const [demoOpen, setDemoOpen] = useState(false); const [demoRunning, setDemoRunning] = useState(""); const [demoResult, setDemoResult] = useState(null); const [demoError, setDemoError] = useState("");
+  const [demoMode, setDemoMode] = useState(null); const [demoChanging, setDemoChanging] = useState(false); const [demoScenarios, setDemoScenarios] = useState([]); const [demoOpen, setDemoOpen] = useState(false); const [demoRunning, setDemoRunning] = useState(""); const [demoResult, setDemoResult] = useState(null); const [demoError, setDemoError] = useState("");
   const [queueContextKey, setQueueContextKey] = useState(0);
   const activeRunsRef = useRef(new Map()); const demoActiveRef = useRef(false); const deleteTriggerRef = useRef(null); const mainRef = useRef(null); const queueControllerRef = useRef(null); const token = identity?.token || "";
   const devicesLoadedAtRef = useRef(0); const suggestionRotationRef = useRef(0); const suggestionRequestRef = useRef(0);
@@ -45,11 +45,30 @@ export default function App({ chatStore = defaultStore, identity = defaultIdenti
       if (error.status === 401) expireSession();
       else setDevicesUnavailable(true);
     });
-    api.getDemoScenarios(token).then((items) => { if (!cancelled) setDemoScenarios(items); }).catch((error) => {
+    api.getDemoMode(token).then((mode) => {
+      if (cancelled || mode?.allowed !== true || typeof mode.enabled !== "boolean") return;
+      setDemoMode(mode);
+      if (mode.enabled) api.getDemoScenarios(token).then((items) => { if (!cancelled) setDemoScenarios(items); }).catch((error) => {
+        if (!cancelled && error.status === 401) expireSession();
+      });
+    }).catch((error) => {
       if (!cancelled && error.status === 401) expireSession();
     });
     return () => { cancelled = true; };
   }, [api, chatStore, token]);
+  const toggleDemoMode = async () => {
+    if (!demoMode || demoChanging) return;
+    setDemoChanging(true);
+    try {
+      const mode = await api.setDemoMode(!demoMode.enabled, token);
+      if (mode?.allowed !== true || typeof mode.enabled !== "boolean") return;
+      setDemoMode(mode);
+      if (mode.enabled) setDemoScenarios(await api.getDemoScenarios(token));
+      else { setDemoScenarios([]); setDemoOpen(false); setDemoResult(null); setDemoError(""); }
+    } catch (error) {
+      if (error.status === 401) expireSession();
+    } finally { setDemoChanging(false); }
+  };
   const refreshDevices = () => {
     if (!token || Date.now() - devicesLoadedAtRef.current < 30000) return;
     devicesLoadedAtRef.current = Date.now();
@@ -111,7 +130,8 @@ export default function App({ chatStore = defaultStore, identity = defaultIdenti
           <header className={styles.header}>
             <button type="button" className={styles.menu} onClick={() => chatStore.dispatch({ type: "drawer.open" })} aria-label="Sohbet geçmişini aç">☰</button>
             <div><p>LibreNMS · Salt okunur</p><h1>{state.threads.find((thread) => thread.id === state.selectedThreadId)?.title || "AI Assistant"}</h1></div>
-            {demoScenarios.length ? <button type="button" className={styles.demoEntry} onClick={() => setDemoOpen(true)}>Demo Controls</button> : null}
+            {demoMode ? <label className={styles.demoMode}>Demo Mode <input type="checkbox" checked={demoMode.enabled} disabled={demoChanging} onChange={toggleDemoMode} /></label> : null}
+            {demoMode?.enabled && demoScenarios.length ? <button type="button" className={styles.demoEntry} onClick={() => setDemoOpen(true)}>Demo Controls</button> : null}
             <span className={styles.status}>Canlı</span>
           </header>
           {sessionExpired ? <p className={styles.error} role="alert">LibreNMS oturumunun süresi doldu. Devam etmek için sayfayı yenile.</p> : run?.error && <p className={styles.error} role="alert">{run.error.message}</p>}
