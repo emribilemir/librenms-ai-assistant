@@ -9,6 +9,14 @@ test.beforeEach(async ({ page }) => {
   );
   await page.goto("/");
   expect((await initialThreadList).status()).toBe(200);
+  const removedExistingThreads = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    const headers = { Authorization: `Bearer ${token}` };
+    const threads = await (await fetch("/ai-api/v1/threads", { headers })).json();
+    await Promise.all(threads.map((thread) => fetch(`/ai-api/v1/threads/${thread.id}`, { method: "DELETE", headers })));
+    return threads.length;
+  });
+  if (removedExistingThreads) await page.reload();
 });
 
 async function createThread(page) {
@@ -46,11 +54,52 @@ test("sends the first assistant-ui message without pre-creating a thread", async
   await expect(page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "first direct question", exact: true })).toBeVisible();
 });
 
+test("keeps New Chat idempotent while pristine and enables it after the first message", async ({ page }) => {
+  const newChat = page.locator('[data-slot="aui_thread-list-new"]');
+  await createThread(page);
+  await expect(newChat).toBeDisabled();
+  const pristineCount = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    return (await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json()).length;
+  });
+
+  await newChat.click({ force: true });
+  const afterDuplicate = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    return (await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json()).length;
+  });
+  expect(afterDuplicate).toBe(pristineCount);
+
+  await ask(page, "first meaningful message");
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  await expect(newChat).toBeEnabled();
+  await createThread(page);
+  const afterContent = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    return (await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json()).length;
+  });
+  expect(afterContent).toBe(pristineCount + 1);
+});
+
+test("restores safe navigation after reload and suppresses malformed targets", async ({ page }) => {
+  await ask(page, "navigation persistence");
+  const navigation = page.getByRole("navigation", { name: "LibreNMS bağlantıları" });
+  await expect(navigation.getByRole("link", { name: /LibreNMS'te cihazı aç/ })).toHaveAttribute("href", "/device/1");
+
+  await page.reload();
+  await page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "navigation persistence", exact: true }).click();
+  await expect(navigation.getByRole("link", { name: /LibreNMS'te cihazı aç/ })).toHaveAttribute("href", "/device/1");
+
+  await ask(page, "malformed navigation");
+  await expect(page.getByText("Validated result without an action.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Unsafe" })).toHaveCount(0);
+});
+
 test("builds assistant-ui starter prompts from currently up devices", async ({ page }) => {
-  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 durumunu kontrol et/i });
+  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 açık mı/i });
   await expect(liveSuggestion).toBeVisible();
   await liveSuggestion.click();
-  await expect(page.getByText("lab-j9775a-01 cihazının mevcut durumunu göster.")).toBeVisible();
+  await expect(page.getByText("lab-j9775a-01 açık mı?")).toBeVisible();
   await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
   await expect(page.getByRole("button", { name: /lab-offline-01/i })).toHaveCount(0);
 });

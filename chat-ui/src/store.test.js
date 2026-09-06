@@ -13,6 +13,19 @@ test("lists, creates, and selects only the current thread", () => {
   expect(state.threads.map((thread) => thread.id)).toEqual(["b", "a"]);
 });
 
+test("moves a reused pristine thread to the front without duplicating its id", () => {
+  const initial = createInitialState({
+    threads: [{ id: "active", title: "Completed" }, { id: "pristine", title: "" }],
+    selectedThreadId: "active",
+    messages: { active: [{ id: "m1", role: "user", content: "Done" }], pristine: [] },
+  });
+
+  const state = reduceAssistantChat(initial, { type: "thread.created", thread: { id: "pristine", title: "" } });
+
+  expect(state.threads.map((thread) => thread.id)).toEqual(["pristine", "active"]);
+  expect(state.selectedThreadId).toBe("pristine");
+});
+
 test("correlates an optimistic client message with the server run", () => {
   let state = createInitialState({ selectedThreadId: "a" });
   state = reduceAssistantChat(state, { type: "message.optimistic", threadId: "a", clientMessageId: "client-1", content: "Check edge" });
@@ -91,6 +104,20 @@ test("attaches completed navigation targets to the accepted message and preserve
   expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
 
   state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Core", messages: [{ id: "m", role: "assistant", content: "Validated" }], runs: [{ id: "r", status: "completed" }] } });
+  expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
+});
+
+test("hydrates persisted navigation targets after a full page reload with no in-memory message", () => {
+  const navigationTargets = [{ kind: "device", label: "LibreNMS'te cihazı aç", entity_id: 1, href: "/device/1" }];
+  let state = createInitialState({ threads: [{ id: "a", title: "Core" }], selectedThreadId: "a" });
+
+  state = reduceAssistantChat(state, { type: "thread.loaded", thread: {
+    id: "a",
+    title: "Core",
+    messages: [{ id: "m", role: "assistant", content: "Validated", navigation_targets: navigationTargets }],
+    runs: [{ id: "r", status: "completed" }],
+  } });
+
   expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
 });
 

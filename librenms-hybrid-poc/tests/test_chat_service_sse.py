@@ -60,7 +60,7 @@ class SseServiceTests(unittest.TestCase):
         detail = self.client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
         self.assertEqual(detail["messages"][-1]["content"], "Güvenli yanıt")
 
-    def test_completed_event_carries_optional_navigation_targets_without_persisting_them(self):
+    def test_completed_event_carries_and_persists_optional_navigation_targets(self):
         class NavigationAdapter(CompletedAdapter):
             def run(self, content, observer, is_cancelled):
                 result = super().run(content, observer, is_cancelled)
@@ -95,7 +95,7 @@ class SseServiceTests(unittest.TestCase):
             "href": "/device/1",
         }])
         detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
-        self.assertNotIn("navigation_targets", detail["messages"][-1])
+        self.assertEqual(detail["messages"][-1]["navigation_targets"], completed["navigation_targets"])
 
     def test_demo_mode_off_drops_adapter_inspection_from_completed_transport(self):
         class InspectionAdapter(CompletedAdapter):

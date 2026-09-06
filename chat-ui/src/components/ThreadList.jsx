@@ -58,7 +58,7 @@ function FilteredItems({ query }) {
   ));
 }
 
-export function ThreadList({ onDelete }) {
+export function ThreadList({ onDelete, newThreadDisabled = false }) {
   const [query, setQuery] = useState("");
   const hasThreads = useAuiState((state) => state.threads.threadIds.length > 0);
 
@@ -66,7 +66,7 @@ export function ThreadList({ onDelete }) {
     <DeleteThreadContext.Provider value={onDelete}>
       <nav className={styles.nav} aria-label="Kayıtlı sohbetler">
         <ThreadListPrimitive.Root className={styles.root} data-slot="aui_thread-list-root">
-          <ThreadListPrimitive.New className={styles.newThread} data-slot="aui_thread-list-new">
+          <ThreadListPrimitive.New className={styles.newThread} data-slot="aui_thread-list-new" disabled={newThreadDisabled} aria-disabled={newThreadDisabled}>
             <MessageSquarePlus size={17} aria-hidden="true" />
             <span data-slot="aui_thread-list-new-label">Yeni sohbet</span>
           </ThreadListPrimitive.New>

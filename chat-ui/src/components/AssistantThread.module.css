@@ -38,7 +38,8 @@
 .queueText { color: #dce1e4; flex: 1; font-size: 12px; line-height: 1.35; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .queueRemove { align-items: center; background: transparent; border: 0; border-radius: 6px; color: #aab2ba; display: inline-flex; flex: none; height: 28px; justify-content: center; width: 28px; }
 .queueRemove:hover { background: #3a4148; color: #fff; }
-.input { background: transparent; border: 0; color: #f1f3f4; font: inherit; font-size: 14px; line-height: 1.5; min-height: 52px; outline: none; padding: 13px 15px 2px; resize: none; width: 100%; }
+.input { background: transparent; border: 0; color: #f1f3f4; font: inherit; font-size: 14px; line-height: 1.5; min-height: 52px; padding: 13px 15px 2px; resize: none; width: 100%; }
+.composer .input:focus-visible { outline: 2px solid transparent; outline-offset: -2px; }
 .input::placeholder { color: #858f98; }
 .composerBar { align-items: center; display: flex; gap: 10px; justify-content: space-between; padding: 5px 8px 8px 12px; }
 .liveMode { align-items: center; color: #aab2ba; display: inline-flex; font-size: 12px; gap: 6px; }
@@ -48,7 +49,12 @@
 .primaryButton { align-items: center; background: #e6e9eb; border: 0; border-radius: 50%; color: #20252a; display: flex; flex: none; height: 38px; justify-content: center; transition: background-color 180ms ease, transform 180ms ease, opacity 180ms ease; width: 38px; }
 .primaryButton:hover:not(:disabled) { background: #fff; transform: scale(1.04); }
 .primaryButton:active:not(:disabled) { transform: scale(.96); }
-.primaryButton:disabled { opacity: .28; }
+.primaryButton:not(.stopButton) svg { color: #20252a; display: block; flex: none; stroke: #20252a; stroke-width: 2.2; transform: translateX(1px); }
+.primaryButton:not(.stopButton) svg path { stroke: #20252a !important; }
+.primaryButton:disabled { background: #343b41; border: 1px solid #46515a; color: #737e87; opacity: 1; }
+.primaryButton:disabled:not(.stopButton) svg { color: #737e87; stroke: #737e87; }
+.primaryButton:disabled:not(.stopButton) svg path { stroke: #737e87 !important; }
+.stopButton svg { transform: none; }
 .stopButton { background: #3b2d31; border: 1px solid #9a5960; color: #f2b2b7; }
 .stopButton:hover:not(:disabled) { background: #4a3338; }
 .retry { background: transparent; border: 0; color: #e4878d; font: inherit; font-size: 12px; padding: 7px 8px; }

@@ -13,7 +13,7 @@ function restoredMessages(messages, history, currentMessages = []) {
     if (message.role !== "assistant") return message;
     const run = acceptedRuns[acceptedIndex++];
     const current = currentById.get(message.id);
-    const navigationTargets = current?.navigationTargets;
+    const navigationTargets = current?.navigationTargets || (Array.isArray(message.navigation_targets) ? message.navigation_targets : null);
     const inspection = current?.inspection;
     return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback), ...(navigationTargets ? { navigationTargets } : {}), ...(inspection ? { inspection } : {}) } : message;
   });
@@ -26,7 +26,7 @@ function updateRun(state, threadId, update) {
 export function reduceAssistantChat(state, action) {
   switch (action.type) {
     case "threads.loaded": return { ...state, threads: action.threads };
-    case "thread.created": return { ...state, threads: [action.thread, ...state.threads], selectedThreadId: action.thread.id, messages: { ...state.messages, [action.thread.id]: [] }, drawerOpen: false };
+    case "thread.created": return { ...state, threads: [action.thread, ...state.threads.filter((thread) => thread.id !== action.thread.id)], selectedThreadId: action.thread.id, messages: { ...state.messages, [action.thread.id]: [] }, drawerOpen: false };
     case "thread.selected": return { ...state, selectedThreadId: action.threadId, drawerOpen: false };
     case "thread.loaded": {
       const history = action.thread.runs || [];

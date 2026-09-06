@@ -158,6 +158,45 @@ test("empty history keeps the composer writable and creates a thread on first se
   );
 });
 
+test("pristine selected thread makes New Chat idempotent after history hydration", async () => {
+  const api = makeApi({
+    listThreads: jest.fn().mockResolvedValue([{ id: "empty", title: "" }]),
+    getThread: jest.fn().mockResolvedValue({ id: "empty", title: "", messages: [], runs: [] }),
+    createThread: jest.fn(),
+  });
+  const chatStore = new AssistantChatStore(createInitialState({
+    threads: [{ id: "empty", title: "" }],
+    selectedThreadId: "empty",
+    messages: { empty: [] },
+  }));
+  render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+
+  await act(async () => mockUseExternalStoreRuntime.mock.calls.at(-1)[0].adapters.threadList.onSwitchToNewThread());
+
+  expect(api.createThread).not.toHaveBeenCalled();
+});
+
+test("New Chat is available after the first message and for a running thread", async () => {
+  for (const seed of [
+    { title: "First question", messages: [{ id: "u", role: "user", content: "First question" }], runs: {} },
+    { title: "", messages: [], runs: { active: { id: "r", status: "running" } } },
+  ]) {
+    const api = makeApi({ createThread: jest.fn().mockResolvedValue({ id: `new-${seed.title || "running"}`, title: "" }) });
+    const chatStore = new AssistantChatStore(createInitialState({
+      threads: [{ id: "active", title: seed.title }],
+      selectedThreadId: "active",
+      messages: { active: seed.messages },
+      runs: seed.runs,
+    }));
+    const view = render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+
+    await act(async () => mockUseExternalStoreRuntime.mock.calls.at(-1)[0].adapters.threadList.onSwitchToNewThread());
+
+    expect(api.createThread).toHaveBeenCalledTimes(1);
+    view.unmount();
+  }
+});
+
 test("mounted App binds the supplied reducer store to the transcript and refreshes the deterministic title after completion", async () => {
   const chatStore = new AssistantChatStore(createInitialState({ threads: [{ id: "a", title: "" }], selectedThreadId: "a", messages: { a: [{ id: "saved", role: "assistant", content: "Existing observed result" }] } }));
   const api = makeApi({ listThreads: jest.fn().mockResolvedValue([{ id: "a", title: "" }]), runThread: jest.fn(async (_thread, client, _content, _token, _signal, onEvent) => { onEvent("run.started", { run_id: "r", client_message_id: client }); onEvent("answer.delta", { run_id: "r", message_id: "m", delta: "Validated result" }); onEvent("completed", { run_id: "r", status: "completed", message_id: "m", used_fallback: false, metrics: currentMetrics }); }), getThread: jest.fn().mockResolvedValue({ id: "a", title: "Core uplink degraded", messages: [{ id: "m", role: "assistant", content: "Validated result" }], runs: [] }) });

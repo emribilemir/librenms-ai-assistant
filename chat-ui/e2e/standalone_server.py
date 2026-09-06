@@ -142,6 +142,24 @@ class DeterministicPipelineAdapter:
                 for index in range(1, 25)
             ]
             return self._result("\n\n".join(lines), backend=13)
+        if "navigation persistence" in question:
+            result = self._result("Validated device result.", backend=13)
+            result["navigation_targets"] = [{
+                "kind": "device",
+                "label": "LibreNMS'te cihazı aç",
+                "entity_id": 1,
+                "href": "/device/1",
+            }]
+            return result
+        if "malformed navigation" in question:
+            result = self._result("Validated result without an action.", backend=13)
+            result["navigation_targets"] = [{
+                "kind": "device",
+                "label": "Unsafe",
+                "entity_id": 1,
+                "href": "https://example.invalid/write",
+            }]
+            return result
         return self._result("Deterministic standalone result.", backend=13)
 
 

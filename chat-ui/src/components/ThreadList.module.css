@@ -3,6 +3,7 @@
 .newThread { align-items: center; background: transparent; border: 0; border-radius: 8px; color: #edf0f2; display: flex; flex: none; font: inherit; font-size: 13px; gap: 9px; justify-content: flex-start; min-height: 38px; padding: 0 10px; transition: background-color 160ms ease, color 160ms ease, transform 100ms ease; width: 100%; }
 .newThread:hover, .newThread[data-active] { background: #373d43; }
 .newThread:active { transform: scale(.985); }
+.newThread:disabled { background: transparent; color: #69737c; cursor: default; opacity: .7; transform: none; }
 .search { align-items: center; color: #8f99a2; display: flex; flex: none; margin: 5px 2px 7px; position: relative; }
 .search svg { left: 10px; pointer-events: none; position: absolute; }
 .search input { background: #24292e; border: 1px solid #3f474e; border-radius: 8px; color: #e8ebed; font: inherit; font-size: 12px; height: 34px; outline: none; padding: 0 10px 0 32px; width: 100%; }

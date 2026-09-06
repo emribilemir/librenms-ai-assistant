@@ -316,7 +316,14 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     return
                 answer = result.get("answer") or "İşlem desteklenmiyor."
                 work = "storage"
-                message_id = store.complete_run(started["id"], "completed", metrics, used_fallback=result["used_fallback"], answer=answer)
+                message_id = store.complete_run(
+                    started["id"],
+                    "completed",
+                    metrics,
+                    used_fallback=result["used_fallback"],
+                    answer=answer,
+                    navigation_targets=result.get("navigation_targets"),
+                )
                 terminal = True
                 chunks = iter(iter_answer_chunks(answer))
                 first_chunk = next(chunks)
