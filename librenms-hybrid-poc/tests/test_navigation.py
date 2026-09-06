@@ -39,6 +39,41 @@ class NavigationTargetTests(unittest.TestCase):
             "href": "/device/7/port/port=41",
         }])
 
+    def test_port_list_exposes_each_verified_row_target_without_a_duplicate_fallback(self):
+        result = run_result({
+            "route": "ports",
+            "final_answer": "two ports",
+            "navigation_context": {
+                "device": {"device_id": 7},
+                "ports": [
+                    {"device_id": 7, "port_id": 41, "ifIndex": 2},
+                    {"device_id": "7", "port_id": "42", "ifIndex": 3},
+                ],
+            },
+        })
+
+        self.assertEqual(result["navigation_targets"], [
+            {"kind": "port", "label": "Port detayını aç", "entity_id": 41, "href": "/device/7/port/port=41"},
+            {"kind": "port", "label": "Port detayını aç", "entity_id": 42, "href": "/device/7/port/port=42"},
+        ])
+
+    def test_port_list_uses_one_device_fallback_when_rows_have_no_verified_port_id(self):
+        result = run_result({
+            "route": "ports",
+            "final_answer": "one unresolved port",
+            "navigation_context": {
+                "device": {"device_id": 7},
+                "ports": [{"device_id": 7, "ifIndex": 2}],
+            },
+        })
+
+        self.assertEqual(result["navigation_targets"], [{
+            "kind": "device",
+            "label": "LibreNMS'te cihaz portlarını aç",
+            "entity_id": 7,
+            "href": "/device/7",
+        }])
+
     def test_events_and_alerts_use_verified_device_level_fallbacks(self):
         cases = (
             ("events", "events", "Event geçmişini aç", "/device/9/logs/eventlog"),

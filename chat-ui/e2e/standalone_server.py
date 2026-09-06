@@ -151,6 +151,24 @@ class DeterministicPipelineAdapter:
                 "href": "/device/1",
             }]
             return result
+        if "structured port list" in question:
+            result = self._result(
+                "Port 2: admin=up oper=down (Test-Down)\nPort 3: admin=down oper=down (Disabled)",
+                backend=13,
+            )
+            result["navigation_targets"] = [
+                {"kind": "port", "label": "Port detayını aç", "entity_id": 41, "href": "/device/7/port/port=41"},
+                {"kind": "port", "label": "Port detayını aç", "entity_id": 42, "href": "/device/7/port/port=42"},
+            ]
+            result["structured_result"] = {
+                "kind": "ports",
+                "device": {"device_id": 7, "hostname": "lab-j9772a-02"},
+                "ports": [
+                    {"device_id": 7, "port_id": 41, "ifIndex": 2, "ifName": "2", "ifAlias": "Test-Down", "admin_status": "up", "oper_status": "down"},
+                    {"device_id": 7, "port_id": 42, "ifIndex": 3, "ifName": "3", "ifAlias": "Disabled", "admin_status": "down", "oper_status": "down"},
+                ],
+            }
+            return result
         if "malformed navigation" in question:
             result = self._result("Validated result without an action.", backend=13)
             result["navigation_targets"] = [{

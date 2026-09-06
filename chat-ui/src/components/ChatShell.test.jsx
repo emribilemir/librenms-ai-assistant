@@ -139,7 +139,7 @@ test("validated demo metadata opens a compact summary and JSON view from the sam
   }
 
   render(<Fixture />);
-  const disclosure = screen.getByRole("button", { name: "Nasıl işlendi?" });
+  const disclosure = screen.getByRole("button", { name: /İşlem ayrıntıları/i });
   expect(disclosure).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("region", { name: "İşleme ayrıntıları" })).not.toBeInTheDocument();
 
@@ -193,7 +193,7 @@ test("malformed optional inspection sections are ignored by the frontend safety 
   }
 
   render(<Fixture />);
-  fireEvent.click(screen.getByRole("button", { name: "Nasıl işlendi?" }));
+  fireEvent.click(screen.getByRole("button", { name: /İşlem ayrıntıları/i }));
   const panel = screen.getByRole("region", { name: "İşleme ayrıntıları" });
   expect(within(panel).getByText("ports", { selector: "dd" })).toBeVisible();
   fireEvent.click(within(panel).getByRole("tab", { name: "JSON" }));
@@ -218,7 +218,7 @@ test("the external-store bridge carries completed inspection metadata into assis
   }
 
   render(<Fixture />);
-  expect(screen.getByRole("button", { name: "Nasıl işlendi?" })).toBeVisible();
+  expect(screen.getByRole("button", { name: /İşlem ayrıntıları/i })).toBeVisible();
 });
 
 test("assistant messages render only validated relative LibreNMS navigation actions", () => {
@@ -253,6 +253,101 @@ test("assistant messages render only validated relative LibreNMS navigation acti
   expect(screen.queryByRole("link", { name: "Kötü link" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Tutarsız kimlik" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Bilinmeyen" })).not.toBeInTheDocument();
+});
+
+test("structured port metadata renders semantic rows with inline verified links and no duplicate action", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "Port 2: admin=up oper=down\nPort 3: admin=down oper=down" }],
+    createdAt: new Date(),
+    metadata: { custom: {
+      structuredResult: {
+        kind: "ports",
+        device: { device_id: 7, hostname: "lab-j9772a-02" },
+        ports: [
+          { device_id: 7, port_id: 41, ifIndex: 2, ifName: "2", ifAlias: "Test-Down", admin_status: "up", oper_status: "down" },
+          { device_id: 7, port_id: 42, ifIndex: 3, ifName: "3", ifAlias: "Disabled", admin_status: "down", oper_status: "down" },
+          { device_id: 7, port_id: 43, ifIndex: 4, ifName: "4", ifDescr: "Uplink", admin_status: "up", oper_status: "up" },
+        ],
+      },
+      navigationTargets: [
+        { kind: "port", label: "Port detayını aç", entity_id: 41, href: "/device/7/port/port=41" },
+        { kind: "port", label: "Port detayını aç", entity_id: 42, href: "/device/7/port/port=42" },
+        { kind: "port", label: "Port detayını aç", entity_id: 43, href: "/device/7/port/port=43" },
+      ],
+    } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.queryByText(/admin=up oper=down/)).not.toBeInTheDocument();
+  expect(screen.getByRole("table", { name: "lab-j9772a-02 portları" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "Port 2" })).toHaveAttribute("href", "/device/7/port/port=41");
+  expect(screen.getByRole("link", { name: "Port 3" })).toHaveAttribute("href", "/device/7/port/port=42");
+  expect(screen.getAllByRole("cell", { name: "Down" }).find((cell) => cell.dataset.status === "problem")).toBeVisible();
+  expect(screen.getAllByRole("cell", { name: "Disabled" })[0]).toHaveAttribute("data-status", "neutral");
+  expect(screen.getAllByRole("cell", { name: "Up" }).find((cell) => cell.dataset.status === "positive")).toBeVisible();
+  expect(screen.queryByRole("link", { name: "Port detayını aç" })).not.toBeInTheDocument();
+});
+
+test("unresolved structured port rows show only the compact device fallback action", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "fallback" }],
+    createdAt: new Date(),
+    metadata: { custom: {
+      structuredResult: {
+        kind: "ports",
+        device: { device_id: 7, hostname: "lab-j9772a-02" },
+        ports: [{ device_id: 7, ifIndex: 2, ifName: "2", admin_status: "up", oper_status: "down" }],
+      },
+      navigationTargets: [{ kind: "device", label: "LibreNMS'te cihaz portlarını aç", entity_id: 7, href: "/device/7" }],
+    } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  expect(screen.getByText("Port 2")).not.toHaveAttribute("href");
+  expect(screen.getByRole("link", { name: "LibreNMS'te cihaz portlarını aç" })).toBeVisible();
+});
+
+test("completed messages place copy and one accessible details disclosure in a compact action row", () => {
+  const inspection = { route: "ports", tools: [], findings: [], synthesis_llm_called: false, navigation_targets: [] };
+  const messages = [{
+    id: "answer", role: "assistant",
+    content: [
+      { type: "text", text: "Observed result" },
+      { type: "reasoning", text: "Soruyu sınıflandırdı · 8 ms\nLibreNMS verisini okudu · 14 ms" },
+    ],
+    createdAt: new Date(),
+    metadata: { custom: { metrics: { total_ms: 14500 }, inspection } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const actions = screen.getByRole("group", { name: "Mesaj eylemleri" });
+  expect(within(actions).getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
+  const details = within(actions).getByRole("button", { name: /İşlem ayrıntıları/i });
+  expect(details).toHaveTextContent("14.5 sn");
+  expect(screen.queryByRole("button", { name: "Nasıl işlendi?" })).not.toBeInTheDocument();
+  expect(details.nextElementSibling).toHaveAttribute("hidden");
+  fireEvent.click(details);
+  expect(screen.getByRole("region", { name: "İşleme ayrıntıları" })).toBeVisible();
 });
 
 test("assistant-ui keeps the copy action in the message layout while a validated answer is streaming", () => {

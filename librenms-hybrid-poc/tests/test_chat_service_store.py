@@ -20,7 +20,7 @@ class ChatStoreTests(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
             self.assertGreaterEqual(connection.execute("PRAGMA busy_timeout").fetchone()[0], 5000)
-            self.assertEqual(connection.execute("SELECT version FROM schema_version").fetchone()[0], 2)
+            self.assertEqual(connection.execute("SELECT version FROM schema_version").fetchone()[0], 3)
 
     def test_create_thread_reuses_a_pristine_thread_but_allows_a_new_one_after_content(self):
         first = self.store.create_thread("owner")
@@ -86,3 +86,16 @@ class ChatStoreTests(unittest.TestCase):
         self.store.complete_run(run["id"], "completed", {}, answer="answer", navigation_targets=targets)
 
         self.assertEqual(self.store.get_thread(thread["id"], "owner")["messages"][-1]["navigation_targets"], targets)
+
+    def test_completed_answer_persists_bounded_structured_result(self):
+        thread = self.store.create_thread("owner")
+        run = self.store.start_run(thread["id"], "owner", "client-1", "question")
+        structured_result = {
+            "kind": "ports",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-02"},
+            "ports": [{"device_id": 1, "port_id": 2, "ifIndex": 2, "admin_status": "up", "oper_status": "down"}],
+        }
+
+        self.store.complete_run(run["id"], "completed", {}, answer="answer", structured_result=structured_result)
+
+        self.assertEqual(self.store.get_thread(thread["id"], "owner")["messages"][-1]["structured_result"], structured_result)

@@ -14,8 +14,9 @@ function restoredMessages(messages, history, currentMessages = []) {
     const run = acceptedRuns[acceptedIndex++];
     const current = currentById.get(message.id);
     const navigationTargets = current?.navigationTargets || (Array.isArray(message.navigation_targets) ? message.navigation_targets : null);
+    const structuredResult = current?.structuredResult || (message.structured_result && typeof message.structured_result === "object" && !Array.isArray(message.structured_result) ? message.structured_result : null);
     const inspection = current?.inspection;
-    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback), ...(navigationTargets ? { navigationTargets } : {}), ...(inspection ? { inspection } : {}) } : message;
+    return run ? { ...message, runId: run.id, usedFallback: Boolean(run.used_fallback), ...(navigationTargets ? { navigationTargets } : {}), ...(structuredResult ? { structuredResult } : {}), ...(inspection ? { inspection } : {}) } : message;
   });
 }
 
@@ -101,7 +102,7 @@ function reduceStreamEvent(state, { threadId, clientMessageId, event, data }) {
   if (event === "completed") {
     const messages = messagesFor(state, threadId).map((message) => {
       const isAnswer = data.message_id ? message.id === data.message_id : message.runId === data.run_id;
-      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback), ...(Array.isArray(data.navigation_targets) ? { navigationTargets: data.navigation_targets } : {}), ...(data.inspection && typeof data.inspection === "object" && !Array.isArray(data.inspection) ? { inspection: data.inspection } : {}) } : message;
+      return isAnswer ? { ...message, pending: false, usedFallback: Boolean(data.used_fallback), ...(Array.isArray(data.navigation_targets) ? { navigationTargets: data.navigation_targets } : {}), ...(data.structured_result && typeof data.structured_result === "object" && !Array.isArray(data.structured_result) ? { structuredResult: data.structured_result } : {}), ...(data.inspection && typeof data.inspection === "object" && !Array.isArray(data.inspection) ? { inspection: data.inspection } : {}) } : message;
     });
     return updateRun({ ...state, messages: { ...state.messages, [threadId]: messages } }, threadId, { status: data.status, metrics: data.metrics, usedFallback: data.used_fallback, canRetry: data.status === "failed" && Boolean(state.runs[threadId]?.error?.retryable) });
   }

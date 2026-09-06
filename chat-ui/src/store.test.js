@@ -121,6 +121,26 @@ test("hydrates persisted navigation targets after a full page reload with no in-
   expect(state.messages.a[0].navigationTargets).toEqual(navigationTargets);
 });
 
+test("attaches structured port metadata from SSE and hydrates it after a full refresh", () => {
+  const structuredResult = {
+    kind: "ports",
+    device: { device_id: 1, hostname: "lab-j9772a-02" },
+    ports: [{ device_id: 1, port_id: 2, ifIndex: 2, admin_status: "up", oper_status: "down" }],
+  };
+  let state = createInitialState({ threads: [{ id: "a", title: "Ports" }], selectedThreadId: "a" });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "run.started", data: { run_id: "r", client_message_id: "c" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "answer.delta", data: { run_id: "r", message_id: "m", delta: "fallback text" } });
+  state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "completed", message_id: "m", used_fallback: false, structured_result: structuredResult, metrics } });
+  expect(state.messages.a[0].structuredResult).toEqual(structuredResult);
+
+  state = reduceAssistantChat(createInitialState({ threads: [{ id: "a", title: "Ports" }] }), { type: "thread.loaded", thread: {
+    id: "a", title: "Ports",
+    messages: [{ id: "m", role: "assistant", content: "fallback text", structured_result: structuredResult }],
+    runs: [{ id: "r", status: "completed" }],
+  } });
+  expect(state.messages.a[0].structuredResult).toEqual(structuredResult);
+});
+
 test("attaches completed inspection to the accepted message and preserves it across in-memory refresh", () => {
   const inspection = {
     planner: { request_type: "ports", intent: "device_ports" },

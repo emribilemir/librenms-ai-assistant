@@ -54,7 +54,8 @@ class ChatStore:
                     id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
                     role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
                     content TEXT NOT NULL, created_at REAL NOT NULL,
-                    navigation_targets TEXT
+                    navigation_targets TEXT,
+                    structured_result TEXT
                 );
                 CREATE TABLE IF NOT EXISTS runs (
                     id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
@@ -71,15 +72,17 @@ class ChatStore:
             """)
             row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
             if row is None:
-                connection.execute("INSERT INTO schema_version(version, applied_at) VALUES(2, ?)", (time.time(),))
+                connection.execute("INSERT INTO schema_version(version, applied_at) VALUES(3, ?)", (time.time(),))
             else:
                 message_columns = {
                     column["name"] for column in connection.execute("PRAGMA table_info(messages)")
                 }
                 if "navigation_targets" not in message_columns:
                     connection.execute("ALTER TABLE messages ADD COLUMN navigation_targets TEXT")
-                if row["version"] < 2:
-                    connection.execute("UPDATE schema_version SET version=2, applied_at=?", (time.time(),))
+                if "structured_result" not in message_columns:
+                    connection.execute("ALTER TABLE messages ADD COLUMN structured_result TEXT")
+                if row["version"] < 3:
+                    connection.execute("UPDATE schema_version SET version=3, applied_at=?", (time.time(),))
 
     @staticmethod
     def _row(row):
@@ -88,14 +91,18 @@ class ChatStore:
     @staticmethod
     def _message_row(row):
         message = dict(row)
-        encoded = message.pop("navigation_targets", None)
-        if encoded:
+        for column in ("navigation_targets", "structured_result"):
+            encoded = message.pop(column, None)
+            if not encoded:
+                continue
             try:
-                targets = json.loads(encoded)
+                value = json.loads(encoded)
             except (TypeError, ValueError):
-                targets = None
-            if isinstance(targets, list):
-                message["navigation_targets"] = targets
+                continue
+            if column == "navigation_targets" and isinstance(value, list):
+                message[column] = value
+            elif column == "structured_result" and isinstance(value, dict):
+                message[column] = value
         return message
 
     @staticmethod
@@ -106,6 +113,13 @@ class ChatStore:
         if not all(isinstance(target, dict) for target in bounded):
             return None
         return json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+
+    @staticmethod
+    def _encoded_structured_result(result):
+        if not isinstance(result, dict) or result.get("kind") != "ports":
+            return None
+        encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        return encoded if len(encoded.encode("utf-8")) <= 32768 else None
 
     def create_thread(self, user_sub: str):
         now, thread_id = time.time(), str(uuid.uuid4())
@@ -142,7 +156,7 @@ class ChatStore:
     def get_thread(self, thread_id: str, user_sub: str):
         with self.connection() as connection:
             thread = self._owned_thread(connection, thread_id, user_sub)
-            messages = [self._message_row(row) for row in connection.execute("SELECT id, role, content, created_at, navigation_targets FROM messages WHERE thread_id=? ORDER BY created_at, rowid", (thread_id,))]
+            messages = [self._message_row(row) for row in connection.execute("SELECT id, role, content, created_at, navigation_targets, structured_result FROM messages WHERE thread_id=? ORDER BY created_at, rowid", (thread_id,))]
             runs = [self._row(row) for row in connection.execute("SELECT id, client_message_id, status, started_at, completed_at, used_fallback, planner_ms, resolver_ms, backend_ms, synthesis_ms, time_to_first_token_ms, time_to_first_visible_chunk_ms, total_ms, error_stage, error_code FROM runs WHERE thread_id=? ORDER BY started_at", (thread_id,))]
             out = self._row(thread)
             out["messages"], out["runs"] = messages, runs
@@ -182,7 +196,7 @@ class ChatStore:
                     connection.execute("ROLLBACK")
                 raise
 
-    def complete_run(self, run_id, status, metrics, *, used_fallback=False, answer=None, navigation_targets=None, error_stage=None, error_code=None):
+    def complete_run(self, run_id, status, metrics, *, used_fallback=False, answer=None, navigation_targets=None, structured_result=None, error_stage=None, error_code=None):
         values = {key: (metrics or {}).get(key) for key in METRIC_COLUMNS}
         with self.connection() as connection:
             try:
@@ -194,8 +208,8 @@ class ChatStore:
                 if status == "completed" and answer:
                     message_id = str(uuid.uuid4())
                     connection.execute(
-                        "INSERT INTO messages(id, thread_id, role, content, created_at, navigation_targets) VALUES(?, ?, 'assistant', ?, ?, ?)",
-                        (message_id, row["thread_id"], answer, now, self._encoded_navigation_targets(navigation_targets)),
+                        "INSERT INTO messages(id, thread_id, role, content, created_at, navigation_targets, structured_result) VALUES(?, ?, 'assistant', ?, ?, ?, ?)",
+                        (message_id, row["thread_id"], answer, now, self._encoded_navigation_targets(navigation_targets), self._encoded_structured_result(structured_result)),
                     )
                 assignments = ", ".join(["status=?", "completed_at=?", "used_fallback=?", *[f"{key}=?" for key in METRIC_COLUMNS], "error_stage=?", "error_code=?"])
                 connection.execute(f"UPDATE runs SET {assignments} WHERE id=?", (status, now, int(bool(used_fallback)), *[values[key] for key in METRIC_COLUMNS], error_stage, error_code, run_id))

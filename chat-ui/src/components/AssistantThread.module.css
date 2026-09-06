@@ -17,12 +17,27 @@
 .markdown :global(pre code) { background: transparent; color: inherit; padding: 0; }
 .markdown :global(a) { color: #e04b54; text-underline-offset: 3px; }
 .markdown :global(strong) { color: #fff; font-weight: 650; }
+.structuredResult { color: #e8ebed; font-size: 13px; min-width: 0; }
+.structuredTitle { color: #f2f4f5; font-size: 14px; font-weight: 620; margin: 0 0 9px; overflow-wrap: anywhere; }
+.portTable { border-collapse: collapse; table-layout: fixed; width: 100%; }
+.portTable th { border-bottom: 1px solid #414950; color: #8f99a2; font-size: 10px; font-weight: 650; letter-spacing: .035em; padding: 6px 8px; text-align: left; text-transform: uppercase; }
+.portTable td { border-bottom: 1px solid #30373d; color: #dce1e4; line-height: 1.4; overflow-wrap: anywhere; padding: 8px; vertical-align: top; }
+.portTable th:nth-child(1), .portTable td:nth-child(1) { width: 25%; }
+.portTable th:nth-child(2), .portTable td:nth-child(2) { width: 18%; }
+.portTable th:nth-child(3), .portTable td:nth-child(3) { width: 18%; }
+.portTable th:nth-child(4), .portTable td:nth-child(4) { width: 39%; }
+.portTable a { align-items: center; color: #f0b0b4; display: inline-flex; gap: 5px; text-decoration: none; text-underline-offset: 3px; }
+.portTable a:hover { text-decoration: underline; }
+.portTable a:focus-visible { border-radius: 3px; outline: 2px solid #ef7a82; outline-offset: 2px; }
+.portTable td[data-status="positive"] { color: #79c995; font-weight: 650; }
+.portTable td[data-status="problem"] { color: #f08087; font-weight: 650; }
+.portTable td[data-status="neutral"] { color: #a3adb5; font-weight: 620; }
 .navigationActions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .navigationAction { align-items: center; background: #292f34; border: 1px solid #46515a; border-radius: 8px; color: #dce1e4; display: inline-flex; font-size: 12px; font-weight: 580; gap: 7px; line-height: 1; padding: 8px 10px; text-decoration: none; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
 .navigationAction:hover { background: #32393f; border-color: #69757e; color: #fff; }
 .navigationAction:focus-visible { outline: 2px solid #ef7a82; outline-offset: 2px; }
 .navigationAction svg { color: #d85a62; flex: none; }
-.messageTools { align-items: flex-start; display: flex; gap: 3px; min-height: 30px; padding-top: 4px; }
+.messageTools { align-items: center; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; min-height: 0; padding-top: 5px; }
 .actionBar { display: flex; flex: none; }
 .messageAction { align-items: center; background: transparent; border: 0; border-radius: 50%; color: #919aa3; display: inline-flex; height: 32px; justify-content: center; transition: background-color 180ms ease, color 180ms ease, transform 120ms ease; width: 32px; }
 .messageAction:hover { background: #30363c; color: #f3f5f7; }
@@ -74,5 +89,5 @@
 .suggestionTitle { display: block; font-size: 12px; font-weight: 620; line-height: 1.35; }
 .suggestionLabel { color: #828d96; display: block; font-size: 10px; line-height: 1.35; margin-top: 4px; }
 .suggestionError { color: #e68e94; font-size: 11px; margin: 10px 0 0; text-align: center; }
-@media (max-width: 700px) { .viewport { padding: 14px 12px 0; } .footer { padding-bottom: 9px; } .message { padding: 10px 0; } .suggestions { grid-template-columns: 1fr; } .empty { align-items: flex-start; padding: 32px 12px 20px; } .emptyInner { margin-top: 0; } .wordmark { font-size: 27px; } }
+@media (max-width: 700px) { .viewport { padding: 14px 12px 0; } .footer { padding-bottom: 9px; } .message { padding: 10px 0; } .portTable { font-size: 12px; } .portTable th, .portTable td { padding-left: 5px; padding-right: 5px; } .portTable th:nth-child(1), .portTable td:nth-child(1) { width: 27%; } .portTable th:nth-child(2), .portTable td:nth-child(2), .portTable th:nth-child(3), .portTable td:nth-child(3) { width: 19%; } .portTable th:nth-child(4), .portTable td:nth-child(4) { width: 35%; } .suggestions { grid-template-columns: 1fr; } .empty { align-items: flex-start; padding: 32px 12px 20px; } .emptyInner { margin-top: 0; } .wordmark { font-size: 27px; } }
 @media (prefers-reduced-motion: reduce) { .viewport { scroll-behavior: auto; } .thread *, .thread *::before, .thread *::after { transition-duration: .01ms !important; } }

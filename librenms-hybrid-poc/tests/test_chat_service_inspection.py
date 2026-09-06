@@ -134,6 +134,57 @@ class PipelineInspectionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, serialized)
 
+    def test_port_route_carries_bounded_structured_rows_from_verified_runtime_objects(self):
+        result = {
+            "final_answer": "debug-shaped fallback text must not be parsed",
+            "route": "ports",
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-02"},
+                "ports": [
+                    {
+                        "device_id": 1,
+                        "port_id": 2,
+                        "ifIndex": 2,
+                        "ifName": "2",
+                        "ifDescr": "GigabitEthernet 2",
+                        "ifAlias": "Test-Down",
+                        "ifAdminStatus": "up",
+                        "ifOperStatus": "down",
+                        "secret": "must not cross the boundary",
+                    },
+                    {
+                        "device_id": 1,
+                        "port_id": 3,
+                        "ifIndex": 3,
+                        "ifName": "3",
+                        "ifAlias": "Disabled",
+                        "ifAdminStatus": "down",
+                        "ifOperStatus": "down",
+                    },
+                ],
+            },
+        }
+
+        response = self._run(result, demo_mode=False)
+
+        self.assertEqual(response["structured_result"], {
+            "kind": "ports",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-02"},
+            "ports": [
+                {
+                    "device_id": 1, "port_id": 2, "ifIndex": 2,
+                    "ifName": "2", "ifDescr": "GigabitEthernet 2", "ifAlias": "Test-Down",
+                    "admin_status": "up", "oper_status": "down",
+                },
+                {
+                    "device_id": 1, "port_id": 3, "ifIndex": 3,
+                    "ifName": "3", "ifAlias": "Disabled",
+                    "admin_status": "down", "oper_status": "down",
+                },
+            ],
+        })
+        self.assertNotIn("secret", json.dumps(response["structured_result"]))
+
     def test_investigation_reuses_bounded_structured_findings(self):
         findings = [
             {
