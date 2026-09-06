@@ -31,13 +31,13 @@ export function PipelineReasoning() {
     : `İşlem ayrıntıları${elapsedMs ? ` · ${duration(elapsedMs)}` : ""}`;
 
   return (
-    <section className={styles.root} data-streaming={streaming || undefined}>
+    <section className={styles.root} data-slot="pipeline-reasoning" data-streaming={streaming || undefined}>
       <button type="button" className={styles.trigger} aria-expanded={open} onClick={() => setManualOpen(!open)}>
         <ListTree size={15} strokeWidth={1.8} aria-hidden="true" />
         <span className={streaming ? styles.shimmer : undefined}>{label}</span>
         <ChevronDown className={styles.chevron} size={16} aria-hidden="true" />
       </button>
-      <div className={styles.panel} data-open={open || undefined} aria-live="polite" aria-busy={streaming}>
+      <div className={styles.panel} data-open={open || undefined} hidden={!open} aria-live="polite" aria-busy={streaming}>
         <ol className={styles.steps}>
           {lines.map((line, index) => {
             const running = streaming && index === lines.length - 1;

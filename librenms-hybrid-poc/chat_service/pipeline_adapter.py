@@ -14,9 +14,10 @@ _METRICS = ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_
 
 
 class PipelineAdapter:
-    def __init__(self, orchestrator=None, device_source=None, include_inspection=None):
+    def __init__(self, orchestrator=None, device_source=None, ports_source=None, include_inspection=None):
         self._orchestrator = orchestrator
         self._device_source = device_source
+        self._ports_source = ports_source
         self._include_inspection = (
             os.environ.get("AI_DEMO_MODE") == "1"
             if include_inspection is None
@@ -28,6 +29,32 @@ class PipelineAdapter:
         if source is None:
             source = LibreNMSBackend().list_devices
         return source()
+
+    def list_suggestion_devices(self):
+        source = self._device_source
+        ports_source = self._ports_source
+        if source is None:
+            backend = LibreNMSBackend()
+            source = backend.list_devices
+            ports_source = backend.get_ports
+        devices = [dict(device) for device in source()]
+        if ports_source is None:
+            return devices
+        up_devices = sorted(
+            (
+                device for device in devices
+                if device.get("status") in (1, True, "1", "true", "up")
+                and str(device.get("hostname", "")).strip()
+            ),
+            key=lambda device: str(device.get("hostname", "")).strip(),
+        )
+        for device in up_devices[1:3]:
+            device_id = device.get("device_id")
+            device["port_count"] = (
+                len(ports_source(device_id=device_id))
+                if device_id is not None else 0
+            )
+        return devices
 
     def run(self, content, observer, is_cancelled):
         if is_cancelled():

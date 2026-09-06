@@ -374,6 +374,41 @@ test("completed assistant answers keep stage and timing details in one reasoning
   expect(screen.getByText("Ekrana aktarım 29 ms")).toBeVisible();
 });
 
+test("completed reasoning follows the answer and its closed panel reserves no layout row", () => {
+  const store = new AssistantChatStore({
+    threads: [{ id: "a", title: "Ports" }],
+    selectedThreadId: "a",
+    messages: { a: [{ id: "answer", role: "assistant", content: "No port rows.", runId: "r" }] },
+    runs: {},
+    runHistory: { a: [{
+      id: "r",
+      status: "completed",
+      stages: {
+        planner: { status: "completed", durationMs: 8 },
+        resolver: { status: "completed", durationMs: 11 },
+        librenms: { status: "completed", durationMs: 14 },
+      },
+      total_ms: 33,
+    }] },
+    drawerOpen: false,
+  });
+
+  function Fixture() {
+    const runtime = useLibreNmsExternalStoreRuntime(store, "a", jest.fn(), jest.fn(), []);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const answer = screen.getByText("No port rows.").closest('[data-slot="assistant-answer"]');
+  const disclosure = screen.getByRole("button", { name: /İşlem ayrıntıları/i });
+  const panel = disclosure.nextElementSibling;
+
+  expect(answer.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(panel).toHaveAttribute("hidden");
+  fireEvent.click(disclosure);
+  expect(panel).not.toHaveAttribute("hidden");
+});
+
 test("live SSE stages appear as an expanded assistant-ui reasoning disclosure inside the assistant message", () => {
   const store = new AssistantChatStore({
     threads: [{ id: "a", title: "Core" }],

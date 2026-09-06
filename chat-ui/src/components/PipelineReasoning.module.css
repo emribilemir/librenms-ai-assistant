@@ -5,6 +5,7 @@
 .chevron { transition: transform 200ms cubic-bezier(.32, .72, 0, 1); }
 .trigger[aria-expanded="false"] .chevron { transform: rotate(-90deg); }
 .panel { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 200ms cubic-bezier(.32, .72, 0, 1), opacity 160ms ease; }
+.panel[hidden] { display: none; }
 .panel[data-open] { grid-template-rows: 1fr; opacity: 1; }
 .steps { border-left: 1px solid #414950; display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 2px 0 2px 7px; min-height: 0; overflow: hidden; padding: 4px 0 5px 16px; }
 .steps li { align-items: center; display: flex; font-size: 11px; gap: 8px; line-height: 1.35; }

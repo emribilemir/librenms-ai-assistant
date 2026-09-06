@@ -88,8 +88,8 @@ export function useLibreNmsExternalStoreRuntime(store, threadId, onSend, onCance
     const run = liveRun?.id === message.runId ? liveRun : persistedRun;
     const reasoning = message.role === "assistant" ? pipelineReasoningText(run) : "";
     const content = [];
-    if (reasoning) content.push({ type: "reasoning", text: reasoning });
     if (message.content) content.push({ type: "text", text: message.content });
+    if (reasoning) content.push({ type: "reasoning", text: reasoning });
     return {
       id: message.id,
       role: message.role,

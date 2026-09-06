@@ -411,6 +411,52 @@ test("renders only real received stage progress for a successful no-match result
   await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
 });
 
+test("completed process disclosure follows the answer without a closed layout row", async ({ page }) => {
+  await createThread(page);
+  await ask(page, "no-match branch switch");
+  await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
+  const assistant = page.locator("[data-message-id]").last();
+  const closed = await assistant.evaluate((message) => {
+    const answer = message.querySelector('[data-slot="assistant-answer"]');
+    const reasoning = message.querySelector('[data-slot="pipeline-reasoning"]');
+    const trigger = reasoning.querySelector("button");
+    const panel = trigger.nextElementSibling;
+    return {
+      answerBeforeReasoning: Boolean(
+        answer.compareDocumentPosition(reasoning) & Node.DOCUMENT_POSITION_FOLLOWING
+      ),
+      gap: trigger.getBoundingClientRect().top - answer.getBoundingClientRect().bottom,
+      panelHeight: panel.getBoundingClientRect().height,
+      panelDisplay: getComputedStyle(panel).display,
+      panelHidden: panel.hidden,
+    };
+  });
+  expect(closed).toEqual({
+    answerBeforeReasoning: true,
+    gap: 0,
+    panelHeight: 0,
+    panelDisplay: "none",
+    panelHidden: true,
+  });
+
+  await page.getByRole("button", { name: /İşlem ayrıntıları/i }).click();
+  const open = await assistant.evaluate((message) => {
+    const reasoning = message.querySelector('[data-slot="pipeline-reasoning"]');
+    const trigger = reasoning.querySelector("button");
+    const panel = trigger.nextElementSibling;
+    return {
+      triggerToPanelGap: panel.getBoundingClientRect().top - trigger.getBoundingClientRect().bottom,
+      panelHeight: panel.getBoundingClientRect().height,
+      panelDisplay: getComputedStyle(panel).display,
+      panelHidden: panel.hidden,
+    };
+  });
+  expect(open.triggerToPanelGap).toBe(0);
+  expect(open.panelHeight).toBeGreaterThan(0);
+  expect(open.panelDisplay).toBe("grid");
+  expect(open.panelHidden).toBe(false);
+});
+
 test("shows a retryable backend failure and allows a real retried stream to succeed", async ({ page }) => {
   await createThread(page);
   await ask(page, "retryable backend question");
