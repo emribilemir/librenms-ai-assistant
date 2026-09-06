@@ -76,8 +76,20 @@ def build_navigation_targets(result):
     if route in {"atomic", "device_fact"}:
         return [_device_target(device_id)]
     if route == "ports":
-        ports = _verified_records(context.get("ports"), device_id, "port_id")
-        return [_port_target(device_id, ports[0]["port_id"])] if len(ports) == 1 else []
+        raw_ports = context.get("ports")
+        ports = _verified_records(raw_ports, device_id, "port_id")
+        if ports:
+            return [_port_target(device_id, port["port_id"]) for port in ports[:3]]
+        same_device_row = any(
+            isinstance(port, dict) and _entity_id(port.get("device_id")) == device_id
+            for port in raw_ports if isinstance(raw_ports, list)
+        )
+        if same_device_row:
+            return [{
+                **_device_target(device_id),
+                "label": "LibreNMS'te cihaz portlarını aç",
+            }]
+        return []
     if route == "events":
         return [_events_target(device_id)]
     if route == "alerts":

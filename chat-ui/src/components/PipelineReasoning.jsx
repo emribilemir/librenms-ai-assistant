@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ListTree } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
+import { ProcessingInspector } from "./ProcessingInspector";
 import styles from "./PipelineReasoning.module.css";
 
 function duration(value) {
@@ -9,8 +10,8 @@ function duration(value) {
 }
 
 // Interaction structure adapted from assistant-ui's official Reasoning element.
-export function PipelineReasoning() {
-  const part = useAuiState((state) => state.part.type === "reasoning" ? state.part : null);
+export function PipelineReasoning({ inspection }) {
+  const part = useAuiState((state) => state.message.content?.find((item) => item.type === "reasoning") || null);
   const streaming = useAuiState((state) => state.message.status?.type === "running");
   const metrics = useAuiState((state) => state.message.metadata?.custom?.metrics || null);
   const [manualOpen, setManualOpen] = useState(null);
@@ -22,8 +23,8 @@ export function PipelineReasoning() {
     wasStreaming.current = streaming;
   }, [streaming]);
 
-  if (!part) return null;
-  const lines = part.text.split("\n").filter(Boolean);
+  if (!part && !inspection) return null;
+  const lines = part?.text.split("\n").filter(Boolean) || [];
   const elapsedMs = metrics?.total_ms ?? lines.reduce((total, line) => total + Number(line.match(/· (\d+) ms$/)?.[1] || 0), 0);
   const activeStep = lines.at(-1)?.replace(/ · \d+ ms$/, "") || "İşlem sürüyor";
   const label = streaming
@@ -37,19 +38,20 @@ export function PipelineReasoning() {
         <span className={streaming ? styles.shimmer : undefined}>{label}</span>
         <ChevronDown className={styles.chevron} size={16} aria-hidden="true" />
       </button>
-      <div className={styles.panel} data-open={open || undefined} hidden={!open} aria-live="polite" aria-busy={streaming}>
-        <ol className={styles.steps}>
+      <div className={styles.panel} data-open={open || undefined} hidden={!open} role="region" aria-label="İşleme ayrıntıları" aria-live="polite" aria-busy={streaming}>
+        {lines.length > 0 && <ol className={styles.steps}>
           {lines.map((line, index) => {
             const running = streaming && index === lines.length - 1;
             return <li key={`${index}-${line}`} data-running={running || undefined}><span className={styles.marker} aria-hidden="true" /><span>{line}</span></li>;
           })}
-        </ol>
+        </ol>}
         {!streaming && (metrics?.time_to_first_token_ms != null || metrics?.time_to_first_visible_chunk_ms != null) && (
           <div className={styles.telemetry} aria-label="Yanıt aktarım süreleri">
             {metrics.time_to_first_token_ms != null && <span>İlk model yanıtı {duration(metrics.time_to_first_token_ms)}</span>}
             {metrics.time_to_first_visible_chunk_ms != null && <span>Ekrana aktarım {duration(metrics.time_to_first_visible_chunk_ms)}</span>}
           </div>
         )}
+        <ProcessingInspector value={inspection} embedded />
       </div>
     </section>
   );

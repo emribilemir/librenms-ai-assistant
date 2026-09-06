@@ -326,6 +326,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     used_fallback=result["used_fallback"],
                     answer=answer,
                     navigation_targets=result.get("navigation_targets"),
+                    structured_result=result.get("structured_result"),
                 )
                 terminal = True
                 chunks = iter(iter_answer_chunks(answer))
@@ -354,6 +355,8 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 completed = {"run_id": started["id"], "status": "completed", "message_id": message_id, "used_fallback": result["used_fallback"], "metrics": metrics}
                 if result.get("navigation_targets"):
                     completed["navigation_targets"] = result["navigation_targets"]
+                if result.get("structured_result"):
+                    completed["structured_result"] = result["structured_result"]
                 if demo_mode and isinstance(result.get("inspection"), dict):
                     completed["inspection"] = result["inspection"]
                 yield _sse("completed", completed)

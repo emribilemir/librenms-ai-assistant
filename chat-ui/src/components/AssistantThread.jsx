@@ -12,15 +12,10 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Square, X } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
-import { ProcessingInspector } from "./ProcessingInspector";
 import styles from "./AssistantThread.module.css";
 
 // Structure adapted from assistant-ui's official Perplexity Clone example.
 // Only LibreNMS-specific colors, typography and product controls are changed.
-function AssistantText() {
-  return <div data-slot="assistant-answer"><MarkdownTextPrimitive smooth defer className={styles.markdown} /></div>;
-}
-
 function UserText() {
   return <MessagePartPrimitive.Text component="p" className={styles.userText} />;
 }
@@ -41,6 +36,9 @@ const NAVIGATION_PATTERNS = {
   alerts: /^\/device\/([1-9]\d*)\/alerts$/,
 };
 
+const boundedText = (value, limit) => typeof value === "string" && value.trim() ? value.trim().slice(0, limit) : null;
+const positiveInteger = (value) => Number.isInteger(value) && value > 0 ? value : null;
+
 function safeNavigationTargets(targets) {
   if (!Array.isArray(targets)) return [];
   return targets.filter((target) => {
@@ -58,9 +56,85 @@ function safeNavigationTargets(targets) {
   }).slice(0, 3);
 }
 
+function safeStructuredPortResult(value) {
+  if (!value || value.kind !== "ports" || typeof value.device !== "object" || !Array.isArray(value.ports)) return null;
+  const deviceId = positiveInteger(value.device.device_id);
+  if (!deviceId) return null;
+  const device = { device_id: deviceId, hostname: boundedText(value.device.hostname, 160) };
+  const ports = value.ports.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || positiveInteger(candidate.device_id) !== deviceId) return [];
+    const row = { device_id: deviceId };
+    const portId = positiveInteger(candidate.port_id);
+    const ifIndex = positiveInteger(candidate.ifIndex);
+    if (portId) row.port_id = portId;
+    if (ifIndex) row.ifIndex = ifIndex;
+    for (const [field, limit] of [["ifName", 120], ["ifDescr", 180], ["ifAlias", 180], ["admin_status", 32], ["oper_status", 32]]) {
+      const safe = boundedText(candidate[field], limit);
+      if (safe) row[field] = safe;
+    }
+    return [row];
+  }).slice(0, 24);
+  return ports.length ? { kind: "ports", device, ports } : null;
+}
+
+function titleCaseStatus(value) {
+  if (value === "up") return "Up";
+  if (value === "down") return "Down";
+  return "Unknown";
+}
+
+function portStatus(port) {
+  if (port.oper_status === "up") return { label: "Up", semantic: "positive" };
+  if (port.admin_status === "down") return { label: "Disabled", semantic: "neutral" };
+  if (port.admin_status === "up" && port.oper_status === "down") return { label: "Down", semantic: "problem" };
+  return { label: "Unknown", semantic: "neutral" };
+}
+
+function portLabel(port) {
+  return `Port ${port.ifName || port.ifIndex || port.port_id || "—"}`;
+}
+
+function StructuredPortResult({ result, navigationTargets }) {
+  const targets = safeNavigationTargets(navigationTargets);
+  const rowTargets = new Map(targets.filter((target) => target.kind === "port").map((target) => [target.entity_id, target]));
+  const hostname = result.device.hostname || `Cihaz ${result.device.device_id}`;
+  return (
+    <section className={styles.structuredResult} data-slot="assistant-answer">
+      <p className={styles.structuredTitle}>{hostname} portları</p>
+      <table className={styles.portTable} aria-label={`${hostname} portları`}>
+        <thead><tr><th>Port</th><th>Durum</th><th>Admin</th><th>Açıklama</th></tr></thead>
+        <tbody>{result.ports.map((port, index) => {
+          const status = portStatus(port);
+          const target = port.port_id ? rowTargets.get(port.port_id) : null;
+          const expectedHref = port.port_id ? `/device/${result.device.device_id}/port/port=${port.port_id}` : null;
+          const label = portLabel(port);
+          return (
+            <tr key={port.port_id || `${port.ifIndex || "row"}-${index}`}>
+              <td>{target?.href === expectedHref ? <a href={target.href} target="_blank" rel="noopener noreferrer" aria-label={label}>{label}<ExternalLink size={12} aria-hidden="true" /></a> : <span>{label}</span>}</td>
+              <td data-status={status.semantic}>{status.label}</td>
+              <td>{titleCaseStatus(port.admin_status)}</td>
+              <td>{port.ifAlias || port.ifDescr || "—"}</td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </section>
+  );
+}
+
+function AssistantText() {
+  const structuredValue = useAuiState((state) => state.message.metadata?.custom?.structuredResult);
+  const structuredResult = safeStructuredPortResult(structuredValue);
+  const navigationTargets = useAuiState((state) => state.message.metadata?.custom?.navigationTargets);
+  if (structuredResult) return <StructuredPortResult result={structuredResult} navigationTargets={navigationTargets} />;
+  return <div data-slot="assistant-answer"><MarkdownTextPrimitive smooth defer className={styles.markdown} /></div>;
+}
+
 function NavigationActions() {
   const navigationTargets = useAuiState((state) => state.message.metadata?.custom?.navigationTargets);
-  const targets = safeNavigationTargets(navigationTargets);
+  const structuredValue = useAuiState((state) => state.message.metadata?.custom?.structuredResult);
+  const structuredResult = safeStructuredPortResult(structuredValue);
+  const targets = safeNavigationTargets(navigationTargets).filter((target) => !(structuredResult && target.kind === "port"));
   if (!targets.length) return null;
   return (
     <nav className={styles.navigationActions} aria-label="LibreNMS bağlantıları">
@@ -88,11 +162,11 @@ function AssistantMessage() {
     <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
       <div className={styles.assistantBody}>
         {usedFallback && <span className={styles.fallback}>Doğrulanmış güvenli yanıt</span>}
-        <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: PipelineReasoning, Empty: () => null }} />
+        <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: () => null, Empty: () => null }} />
         <NavigationActions />
-        <ProcessingInspector value={inspection} />
-        <div className={styles.messageTools}>
+        <div className={styles.messageTools} role="group" aria-label="Mesaj eylemleri">
           <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
+          <PipelineReasoning inspection={inspection} />
         </div>
       </div>
     </MessagePrimitive.Root>

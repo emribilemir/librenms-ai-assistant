@@ -95,6 +95,43 @@ test("restores safe navigation after reload and suppresses malformed targets", a
   await expect(page.getByRole("link", { name: "Unsafe" })).toHaveCount(0);
 });
 
+test("renders compact structured port rows, inline links, and the action row after reload without overflow", async ({ page }) => {
+  await ask(page, "structured port list");
+  const table = page.getByRole("table", { name: "lab-j9772a-02 portları" });
+  await expect(table).toBeVisible();
+  await expect(page.getByText(/admin=up oper=down/)).toHaveCount(0);
+  await expect(table.getByRole("link", { name: "Port 2" })).toHaveAttribute("href", "/device/7/port/port=41");
+  await expect(table.getByRole("link", { name: "Port 3" })).toHaveAttribute("href", "/device/7/port/port=42");
+  await expect(table.getByRole("cell", { name: "Down" }).first()).toHaveAttribute("data-status", "problem");
+  await expect(table.getByRole("cell", { name: "Disabled" }).first()).toHaveAttribute("data-status", "neutral");
+  await expect(page.getByRole("link", { name: "Port detayını aç" })).toHaveCount(0);
+
+  const actions = page.getByRole("group", { name: "Mesaj eylemleri" });
+  await expect(actions.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
+  const details = actions.getByRole("button", { name: /İşlem ayrıntıları/i });
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  const compactGap = await page.locator("[data-message-id]").last().evaluate((message) => {
+    const answer = message.querySelector('[data-slot="assistant-answer"]').getBoundingClientRect();
+    const actionRow = message.querySelector('[aria-label="Mesaj eylemleri"]').getBoundingClientRect();
+    return actionRow.top - answer.bottom;
+  });
+  expect(compactGap).toBeLessThanOrEqual(12);
+
+  await details.click();
+  await expect(page.getByRole("region", { name: "İşleme ayrıntıları" })).toBeVisible();
+  await details.click();
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+
+  await page.reload();
+  await page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "structured port list", exact: true }).click();
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("link", { name: "Port 2" })).toHaveAttribute("href", "/device/7/port/port=41");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 test("builds assistant-ui starter prompts from currently up devices", async ({ page }) => {
   const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 açık mı/i });
   await expect(liveSuggestion).toBeVisible();
@@ -431,13 +468,13 @@ test("completed process disclosure follows the answer without a closed layout ro
       panelHidden: panel.hidden,
     };
   });
-  expect(closed).toEqual({
+  expect(closed).toMatchObject({
     answerBeforeReasoning: true,
-    gap: 0,
     panelHeight: 0,
     panelDisplay: "none",
     panelHidden: true,
   });
+  expect(closed.gap).toBeLessThanOrEqual(12);
 
   await page.getByRole("button", { name: /İşlem ayrıntıları/i }).click();
   const open = await assistant.evaluate((message) => {
@@ -451,7 +488,7 @@ test("completed process disclosure follows the answer without a closed layout ro
       panelHidden: panel.hidden,
     };
   });
-  expect(open.triggerToPanelGap).toBe(0);
+  expect(open.triggerToPanelGap).toBeLessThanOrEqual(12);
   expect(open.panelHeight).toBeGreaterThan(0);
   expect(open.panelDisplay).toBe("grid");
   expect(open.panelHidden).toBe(false);

@@ -97,6 +97,39 @@ class SseServiceTests(unittest.TestCase):
         detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
         self.assertEqual(detail["messages"][-1]["navigation_targets"], completed["navigation_targets"])
 
+    def test_completed_event_carries_and_persists_structured_result(self):
+        structured_result = {
+            "kind": "ports",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-02"},
+            "ports": [{"device_id": 1, "port_id": 2, "ifIndex": 2, "admin_status": "up", "oper_status": "down"}],
+        }
+
+        class StructuredAdapter(CompletedAdapter):
+            def run(self, content, observer, is_cancelled):
+                result = super().run(content, observer, is_cancelled)
+                result["structured_result"] = structured_result
+                return result
+
+        client = TestClient(create_app(
+            os.path.join(self.directory.name, "structured.sqlite3"),
+            secret=SECRET,
+            adapter=StructuredAdapter(),
+        ))
+        headers = bearer()
+        thread = client.post("/v1/threads", headers=headers, json={}).json()
+        response = client.post(
+            f"/v1/threads/{thread['id']}/runs",
+            headers=headers,
+            json={"client_message_id": "structured", "content": "down portlar?"},
+        )
+        completed = json.loads([
+            line[6:] for line in response.text.splitlines() if line.startswith("data:")
+        ][-1])
+
+        self.assertEqual(completed["structured_result"], structured_result)
+        detail = client.get(f"/v1/threads/{thread['id']}", headers=headers).json()
+        self.assertEqual(detail["messages"][-1]["structured_result"], structured_result)
+
     def test_demo_mode_off_drops_adapter_inspection_from_completed_transport(self):
         class InspectionAdapter(CompletedAdapter):
             def run(self, content, observer, is_cancelled):

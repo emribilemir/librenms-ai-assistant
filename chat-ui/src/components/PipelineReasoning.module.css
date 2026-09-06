@@ -1,12 +1,13 @@
-.root { color: #9ba5ad; margin: 0 0 5px; width: 100%; }
-.trigger { align-items: center; background: transparent; border: 0; color: #9ba5ad; display: inline-flex; font: inherit; font-size: 12px; gap: 7px; padding: 4px 0; transition: color 180ms ease, transform 180ms ease; }
-.trigger:hover { color: #eef1f3; }
+.root { display: contents; }
+.trigger { align-items: center; background: transparent; border: 0; border-radius: 7px; color: #929ca4; display: inline-flex; font: inherit; font-size: 11px; gap: 5px; min-height: 28px; padding: 4px 7px; transition: background-color 180ms ease, color 180ms ease, transform 180ms ease; }
+.trigger:hover { background: #30363c; color: #eef1f3; }
+.trigger:focus-visible { outline: 2px solid #ef7a82; outline-offset: 2px; }
 .trigger:active { transform: scale(.98); }
 .chevron { transition: transform 200ms cubic-bezier(.32, .72, 0, 1); }
 .trigger[aria-expanded="false"] .chevron { transform: rotate(-90deg); }
-.panel { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 200ms cubic-bezier(.32, .72, 0, 1), opacity 160ms ease; }
+.panel { background: #1a1f23; border: 1px solid #343c43; border-radius: 9px; display: grid; flex: 0 0 100%; margin-top: 3px; min-width: 0; opacity: 0; overflow: hidden; transition: opacity 160ms ease; }
 .panel[hidden] { display: none; }
-.panel[data-open] { grid-template-rows: 1fr; opacity: 1; }
+.panel[data-open] { opacity: 1; }
 .steps { border-left: 1px solid #414950; display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 2px 0 2px 7px; min-height: 0; overflow: hidden; padding: 4px 0 5px 16px; }
 .steps li { align-items: center; display: flex; font-size: 11px; gap: 8px; line-height: 1.35; }
 .marker { background: #78828b; border-radius: 50%; height: 5px; margin-left: -19px; width: 5px; }

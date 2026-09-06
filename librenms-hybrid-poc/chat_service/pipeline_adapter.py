@@ -8,6 +8,7 @@ from librenms_backend import LibreNMSBackend
 
 from .inspection import build_inspection
 from .navigation import build_navigation_targets
+from .structured_results import build_structured_result
 
 
 _METRICS = ("planner_ms", "resolver_ms", "backend_ms", "synthesis_ms", "time_to_first_token_ms", "time_to_first_visible_chunk_ms", "total_ms")
@@ -105,6 +106,9 @@ class PipelineAdapter:
         navigation_targets = build_navigation_targets(result)
         if navigation_targets:
             response["navigation_targets"] = navigation_targets
+        structured_result = build_structured_result(result)
+        if structured_result:
+            response["structured_result"] = structured_result
         if self._include_inspection:
             response["inspection"] = build_inspection(result, navigation_targets)
         return response

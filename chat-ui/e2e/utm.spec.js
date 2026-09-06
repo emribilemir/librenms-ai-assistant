@@ -214,6 +214,54 @@ test.describe("authorized UTM acceptance", () => {
     }
   });
 
+  test("renders live plural down ports as persisted compact rows with inline read-only links", async ({ browser }) => {
+    skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE");
+    const query = "lab-j9772a-02'in down portları hangileri?";
+    const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
+    try {
+      await createThread(page);
+      await ask(page, query);
+      const table = page.getByRole("table", { name: "lab-j9772a-02 portları" });
+      await expect(table).toBeVisible();
+      await expect(page.getByText(/admin=up oper=down/)).toHaveCount(0);
+      const port2 = table.getByRole("link", { name: "Port 2" });
+      const port3 = table.getByRole("link", { name: "Port 3" });
+      await expect(port2).toHaveAttribute("href", /^\/device\/[1-9]\d*\/port\/port=[1-9]\d*$/);
+      await expect(port3).toHaveAttribute("href", /^\/device\/[1-9]\d*\/port\/port=[1-9]\d*$/);
+      await expect(table.getByRole("cell", { name: "Down" }).first()).toHaveAttribute("data-status", "problem");
+      await expect(table.getByRole("cell", { name: "Disabled" }).first()).toHaveAttribute("data-status", "neutral");
+      await expect(page.getByRole("link", { name: "Port detayını aç" })).toHaveCount(0);
+
+      const assistant = page.locator("[data-message-id]").last();
+      const compact = await assistant.evaluate((message) => {
+        const answer = message.querySelector('[data-slot="assistant-answer"]').getBoundingClientRect();
+        const actions = message.querySelector('[aria-label="Mesaj eylemleri"]').getBoundingClientRect();
+        const details = message.querySelector('[data-slot="pipeline-reasoning"] button');
+        const panel = details.nextElementSibling;
+        return { gap: actions.top - answer.bottom, panelHeight: panel.getBoundingClientRect().height, panelHidden: panel.hidden };
+      });
+      expect(compact.gap).toBeLessThanOrEqual(12);
+      expect(compact.panelHeight).toBe(0);
+      expect(compact.panelHidden).toBe(true);
+
+      const details = assistant.getByRole("button", { name: /İşlem ayrıntıları/i });
+      await details.click();
+      await expect(assistant.getByRole("region", { name: "İşleme ayrıntıları" })).toBeVisible();
+      await details.click();
+      await expect(details).toHaveAttribute("aria-expanded", "false");
+
+      await page.reload();
+      await page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: query, exact: true }).click();
+      await expect(table).toBeVisible();
+      await expect(table.getByRole("link", { name: "Port 2" })).toHaveAttribute("href", /^\/device\/[1-9]\d*\/port\/port=[1-9]\d*$/);
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("shows a curated backend failure after streamed progress and retries only when the service permits it", async ({ browser }) => {
     skipWithout(test, "AI_UTM_PRIMARY_STORAGE_STATE", "AI_UTM_RETRY_QUERY", "AI_UTM_RETRY_ERROR_TEXT", "AI_UTM_RETRY_SUCCESS_TEXT");
     const { context, page } = await signedPluginPage(browser, process.env.AI_UTM_PRIMARY_STORAGE_STATE);
