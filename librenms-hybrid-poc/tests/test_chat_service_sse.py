@@ -137,7 +137,7 @@ class SseServiceTests(unittest.TestCase):
                 result["inspection"] = {"route": "ports"}
                 return result
 
-        with patch.dict(os.environ, {"AI_DEMO_MODE": "0"}):
+        with patch.dict(os.environ, {"AI_DEMO_MODE_ALLOWED": "0"}):
             client = TestClient(create_app(
                 os.path.join(self.directory.name, "inspection-off.sqlite3"),
                 secret=SECRET,
@@ -165,13 +165,17 @@ class SseServiceTests(unittest.TestCase):
                 result["inspection"] = inspection
                 return result
 
-        with patch.dict(os.environ, {"AI_DEMO_MODE": "1"}):
+        with patch.dict(os.environ, {"AI_DEMO_MODE_ALLOWED": "1"}):
             client = TestClient(create_app(
                 os.path.join(self.directory.name, "inspection-on.sqlite3"),
                 secret=SECRET,
                 adapter=InspectionAdapter(),
             ))
         headers = bearer()
+        self.assertEqual(
+            client.post("/v1/demo-mode", headers=headers, json={"enabled": True}).status_code,
+            200,
+        )
         thread = client.post("/v1/threads", headers=headers, json={}).json()
         response = client.post(
             f"/v1/threads/{thread['id']}/runs",

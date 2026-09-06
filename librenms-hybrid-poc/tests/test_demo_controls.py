@@ -85,7 +85,7 @@ class DemoControlRouteTests(unittest.TestCase):
         self.directory.cleanup()
 
     def make_client(self, *, enabled, runner=None):
-        environment = {"AI_DEMO_MODE": "1" if enabled else "0"}
+        environment = {"AI_DEMO_MODE_ALLOWED": "1" if enabled else "0"}
         with patch.dict(os.environ, environment, clear=False), patch.object(
             app_module,
             "load_simulation_runner",
@@ -95,7 +95,11 @@ class DemoControlRouteTests(unittest.TestCase):
             app = app_module.create_app(
                 os.path.join(self.directory.name, "chat.sqlite3"), secret=SECRET
             )
-        return TestClient(app)
+        client = TestClient(app)
+        if enabled:
+            response = client.post("/v1/demo-mode", headers=bearer(), json={"enabled": True})
+            self.assertEqual(response.status_code, 200)
+        return client
 
     def test_demo_mode_off_does_not_register_endpoints(self):
         client = self.make_client(enabled=False)

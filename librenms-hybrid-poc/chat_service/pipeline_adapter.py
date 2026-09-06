@@ -22,7 +22,7 @@ class PipelineAdapter:
         self._include_inspection = (
             os.environ.get("AI_DEMO_MODE") == "1"
             if include_inspection is None
-            else bool(include_inspection)
+            else include_inspection if callable(include_inspection) else bool(include_inspection)
         )
 
     def list_devices(self):
@@ -109,7 +109,7 @@ class PipelineAdapter:
         structured_result = build_structured_result(result)
         if structured_result:
             response["structured_result"] = structured_result
-        if self._include_inspection:
+        if self._include_inspection() if callable(self._include_inspection) else self._include_inspection:
             response["inspection"] = build_inspection(result, navigation_targets)
         return response
 
