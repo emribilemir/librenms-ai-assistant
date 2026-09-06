@@ -68,6 +68,11 @@ class SuggestionGenerationTests(unittest.TestCase):
             {item["prompt"] for item in first},
             {item["prompt"] for item in second},
         )
+        self.assertTrue(
+            {item["prompt"] for item in first}.isdisjoint(
+                {item["prompt"] for item in second}
+            )
+        )
         self.assertIn("Cihaz incelemesi", [item["label"] for item in second])
         self.assertTrue(
             all(

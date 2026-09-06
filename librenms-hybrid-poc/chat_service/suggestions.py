@@ -87,10 +87,13 @@ def build_suggestions(
     ]
     if not eligible:
         return []
-    offset = max(0, int(rotation)) % len(eligible)
+    window_size = max(0, min(limit, len(eligible)))
+    if window_size == 0:
+        return []
+    offset = (max(0, int(rotation)) * window_size) % len(eligible)
     ordered = eligible[offset:] + eligible[:offset]
     suggestions = []
-    for index, capability in enumerate(ordered[:max(0, min(limit, len(ordered)))]):
+    for index, capability in enumerate(ordered[:window_size]):
         candidates = port_hostnames if capability.get("requires_ports") and has_port_metadata else hostnames
         hostname = candidates[index % len(candidates)]
         prompt = capability["prompt"].format(hostname=hostname)

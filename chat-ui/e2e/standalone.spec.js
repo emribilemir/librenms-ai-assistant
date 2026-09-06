@@ -194,6 +194,7 @@ test("rotates the capability-first suggestion set on a consecutive new chat", as
   await expect(suggestions).toHaveCount(4);
   const secondSet = new Set(await suggestions.allTextContents());
   expect(secondSet).not.toEqual(firstSet);
+  expect([...secondSet].every((text) => !firstSet.has(text))).toBe(true);
   expect([...secondSet].some((text) => text.includes("Cihaz incelemesi"))).toBe(true);
 });
 
