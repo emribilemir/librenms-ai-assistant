@@ -1,4 +1,4 @@
-.root { margin-top: 10px; max-width: 42rem; }
+.root { margin-top: 6px; max-width: 42rem; }
 .trigger { align-items: center; background: transparent; border: 0; border-radius: 6px; color: #98a2aa; display: inline-flex; font: inherit; font-size: 11px; font-weight: 620; gap: 4px; min-height: 24px; padding: 5px 4px; }
 .trigger:hover { color: #dfe3e6; }
 .trigger:focus-visible, .tabs button:focus-visible { outline: 2px solid #ef7a82; outline-offset: 2px; }

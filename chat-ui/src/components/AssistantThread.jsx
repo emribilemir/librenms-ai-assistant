@@ -4,12 +4,13 @@ import {
   ComposerPrimitive,
   MessagePartPrimitive,
   MessagePrimitive,
+  QueueItemPrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
   useAuiState,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Square } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Square, X } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
 import { ProcessingInspector } from "./ProcessingInspector";
 import styles from "./AssistantThread.module.css";
@@ -107,9 +108,30 @@ function LiveSuggestion() {
   );
 }
 
+function ComposerQueue() {
+  const count = useAuiState((state) => state.composer.queue.length);
+  if (count === 0) return null;
+  return (
+    <section className={styles.queue} aria-label="Sıradaki sorular" aria-live="polite">
+      <p className={styles.queueCount}>{count} sırada</p>
+      <ComposerPrimitive.Queue>
+        {({ queueItem }) => (
+          <div className={styles.queueItem}>
+            <QueueItemPrimitive.Text className={styles.queueText} />
+            <QueueItemPrimitive.Remove className={styles.queueRemove} aria-label={`Sıradaki soruyu kaldır: ${queueItem.prompt}`}>
+              <X size={15} aria-hidden="true" />
+            </QueueItemPrimitive.Remove>
+          </div>
+        )}
+      </ComposerPrimitive.Queue>
+    </section>
+  );
+}
+
 function Composer({ placeholder, canRetry, onRetry }) {
   return (
     <ComposerPrimitive.Root className={styles.composer}>
+      <ComposerQueue />
       <ComposerPrimitive.Input rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" />
       <div className={styles.composerBar}>
         <span className={styles.liveMode}><Activity size={14} aria-hidden="true" /> Canlı LibreNMS</span>
@@ -117,7 +139,10 @@ function Composer({ placeholder, canRetry, onRetry }) {
           {canRetry && <button type="button" className={styles.retry} onClick={onRetry}>Yeniden dene</button>}
           <span className={styles.primaryAction}>
             <AuiIf condition={(state) => state.thread.isRunning}>
-              <ComposerPrimitive.Cancel className={styles.primaryButton} aria-label="Çalışmayı iptal et"><Square size={13} fill="currentColor" aria-hidden="true" /></ComposerPrimitive.Cancel>
+              <ComposerPrimitive.Cancel className={`${styles.primaryButton} ${styles.stopButton}`} aria-label="Çalışmayı iptal et"><Square size={13} fill="currentColor" aria-hidden="true" /></ComposerPrimitive.Cancel>
+            </AuiIf>
+            <AuiIf condition={(state) => state.thread.isRunning && !state.composer.isEmpty}>
+              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu sıraya ekle"><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
             </AuiIf>
             <AuiIf condition={(state) => !state.thread.isRunning && !state.composer.isEmpty}>
               <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu gönder"><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>

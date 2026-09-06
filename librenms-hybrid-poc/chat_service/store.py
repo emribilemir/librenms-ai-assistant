@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 import sqlite3
 import time
 import uuid
@@ -52,7 +53,8 @@ class ChatStore:
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
                     role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
-                    content TEXT NOT NULL, created_at REAL NOT NULL
+                    content TEXT NOT NULL, created_at REAL NOT NULL,
+                    navigation_targets TEXT
                 );
                 CREATE TABLE IF NOT EXISTS runs (
                     id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
@@ -69,16 +71,60 @@ class ChatStore:
             """)
             row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
             if row is None:
-                connection.execute("INSERT INTO schema_version(version, applied_at) VALUES(1, ?)", (time.time(),))
+                connection.execute("INSERT INTO schema_version(version, applied_at) VALUES(2, ?)", (time.time(),))
+            else:
+                message_columns = {
+                    column["name"] for column in connection.execute("PRAGMA table_info(messages)")
+                }
+                if "navigation_targets" not in message_columns:
+                    connection.execute("ALTER TABLE messages ADD COLUMN navigation_targets TEXT")
+                if row["version"] < 2:
+                    connection.execute("UPDATE schema_version SET version=2, applied_at=?", (time.time(),))
 
     @staticmethod
     def _row(row):
         return dict(row) if row is not None else None
 
+    @staticmethod
+    def _message_row(row):
+        message = dict(row)
+        encoded = message.pop("navigation_targets", None)
+        if encoded:
+            try:
+                targets = json.loads(encoded)
+            except (TypeError, ValueError):
+                targets = None
+            if isinstance(targets, list):
+                message["navigation_targets"] = targets
+        return message
+
+    @staticmethod
+    def _encoded_navigation_targets(targets):
+        if not isinstance(targets, list) or not targets:
+            return None
+        bounded = targets[:3]
+        if not all(isinstance(target, dict) for target in bounded):
+            return None
+        return json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+
     def create_thread(self, user_sub: str):
         now, thread_id = time.time(), str(uuid.uuid4())
         with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            pristine = connection.execute("""
+                SELECT t.id, t.title, t.created_at, t.updated_at
+                FROM threads t
+                WHERE t.user_sub=?
+                  AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.thread_id=t.id)
+                  AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.thread_id=t.id)
+                ORDER BY t.updated_at DESC
+                LIMIT 1
+            """, (user_sub,)).fetchone()
+            if pristine is not None:
+                connection.execute("COMMIT")
+                return self._row(pristine)
             connection.execute("INSERT INTO threads VALUES(?, ?, '', ?, ?)", (thread_id, user_sub, now, now))
+            connection.execute("COMMIT")
         return {"id": thread_id, "title": "", "created_at": now, "updated_at": now}
 
     def list_threads(self, user_sub: str):
@@ -96,7 +142,7 @@ class ChatStore:
     def get_thread(self, thread_id: str, user_sub: str):
         with self.connection() as connection:
             thread = self._owned_thread(connection, thread_id, user_sub)
-            messages = [self._row(row) for row in connection.execute("SELECT id, role, content, created_at FROM messages WHERE thread_id=? ORDER BY created_at, rowid", (thread_id,))]
+            messages = [self._message_row(row) for row in connection.execute("SELECT id, role, content, created_at, navigation_targets FROM messages WHERE thread_id=? ORDER BY created_at, rowid", (thread_id,))]
             runs = [self._row(row) for row in connection.execute("SELECT id, client_message_id, status, started_at, completed_at, used_fallback, planner_ms, resolver_ms, backend_ms, synthesis_ms, time_to_first_token_ms, time_to_first_visible_chunk_ms, total_ms, error_stage, error_code FROM runs WHERE thread_id=? ORDER BY started_at", (thread_id,))]
             out = self._row(thread)
             out["messages"], out["runs"] = messages, runs
@@ -108,7 +154,7 @@ class ChatStore:
             thread = self._owned_thread(connection, thread_id, user_sub)
             now, message_id = time.time(), str(uuid.uuid4())
             title = thread["title"] or " ".join(content.split())[:60]
-            connection.execute("INSERT INTO messages VALUES(?, ?, 'user', ?, ?)", (message_id, thread_id, content, now))
+            connection.execute("INSERT INTO messages(id, thread_id, role, content, created_at) VALUES(?, ?, 'user', ?, ?)", (message_id, thread_id, content, now))
             connection.execute("UPDATE threads SET title=?, updated_at=? WHERE id=?", (title, now, thread_id))
             connection.execute("COMMIT")
             return message_id
@@ -126,7 +172,7 @@ class ChatStore:
                     raise ConflictError("active run")
                 now, run_id, message_id = time.time(), str(uuid.uuid4()), str(uuid.uuid4())
                 title = thread["title"] or " ".join(content.split())[:60]
-                connection.execute("INSERT INTO messages VALUES(?, ?, 'user', ?, ?)", (message_id, thread_id, content, now))
+                connection.execute("INSERT INTO messages(id, thread_id, role, content, created_at) VALUES(?, ?, 'user', ?, ?)", (message_id, thread_id, content, now))
                 connection.execute("INSERT INTO runs(id, thread_id, client_message_id, status, started_at) VALUES(?, ?, ?, 'running', ?)", (run_id, thread_id, client_message_id, now))
                 connection.execute("UPDATE threads SET title=?, updated_at=? WHERE id=?", (title, now, thread_id))
                 connection.execute("COMMIT")
@@ -136,7 +182,7 @@ class ChatStore:
                     connection.execute("ROLLBACK")
                 raise
 
-    def complete_run(self, run_id, status, metrics, *, used_fallback=False, answer=None, error_stage=None, error_code=None):
+    def complete_run(self, run_id, status, metrics, *, used_fallback=False, answer=None, navigation_targets=None, error_stage=None, error_code=None):
         values = {key: (metrics or {}).get(key) for key in METRIC_COLUMNS}
         with self.connection() as connection:
             try:
@@ -147,7 +193,10 @@ class ChatStore:
                 now, message_id = time.time(), None
                 if status == "completed" and answer:
                     message_id = str(uuid.uuid4())
-                    connection.execute("INSERT INTO messages VALUES(?, ?, 'assistant', ?, ?)", (message_id, row["thread_id"], answer, now))
+                    connection.execute(
+                        "INSERT INTO messages(id, thread_id, role, content, created_at, navigation_targets) VALUES(?, ?, 'assistant', ?, ?, ?)",
+                        (message_id, row["thread_id"], answer, now, self._encoded_navigation_targets(navigation_targets)),
+                    )
                 assignments = ", ".join(["status=?", "completed_at=?", "used_fallback=?", *[f"{key}=?" for key in METRIC_COLUMNS], "error_stage=?", "error_code=?"])
                 connection.execute(f"UPDATE runs SET {assignments} WHERE id=?", (status, now, int(bool(used_fallback)), *[values[key] for key in METRIC_COLUMNS], error_stage, error_code, run_id))
                 connection.execute("COMMIT")

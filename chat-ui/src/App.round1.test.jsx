@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 const mockUseExternalStoreRuntime = jest.fn(() => ({}));
-jest.mock("@assistant-ui/react", () => ({ AssistantRuntimeProvider: ({ children }) => children, useExternalStoreRuntime: (...args) => mockUseExternalStoreRuntime(...args) }));
+jest.mock("@assistant-ui/react", () => {
+  const actual = jest.requireActual("@assistant-ui/react");
+  return { ...actual, AssistantRuntimeProvider: ({ children }) => children, useExternalStoreRuntime: (...args) => mockUseExternalStoreRuntime(...args) };
+});
 jest.mock("./components/AssistantThread", () => {
   const React = require("react");
   return {
@@ -153,6 +156,45 @@ test("empty history keeps the composer writable and creates a thread on first se
     expect.any(AbortSignal),
     expect.any(Function),
   );
+});
+
+test("pristine selected thread makes New Chat idempotent after history hydration", async () => {
+  const api = makeApi({
+    listThreads: jest.fn().mockResolvedValue([{ id: "empty", title: "" }]),
+    getThread: jest.fn().mockResolvedValue({ id: "empty", title: "", messages: [], runs: [] }),
+    createThread: jest.fn(),
+  });
+  const chatStore = new AssistantChatStore(createInitialState({
+    threads: [{ id: "empty", title: "" }],
+    selectedThreadId: "empty",
+    messages: { empty: [] },
+  }));
+  render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+
+  await act(async () => mockUseExternalStoreRuntime.mock.calls.at(-1)[0].adapters.threadList.onSwitchToNewThread());
+
+  expect(api.createThread).not.toHaveBeenCalled();
+});
+
+test("New Chat is available after the first message and for a running thread", async () => {
+  for (const seed of [
+    { title: "First question", messages: [{ id: "u", role: "user", content: "First question" }], runs: {} },
+    { title: "", messages: [], runs: { active: { id: "r", status: "running" } } },
+  ]) {
+    const api = makeApi({ createThread: jest.fn().mockResolvedValue({ id: `new-${seed.title || "running"}`, title: "" }) });
+    const chatStore = new AssistantChatStore(createInitialState({
+      threads: [{ id: "active", title: seed.title }],
+      selectedThreadId: "active",
+      messages: { active: seed.messages },
+      runs: seed.runs,
+    }));
+    const view = render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+
+    await act(async () => mockUseExternalStoreRuntime.mock.calls.at(-1)[0].adapters.threadList.onSwitchToNewThread());
+
+    expect(api.createThread).toHaveBeenCalledTimes(1);
+    view.unmount();
+  }
 });
 
 test("mounted App binds the supplied reducer store to the transcript and refreshes the deterministic title after completion", async () => {

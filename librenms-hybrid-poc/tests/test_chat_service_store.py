@@ -20,7 +20,28 @@ class ChatStoreTests(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
             self.assertGreaterEqual(connection.execute("PRAGMA busy_timeout").fetchone()[0], 5000)
-            self.assertEqual(connection.execute("SELECT version FROM schema_version").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT version FROM schema_version").fetchone()[0], 2)
+
+    def test_create_thread_reuses_a_pristine_thread_but_allows_a_new_one_after_content(self):
+        first = self.store.create_thread("owner")
+        duplicate = self.store.create_thread("owner")
+
+        self.assertEqual(duplicate["id"], first["id"])
+        self.assertEqual(len(self.store.list_threads("owner")), 1)
+
+        self.store.create_user_message(first["id"], "owner", "first question")
+        second = self.store.create_thread("owner")
+
+        self.assertNotEqual(second["id"], first["id"])
+        self.assertEqual(len(self.store.list_threads("owner")), 2)
+
+    def test_running_thread_is_not_reused_as_pristine(self):
+        first = self.store.create_thread("owner")
+        self.store.start_run(first["id"], "owner", "client-1", "first question")
+
+        second = self.store.create_thread("owner")
+
+        self.assertNotEqual(second["id"], first["id"])
 
     def test_titles_are_whitespace_normalized_and_limited_to_sixty_unicode_characters(self):
         thread = self.store.create_thread("owner")
@@ -51,3 +72,17 @@ class ChatStoreTests(unittest.TestCase):
             self.store.complete_run(run["id"], "completed", {}, answer="must not persist")
         detail = self.store.get_thread(thread["id"], "owner")
         self.assertEqual([message["role"] for message in detail["messages"]], ["user"])
+
+    def test_completed_answer_persists_bounded_navigation_targets(self):
+        thread = self.store.create_thread("owner")
+        run = self.store.start_run(thread["id"], "owner", "client-1", "question")
+        targets = [{
+            "kind": "device",
+            "label": "LibreNMS'te cihazı aç",
+            "entity_id": 1,
+            "href": "/device/1",
+        }]
+
+        self.store.complete_run(run["id"], "completed", {}, answer="answer", navigation_targets=targets)
+
+        self.assertEqual(self.store.get_thread(thread["id"], "owner")["messages"][-1]["navigation_targets"], targets)

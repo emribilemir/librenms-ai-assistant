@@ -9,6 +9,14 @@ test.beforeEach(async ({ page }) => {
   );
   await page.goto("/");
   expect((await initialThreadList).status()).toBe(200);
+  const removedExistingThreads = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    const headers = { Authorization: `Bearer ${token}` };
+    const threads = await (await fetch("/ai-api/v1/threads", { headers })).json();
+    await Promise.all(threads.map((thread) => fetch(`/ai-api/v1/threads/${thread.id}`, { method: "DELETE", headers })));
+    return threads.length;
+  });
+  if (removedExistingThreads) await page.reload();
 });
 
 async function createThread(page) {
@@ -46,16 +54,57 @@ test("sends the first assistant-ui message without pre-creating a thread", async
   await expect(page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "first direct question", exact: true })).toBeVisible();
 });
 
+test("keeps New Chat idempotent while pristine and enables it after the first message", async ({ page }) => {
+  const newChat = page.locator('[data-slot="aui_thread-list-new"]');
+  await createThread(page);
+  await expect(newChat).toBeDisabled();
+  const pristineCount = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    return (await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json()).length;
+  });
+
+  await newChat.click({ force: true });
+  const afterDuplicate = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    return (await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json()).length;
+  });
+  expect(afterDuplicate).toBe(pristineCount);
+
+  await ask(page, "first meaningful message");
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  await expect(newChat).toBeEnabled();
+  await createThread(page);
+  const afterContent = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    return (await (await fetch("/ai-api/v1/threads", { headers: { Authorization: `Bearer ${token}` } })).json()).length;
+  });
+  expect(afterContent).toBe(pristineCount + 1);
+});
+
+test("restores safe navigation after reload and suppresses malformed targets", async ({ page }) => {
+  await ask(page, "navigation persistence");
+  const navigation = page.getByRole("navigation", { name: "LibreNMS bağlantıları" });
+  await expect(navigation.getByRole("link", { name: /LibreNMS'te cihazı aç/ })).toHaveAttribute("href", "/device/1");
+
+  await page.reload();
+  await page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "navigation persistence", exact: true }).click();
+  await expect(navigation.getByRole("link", { name: /LibreNMS'te cihazı aç/ })).toHaveAttribute("href", "/device/1");
+
+  await ask(page, "malformed navigation");
+  await expect(page.getByText("Validated result without an action.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Unsafe" })).toHaveCount(0);
+});
+
 test("builds assistant-ui starter prompts from currently up devices", async ({ page }) => {
-  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 durumunu kontrol et/i });
+  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 açık mı/i });
   await expect(liveSuggestion).toBeVisible();
   await liveSuggestion.click();
-  await expect(page.getByText("lab-j9775a-01 cihazının mevcut durumunu göster.")).toBeVisible();
+  await expect(page.getByText("lab-j9775a-01 açık mı?")).toBeVisible();
   await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
   await expect(page.getByRole("button", { name: /lab-offline-01/i })).toHaveCount(0);
 });
 
-test("fills the available conversation height without clipping starter prompts", async ({ page }) => {
+test("fills the available conversation height without clipping starter prompts", async ({ page }, testInfo) => {
   const [threadBox, mainBox] = await Promise.all([
     page.locator('[data-assistant-ui="thread"]').boundingBox(),
     page.locator("#investigation-main").boundingBox(),
@@ -65,6 +114,212 @@ test("fills the available conversation height without clipping starter prompts",
   await expect(suggestions).toBeInViewport();
   const suggestionBox = await suggestions.boundingBox();
   expect(suggestionBox.y + suggestionBox.height).toBeLessThanOrEqual(threadBox.y + threadBox.height);
+  const shellBox = await page.locator("#root > div").boundingBox();
+  expect(Math.abs((shellBox.y + shellBox.height) - page.viewportSize().height)).toBeLessThanOrEqual(1);
+
+  const [headingBox, composerBox] = await Promise.all([
+    page.getByRole("heading", { name: "Ağında neyi inceleyelim?" }).boundingBox(),
+    page.getByLabel("Ask LibreNMS").boundingBox(),
+  ]);
+  const contentCenter = (headingBox.y + composerBox.y + composerBox.height) / 2;
+  const availableCenter = threadBox.y + (threadBox.height / 2);
+  expect(Math.abs(contentCenter - availableCenter)).toBeLessThan(threadBox.height * 0.18);
+  await page.screenshot({ path: testInfo.outputPath("new-chat-balanced-layout.png"), fullPage: true });
+});
+
+test("keeps empty and completed composers inside the host shell with a long thread history", async ({ page }) => {
+  const seeded = await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    for (let index = 0; index < 40; index += 1) {
+      const response = await fetch("/ai-api/v1/threads", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!response.ok) return response.status;
+    }
+    return 201;
+  });
+  expect(seeded).toBe(201);
+
+  const reloadedThreads = page.waitForResponse((response) =>
+    response.url().endsWith("/ai-api/v1/threads") && response.request().method() === "GET",
+  );
+  await page.reload();
+  expect((await reloadedThreads).status()).toBe(200);
+
+  const assertComposerWithinShell = async () => {
+    const geometry = await page.evaluate(() => {
+      const shell = document.querySelector("#root > div").getBoundingClientRect();
+      const main = document.querySelector("#investigation-main").getBoundingClientRect();
+      const composer = document.querySelector('textarea[aria-label="Ask LibreNMS"]').getBoundingClientRect();
+      return {
+        shellBottom: shell.bottom,
+        mainBottom: main.bottom,
+        composerTop: composer.top,
+        composerBottom: composer.bottom,
+      };
+    });
+    expect(Math.abs(geometry.mainBottom - geometry.shellBottom)).toBeLessThanOrEqual(1);
+    expect(geometry.composerTop).toBeGreaterThanOrEqual(0);
+    expect(geometry.composerBottom).toBeLessThanOrEqual(geometry.shellBottom);
+    await expect(page.getByLabel("Ask LibreNMS")).toBeInViewport();
+  };
+
+  await assertComposerWithinShell();
+  await ask(page, "completed composer remains visible");
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  await assertComposerWithinShell();
+  await expect(page.getByLabel("Ask LibreNMS")).toBeEnabled();
+});
+
+test("keeps the composer visible and drains queued follow-ups once in FIFO order", async ({ page }, testInfo) => {
+  const runRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/runs") && request.method() === "POST") runRequests.push(request.postDataJSON().content);
+  });
+
+  await createThread(page);
+  await ask(page, "queue barrier first");
+  await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText("Soruyu sınıflandırdı");
+  const composer = page.getByLabel("Ask LibreNMS");
+  await expect(composer).toBeVisible();
+  await expect(composer).toBeEnabled();
+
+  await composer.fill("queue follow-up second");
+  await composer.press("Enter");
+  await composer.fill("queue follow-up third");
+  await composer.press("Enter");
+  await expect(page.getByLabel("Sıradaki sorular")).toContainText("2 sırada");
+  expect(runRequests).toEqual(["queue barrier first"]);
+  await page.screenshot({ path: testInfo.outputPath("active-run-visible-composer-and-queue.png"), fullPage: true });
+
+  const releaseStatus = await page.evaluate(async () => (await fetch("/ai-api/__test__/release-queue-barrier", { method: "POST" })).status);
+  expect(releaseStatus).toBe(204);
+  await expect.poll(() => runRequests).toEqual([
+    "queue barrier first",
+    "queue follow-up second",
+    "queue follow-up third",
+  ]);
+  await expect(page.getByLabel("Sıradaki sorular")).toHaveCount(0);
+  await expect(page.locator("[data-message-id]")).toHaveCount(6);
+});
+
+test("removes queued items and Stop preserves the remaining queue without draining", async ({ page }) => {
+  const runRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/runs") && request.method() === "POST") runRequests.push(request.postDataJSON().content);
+  });
+
+  await createThread(page);
+  await ask(page, "cancel after planner queue policy");
+  await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText("Soruyu sınıflandırdı");
+  const composer = page.getByLabel("Ask LibreNMS");
+  await composer.fill("remove this queued question");
+  await composer.press("Enter");
+  await composer.fill("keep this queued question");
+  await composer.press("Enter");
+  await expect(page.getByLabel("Sıradaki sorular")).toContainText("2 sırada");
+
+  await page.getByRole("button", { name: "Sıradaki soruyu kaldır: remove this queued question" }).click();
+  await expect(page.getByLabel("Sıradaki sorular")).toContainText("1 sırada");
+  await page.getByRole("button", { name: "Çalışmayı iptal et" }).click();
+  await expect(page.locator("[data-streaming]")).toHaveCount(0);
+  await expect(page.getByLabel("Sıradaki sorular")).toContainText("keep this queued question");
+  expect(runRequests).toEqual(["cancel after planner queue policy"]);
+});
+
+test("clears queued work when the active conversation is replaced", async ({ page }) => {
+  const runRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/runs") && request.method() === "POST") runRequests.push(request.postDataJSON().content);
+  });
+
+  await createThread(page);
+  await ask(page, "queue barrier isolation");
+  await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText("Soruyu sınıflandırdı");
+  const composer = page.getByLabel("Ask LibreNMS");
+  await composer.fill("must never reach another thread");
+  await composer.press("Enter");
+  await expect(page.getByLabel("Sıradaki sorular")).toBeVisible();
+
+  await createThread(page);
+  await expect(page.getByLabel("Sıradaki sorular")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ağında neyi inceleyelim?" })).toBeVisible();
+  await page.evaluate(async () => { await fetch("/ai-api/__test__/release-queue-barrier", { method: "POST" }); });
+  await page.waitForTimeout(350);
+  expect(runRequests).toEqual(["queue barrier isolation"]);
+  await expect(page.getByText("must never reach another thread", { exact: true })).toHaveCount(0);
+});
+
+test("clears queued work when switching to a saved conversation", async ({ page }) => {
+  const runRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/runs") && request.method() === "POST") runRequests.push(request.postDataJSON().content);
+  });
+
+  await createThread(page);
+  await ask(page, "saved switch target");
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  const savedTarget = page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "saved switch target", exact: true });
+  await createThread(page);
+  await ask(page, "queue barrier switch source");
+  await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText("Soruyu sınıflandırdı");
+  const composer = page.getByLabel("Ask LibreNMS");
+  await composer.fill("stale switch follow-up");
+  await composer.press("Enter");
+  await savedTarget.click();
+  await expect(page.getByLabel("Sıradaki sorular")).toHaveCount(0);
+
+  await page.evaluate(async () => { await fetch("/ai-api/__test__/release-queue-barrier", { method: "POST" }); });
+  await page.waitForTimeout(350);
+  expect(runRequests).toEqual(["saved switch target", "queue barrier switch source"]);
+  await expect(page.getByText("stale switch follow-up", { exact: true })).toHaveCount(0);
+});
+
+test("clears queued work before deleting its running conversation", async ({ page }) => {
+  const runRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/runs") && request.method() === "POST") runRequests.push(request.postDataJSON().content);
+  });
+
+  await createThread(page);
+  await ask(page, "queue barrier delete source");
+  await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText("Soruyu sınıflandırdı");
+  const composer = page.getByLabel("Ask LibreNMS");
+  await composer.fill("stale delete follow-up");
+  await composer.press("Enter");
+  await page.getByRole("button", { name: "Yeni sohbet için seçenekler" }).first().click();
+  await page.getByRole("menuitem", { name: "Sohbeti sil" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sohbeti sil" }).click();
+
+  await expect(page.getByLabel("Sıradaki sorular")).toHaveCount(0);
+  await page.waitForTimeout(250);
+  expect(runRequests).toEqual(["queue barrier delete source"]);
+  await expect(page.getByText("stale delete follow-up", { exact: true })).toHaveCount(0);
+});
+
+test("reload discards the in-memory queue", async ({ page }) => {
+  const runRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/runs") && request.method() === "POST") runRequests.push(request.postDataJSON().content);
+  });
+
+  await createThread(page);
+  await ask(page, "queue barrier reload source");
+  await expect(page.locator("[data-streaming] [aria-live='polite']")).toContainText("Soruyu sınıflandırdı");
+  const composer = page.getByLabel("Ask LibreNMS");
+  await composer.fill("stale reload follow-up");
+  await composer.press("Enter");
+  await expect(page.getByLabel("Sıradaki sorular")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel("Sıradaki sorular")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ağında neyi inceleyelim?" })).toBeVisible();
+  await page.evaluate(async () => { await fetch("/ai-api/__test__/release-queue-barrier", { method: "POST" }); });
+  await page.waitForTimeout(350);
+  expect(runRequests).toEqual(["queue barrier reload source"]);
+  await expect(page.getByText("stale reload follow-up", { exact: true })).toHaveCount(0);
 });
 
 test("collapses the assistant-ui history rail without taking space from the conversation", async ({ page }) => {
