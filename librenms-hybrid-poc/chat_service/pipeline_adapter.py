@@ -49,7 +49,7 @@ class PipelineAdapter:
             ),
             key=lambda device: str(device.get("hostname", "")).strip(),
         )
-        for device in up_devices[1:3]:
+        for device in up_devices[:3]:
             device_id = device.get("device_id")
             device["port_count"] = (
                 len(ports_source(device_id=device_id))

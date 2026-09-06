@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
 from .auth import AuthError, Identity, IdentityVerifier
@@ -19,7 +19,7 @@ from .logging import RestrictedJsonLogger
 from .pipeline_adapter import PipelineAdapter
 from .runs import ActiveRunRegistry, RunConflictError
 from .store import ChatStore, ConflictError, NotFoundError
-from .suggestions import build_suggestions
+from .suggestions import build_picker_devices, build_suggestions
 
 
 DEMO_SCENARIO_IDS = (
@@ -128,7 +128,10 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
         return store.list_threads(user.sub)
 
     @app.get("/v1/suggestions")
-    async def list_suggestions(authorization: str | None = Header(default=None)):
+    async def list_suggestions(
+        rotation: int = Query(default=0, ge=0, le=10000),
+        authorization: str | None = Header(default=None),
+    ):
         identity(authorization)
         try:
             suggestion_source = getattr(
@@ -143,7 +146,24 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     "message": "Canlı cihaz önerileri şu anda alınamıyor.",
                 },
             ) from None
-        return {"suggestions": build_suggestions(devices)}
+        return {"suggestions": build_suggestions(devices, rotation=rotation)}
+
+    @app.get("/v1/devices")
+    async def list_picker_devices(
+        authorization: str | None = Header(default=None),
+    ):
+        identity(authorization)
+        try:
+            devices = adapter.list_devices()
+        except Exception:
+            raise HTTPException(
+                503,
+                {
+                    "code": "librenms_unavailable",
+                    "message": "Canlı cihaz listesi şu anda alınamıyor.",
+                },
+            ) from None
+        return {"devices": build_picker_devices(devices)}
 
     if demo_mode:
         @app.get("/v1/demo/scenarios")

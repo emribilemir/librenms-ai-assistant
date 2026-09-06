@@ -1,4 +1,4 @@
-import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getDemoScenarios, getSuggestions, getThread, listThreads, readEventStream, resetDemo, runDemoScenario, runThread } from "./api";
+import { API_BASE, ApiError, IncompleteStreamError, createThread, deleteThread, getDemoScenarios, getDevices, getSuggestions, getThread, listThreads, readEventStream, resetDemo, runDemoScenario, runThread } from "./api";
 
 test("uses only the relative production API base with no embedded identity", async () => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "thread-a" }) });
@@ -9,7 +9,7 @@ test("uses only the relative production API base with no embedded identity", asy
   expect(global.fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer signed-plugin-token");
 });
 
-test("loads authenticated live suggestions", async () => {
+test("loads authenticated live suggestions for a deterministic rotation", async () => {
   const suggestion = {
     title: "sw-01 durumunu kontrol et",
     label: "Güncel cihaz durumu",
@@ -20,9 +20,30 @@ test("loads authenticated live suggestions", async () => {
     json: async () => ({ suggestions: [suggestion] }),
   });
 
-  await expect(getSuggestions("signed-plugin-token")).resolves.toEqual([suggestion]);
+  await expect(getSuggestions("signed-plugin-token", 2)).resolves.toEqual([suggestion]);
   expect(global.fetch).toHaveBeenCalledWith(
-    "/ai-api/v1/suggestions",
+    "/ai-api/v1/suggestions?rotation=2",
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer signed-plugin-token",
+      }),
+    }),
+  );
+});
+
+test("loads only the bounded live device picker payload", async () => {
+  const devices = [
+    { hostname: "lab-up", status: "up", examples: ["lab-up açık mı?"] },
+    { hostname: "core-down", status: "down", examples: [] },
+  ];
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ devices }),
+  });
+
+  await expect(getDevices("signed-plugin-token")).resolves.toEqual(devices);
+  expect(global.fetch).toHaveBeenCalledWith(
+    "/ai-api/v1/devices",
     expect.objectContaining({
       headers: expect.objectContaining({
         Authorization: "Bearer signed-plugin-token",

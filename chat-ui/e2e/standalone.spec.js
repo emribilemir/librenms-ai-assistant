@@ -141,6 +141,63 @@ test("builds assistant-ui starter prompts from currently up devices", async ({ p
   await expect(page.getByRole("button", { name: /lab-offline-01/i })).toHaveCount(0);
 });
 
+test("uses one live device picker for icon and at-search without auto-submitting", async ({ page }) => {
+  const composer = page.getByLabel("Ask LibreNMS");
+  await page.getByRole("button", { name: "Cihaz seç" }).click();
+  let picker = page.getByRole("dialog", { name: "Canlı cihaz seçici" });
+  await expect(picker.getByRole("option", { name: "lab-j9775a-01 Up" })).toBeVisible();
+  await expect(picker.getByRole("option", { name: "lab-offline-01 Down" })).toBeVisible();
+  await expect(picker.getByRole("option", { name: "lab-unknown-01 Unknown" })).toBeVisible();
+  await picker.getByRole("option", { name: "lab-offline-01 Down" }).click();
+  await expect(composer).toHaveValue("lab-offline-01 ");
+  await expect(page.locator("[data-message-id]")).toHaveCount(0);
+
+  await composer.fill("@lab-j9775");
+  picker = page.getByRole("dialog", { name: "Canlı cihaz seçici" });
+  await expect(picker.getByRole("listbox", { name: "Canlı cihazlar" }).getByRole("option")).toHaveCount(1);
+  await composer.press("Enter");
+  await expect(composer).toHaveValue("lab-j9775a-01 ");
+  await expect(page.locator("[data-message-id]")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Cihaz seç" }).click();
+  const recent = page.getByRole("listbox", { name: "Son kullanılan cihazlar" });
+  await expect(recent.getByRole("option").first()).toHaveAccessibleName("lab-j9775a-01 Up");
+});
+
+test("keeps contextual discovery optional and leaves its selected example editable", async ({ page }) => {
+  const composer = page.getByLabel("Ask LibreNMS");
+  await composer.fill("@lab-j9775");
+  await page.getByRole("option", { name: "lab-j9775a-01 Up" }).click();
+  const discovery = page.getByRole("button", { name: "Neler sorabilirim?" });
+  await expect(discovery).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("region", { name: "Bağlamsal soru örnekleri" })).toHaveCount(0);
+  await discovery.click();
+  const examples = page.getByRole("region", { name: "Bağlamsal soru örnekleri" });
+  await expect(examples.getByRole("button")).toHaveCount(3);
+  await examples.getByRole("button", { name: "lab-j9775a-01 üzerinde aktif alarm var mı?" }).click();
+  await expect(composer).toHaveValue("lab-j9775a-01 üzerinde aktif alarm var mı?");
+  await composer.fill("lab-j9775a-01 için farklı bir doğal dil sorusu");
+  await expect(composer).toHaveValue("lab-j9775a-01 için farklı bir doğal dil sorusu");
+  await expect(page.locator("[data-message-id]")).toHaveCount(0);
+});
+
+test("rotates the capability-first suggestion set on a consecutive new chat", async ({ page }) => {
+  const suggestions = page.getByLabel("Canlı cihaz önerileri").getByRole("button");
+  await expect(suggestions).toHaveCount(4);
+  const firstSet = new Set(await suggestions.allTextContents());
+  expect([...firstSet].some((text) => text.includes("Aktif alarmlar"))).toBe(true);
+  expect([...firstSet].some((text) => text.includes("Son olaylar"))).toBe(true);
+
+  await ask(page, "prepare suggestion rotation");
+  await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
+  await createThread(page);
+  await expect(suggestions).toHaveCount(4);
+  const secondSet = new Set(await suggestions.allTextContents());
+  expect(secondSet).not.toEqual(firstSet);
+  expect([...secondSet].every((text) => !firstSet.has(text))).toBe(true);
+  expect([...secondSet].some((text) => text.includes("Cihaz incelemesi"))).toBe(true);
+});
+
 test("fills the available conversation height without clipping starter prompts", async ({ page }, testInfo) => {
   const [threadBox, mainBox] = await Promise.all([
     page.locator('[data-assistant-ui="thread"]').boundingBox(),

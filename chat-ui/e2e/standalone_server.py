@@ -60,6 +60,7 @@ class DeterministicPipelineAdapter:
             {"hostname": "lab-j9775a-01", "status": 1},
             {"hostname": "lab-j9776a-01", "status": 1},
             {"hostname": "lab-offline-01", "status": 0},
+            {"hostname": "lab-unknown-01", "status": None},
         ]
 
     @staticmethod

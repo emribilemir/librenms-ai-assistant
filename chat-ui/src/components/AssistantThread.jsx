@@ -7,10 +7,12 @@ import {
   QueueItemPrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Square, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Search, Server, Square, X } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
 import styles from "./AssistantThread.module.css";
 
@@ -202,13 +204,155 @@ function ComposerQueue() {
   );
 }
 
-function Composer({ placeholder, canRetry, onRetry }) {
+const safeDeviceStatus = (status) => status === "up" || status === "down" ? status : "unknown";
+const deviceStatusLabel = (status) => status === "up" ? "Up" : status === "down" ? "Down" : "Unknown";
+
+function DeviceOption({ device, active, onSelect }) {
+  const status = safeDeviceStatus(device.status);
+  const label = deviceStatusLabel(status);
+  return (
+    <li>
+      <button type="button" role="option" aria-selected={active} className={styles.deviceOption} data-active={active || undefined} onClick={() => onSelect(device)}>
+        <span className={styles.deviceName}>{device.hostname}</span>
+        <span className={styles.deviceStatus}><span className={styles.statusDot} data-status={status} aria-hidden="true" />{label}</span>
+      </button>
+    </li>
+  );
+}
+
+function triggerAt(text, cursor) {
+  const beforeCursor = text.slice(0, cursor);
+  const match = beforeCursor.match(/(?:^|\s)@([^\s@]*)$/);
+  if (!match) return null;
+  return { start: beforeCursor.lastIndexOf("@"), query: match[1] };
+}
+
+function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices = [], onDeviceUsed, onRequestDevices, devicesUnavailable }) {
+  const aui = useAui();
+  const composerText = useAuiState((state) => state.composer.text);
+  const inputRef = useRef(null);
+  const searchRef = useRef(null);
+  const [picker, setPicker] = useState({ open: false, query: "", triggerStart: null });
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [selectedDevice, setSelectedDevice] = useState(null);
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const filteredDevices = useMemo(() => {
+    const query = picker.query.trim().toLocaleLowerCase("tr-TR");
+    return devices.filter((device) => !query || device.hostname.toLocaleLowerCase("tr-TR").includes(query));
+  }, [devices, picker.query]);
+  const recentRows = useMemo(() => {
+    const byHostname = new Map(devices.map((device) => [device.hostname, device]));
+    return recentDevices.flatMap((hostname) => byHostname.has(hostname) ? [byHostname.get(hostname)] : []);
+  }, [devices, recentDevices]);
+  useEffect(() => { setActiveIndex(0); }, [picker.query, devices]);
+
+  const closePicker = () => setPicker((current) => ({ ...current, open: false }));
+  const openPicker = (triggerStart = null, query = "", focusSearch = false) => {
+    setPicker({ open: true, query, triggerStart });
+    setActiveIndex(0);
+    onRequestDevices?.();
+    if (focusSearch) requestAnimationFrame(() => searchRef.current?.focus());
+  };
+  const selectDevice = (device) => {
+    const cursor = inputRef.current?.selectionStart ?? composerText.length;
+    let nextText;
+    if (picker.triggerStart !== null) {
+      const suffix = composerText.slice(cursor).replace(/^\s+/, "");
+      nextText = `${composerText.slice(0, picker.triggerStart)}${device.hostname} ${suffix}`;
+    } else {
+      const prefix = composerText.slice(0, cursor);
+      const suffix = composerText.slice(cursor).replace(/^\s+/, "");
+      const separator = prefix && !/\s$/.test(prefix) ? " " : "";
+      nextText = `${prefix}${separator}${device.hostname} ${suffix}`;
+    }
+    aui.composer.setText(nextText);
+    setSelectedDevice(device);
+    setDiscoveryOpen(false);
+    closePicker();
+    onDeviceUsed?.(device.hostname);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      const position = nextText.length;
+      inputRef.current?.setSelectionRange(position, position);
+    });
+  };
+  const handlePickerKey = (event) => {
+    if (!picker.open) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePicker();
+      requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!filteredDevices.length) return;
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      setActiveIndex((index) => (index + direction + filteredDevices.length) % filteredDevices.length);
+      return;
+    }
+    if (event.key === "Enter" && filteredDevices[activeIndex]) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectDevice(filteredDevices[activeIndex]);
+    }
+  };
+  const handleComposerChange = (event) => {
+    const detected = triggerAt(event.target.value, event.target.selectionStart ?? event.target.value.length);
+    if (detected) {
+      if (!picker.open || picker.triggerStart !== detected.start) onRequestDevices?.();
+      setPicker({ open: true, query: detected.query, triggerStart: detected.start });
+    } else if (picker.triggerStart !== null) {
+      closePicker();
+    }
+  };
+  const examples = Array.isArray(selectedDevice?.examples) ? selectedDevice.examples.slice(0, 3) : [];
+
   return (
     <ComposerPrimitive.Root className={styles.composer}>
       <ComposerQueue />
-      <ComposerPrimitive.Input rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" />
+      {picker.open ? (
+        <div className={styles.devicePicker} role="dialog" aria-label="Canlı cihaz seçici">
+          <div className={styles.pickerHeader}>
+            <span>Canlı cihazlar</span>
+            <button type="button" className={styles.pickerClose} onClick={closePicker} aria-label="Cihaz seçiciyi kapat"><X size={15} aria-hidden="true" /></button>
+          </div>
+          <label className={styles.deviceSearch}>
+            <Search size={14} aria-hidden="true" />
+            <span className={styles.srOnly}>Cihazlarda ara</span>
+            <input ref={searchRef} type="search" aria-label="Cihazlarda ara" value={picker.query} onChange={(event) => setPicker((current) => ({ ...current, query: event.target.value }))} onKeyDown={handlePickerKey} placeholder="Hostname ara…" />
+          </label>
+          {!picker.query && recentRows.length ? (
+            <section className={styles.deviceSection}>
+              <p>Son kullanılanlar</p>
+              <ul role="listbox" aria-label="Son kullanılan cihazlar">
+                {recentRows.map((device) => <DeviceOption key={`recent-${device.hostname}`} device={device} active={false} onSelect={selectDevice} />)}
+              </ul>
+            </section>
+          ) : null}
+          <section className={styles.deviceSection}>
+            <p>Cihazlar <span>{filteredDevices.length}</span></p>
+            {filteredDevices.length ? (
+              <ul role="listbox" aria-label="Canlı cihazlar">
+                {filteredDevices.map((device, index) => <DeviceOption key={device.hostname} device={device} active={index === activeIndex} onSelect={selectDevice} />)}
+              </ul>
+            ) : <p className={styles.deviceEmpty}>{devicesUnavailable ? "Canlı cihaz listesi alınamıyor." : "Eşleşen canlı cihaz yok."}</p>}
+          </section>
+        </div>
+      ) : null}
+      <ComposerPrimitive.Input ref={inputRef} rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" onChange={handleComposerChange} onKeyDown={handlePickerKey} />
+      {discoveryOpen && examples.length ? (
+        <section className={styles.discovery} role="region" aria-label="Bağlamsal soru örnekleri">
+          <p>Düzenleyebileceğin örnek başlangıçlar</p>
+          {examples.map((example) => <button type="button" key={example} onClick={() => { aui.composer.setText(example); setDiscoveryOpen(false); requestAnimationFrame(() => inputRef.current?.focus()); }}>{example}</button>)}
+        </section>
+      ) : null}
       <div className={styles.composerBar}>
-        <span className={styles.liveMode}><Activity size={14} aria-hidden="true" /> Canlı LibreNMS</span>
+        <div className={styles.composerTools}>
+          <span className={styles.liveMode}><Activity size={14} aria-hidden="true" /> Canlı LibreNMS</span>
+          <button type="button" className={styles.deviceTrigger} aria-label="Cihaz seç" aria-expanded={picker.open} onClick={() => openPicker(null, "", true)}><Server size={15} aria-hidden="true" /></button>
+          {examples.length ? <button type="button" className={styles.discoveryTrigger} aria-expanded={discoveryOpen} onClick={() => setDiscoveryOpen((open) => !open)}>Neler sorabilirim?</button> : null}
+        </div>
         <div className={styles.composerActions}>
           {canRetry && <button type="button" className={styles.retry} onClick={onRetry}>Yeniden dene</button>}
           <span className={styles.primaryAction}>
@@ -231,14 +375,14 @@ function Composer({ placeholder, canRetry, onRetry }) {
   );
 }
 
-function EmptyState({ suggestionsUnavailable, canRetry, onRetry }) {
+function EmptyState({ suggestionsUnavailable, canRetry, onRetry, composerProps }) {
   return (
     <div className={styles.empty}>
       <div className={styles.emptyInner}>
         <div className={styles.wordmark}><span>LibreNMS</span> Assistant</div>
         <h2>Ağında neyi inceleyelim?</h2>
         <p className={styles.intro}>Cihaz, port, alarm ve olay verilerini canlı LibreNMS kayıtlarından araştır.</p>
-        <Composer placeholder="Ağın hakkında bir soru sor…" canRetry={canRetry} onRetry={onRetry} />
+        <Composer placeholder="Ağın hakkında bir soru sor…" canRetry={canRetry} onRetry={onRetry} {...composerProps} />
         <div className={styles.suggestions} aria-label="Canlı cihaz önerileri"><ThreadPrimitive.Suggestions>{() => <LiveSuggestion />}</ThreadPrimitive.Suggestions></div>
         {suggestionsUnavailable && <p className={styles.suggestionError} role="status">Canlı cihaz önerileri şu anda alınamıyor.</p>}
       </div>
@@ -246,16 +390,17 @@ function EmptyState({ suggestionsUnavailable, canRetry, onRetry }) {
   );
 }
 
-export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable }) {
+export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable, devices = [], recentDevices = [], onDeviceUsed, onRequestDevices, devicesUnavailable = false }) {
+  const composerProps = { devices, recentDevices, onDeviceUsed, onRequestDevices, devicesUnavailable };
   return (
     <ThreadPrimitive.Root className={styles.thread} aria-label="AI Assistant sohbeti" data-assistant-ui="thread" style={{ "--thread-max-width": "54rem" }}>
-      <AuiIf condition={(state) => state.thread.isEmpty}><EmptyState suggestionsUnavailable={suggestionsUnavailable} canRetry={canRetry} onRetry={onRetry} /></AuiIf>
+      <AuiIf condition={(state) => state.thread.isEmpty}><EmptyState suggestionsUnavailable={suggestionsUnavailable} canRetry={canRetry} onRetry={onRetry} composerProps={composerProps} /></AuiIf>
       <AuiIf condition={(state) => !state.thread.isEmpty}>
         <ThreadPrimitive.Viewport className={styles.viewport} data-slot="thread-viewport">
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
           <ThreadPrimitive.ViewportFooter className={styles.footer}>
             <ThreadPrimitive.ScrollToBottom className={styles.scrollToBottom} aria-label="En yeni mesaja git"><ChevronDown size={17} aria-hidden="true" /></ThreadPrimitive.ScrollToBottom>
-            <Composer placeholder="Devam sorusu sor…" canRetry={canRetry} onRetry={onRetry} />
+            <Composer placeholder="Devam sorusu sor…" canRetry={canRetry} onRetry={onRetry} {...composerProps} />
             <p className={styles.disclaimer}>Yalnızca salt-okunur LibreNMS verileri kullanılır.</p>
           </ThreadPrimitive.ViewportFooter>
         </ThreadPrimitive.Viewport>
