@@ -32,7 +32,7 @@ const demoScenarios = [
   { id: "device-down-up", label: "Device Down/Up", example_question: "Last down?" },
   { id: "port-down-up-event", label: "Generate Port Event", example_question: "Events?" },
 ];
-const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDemoScenarios: jest.fn().mockResolvedValue([]), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDevices: jest.fn().mockResolvedValue([]), getDemoScenarios: jest.fn().mockResolvedValue([]), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
 
 test("demo mode off keeps all simulation UI hidden", async () => {
   const api = makeApi();
@@ -119,6 +119,32 @@ test("loads live suggestions into ExternalStoreRuntime", async () => {
   await waitFor(() => {
     const bridge = mockUseExternalStoreRuntime.mock.calls.at(-1)[0];
     expect(bridge.suggestions).toEqual(suggestions);
+  });
+});
+
+test("creating consecutive chats advances the deterministic live suggestion window", async () => {
+  const first = [{ title: "Status", label: "Cihaz durumu", prompt: "lab açık mı?" }];
+  const second = [{ title: "Alarm", label: "Aktif alarmlar", prompt: "lab alarmı var mı?" }];
+  const api = makeApi({
+    getSuggestions: jest.fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second),
+    createThread: jest.fn().mockResolvedValue({ id: "next", title: "" }),
+  });
+  const chatStore = new AssistantChatStore(createInitialState({
+    threads: [{ id: "active", title: "Current" }],
+    selectedThreadId: "active",
+    messages: { active: [{ id: "u", role: "user", content: "Current" }] },
+  }));
+  render(<App chatStore={chatStore} identity={{ token: "plugin-token" }} api={api} />);
+  await waitFor(() => expect(api.getSuggestions).toHaveBeenCalledWith("plugin-token"));
+
+  await act(async () => mockUseExternalStoreRuntime.mock.calls.at(-1)[0].adapters.threadList.onSwitchToNewThread());
+
+  await waitFor(() => expect(api.getSuggestions).toHaveBeenCalledWith("plugin-token", 1));
+  await waitFor(() => {
+    const bridge = mockUseExternalStoreRuntime.mock.calls.at(-1)[0];
+    expect(bridge.suggestions).toEqual(second);
   });
 });
 

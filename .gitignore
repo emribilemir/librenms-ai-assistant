@@ -28,6 +28,7 @@ docs/superpowers/
 *.bak-*
 *.pre-*
 *.zip
+docs/CODEX_VM_ACCESS.md
 
 # Generated verification / historical evidence
 4b-verification-results/

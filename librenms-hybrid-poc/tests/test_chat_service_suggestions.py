@@ -42,6 +42,50 @@ def bearer(sub="alice"):
 
 
 class SuggestionGenerationTests(unittest.TestCase):
+    def test_single_live_device_covers_multiple_capabilities(self):
+        result = build_suggestions(
+            [{"hostname": "lab-j9772a-01", "status": 1, "port_count": 4}],
+            limit=4,
+        )
+
+        self.assertEqual(
+            [item["label"] for item in result],
+            ["Cihaz durumu", "Port durumu", "Aktif alarmlar", "Son olaylar"],
+        )
+        self.assertTrue(
+            all("lab-j9772a-01" in item["prompt"] for item in result)
+        )
+
+    def test_rotation_changes_recent_capability_window_without_unsupported_prompts(self):
+        devices = [
+            {"hostname": "lab-j9772a-01", "status": 1, "port_count": 4}
+        ]
+
+        first = build_suggestions(devices, limit=4, rotation=0)
+        second = build_suggestions(devices, limit=4, rotation=1)
+
+        self.assertNotEqual(
+            {item["prompt"] for item in first},
+            {item["prompt"] for item in second},
+        )
+        self.assertIn("Cihaz incelemesi", [item["label"] for item in second])
+        self.assertTrue(
+            all(
+                item["label"]
+                in {
+                    "Cihaz durumu",
+                    "Port durumu",
+                    "Aktif alarmlar",
+                    "Son olaylar",
+                    "Cihaz incelemesi",
+                    "Down portlar",
+                    "Konum",
+                    "Çalışma süresi",
+                }
+                for item in first + second
+            )
+        )
+
     def test_uses_only_sorted_up_devices(self):
         devices = [
             {"hostname": "z-down", "status": 0},
@@ -59,8 +103,8 @@ class SuggestionGenerationTests(unittest.TestCase):
             [
                 "a-up açık mı?",
                 "b-up port 2 ne durumda?",
-                "lab-j9772a-01'in down portları hangileri?",
-                "z-up üzerinde aktif alarm var mı?",
+                "lab-j9772a-01 üzerinde aktif alarm var mı?",
+                "z-up son eventlerini göster",
             ],
         )
         self.assertEqual(
@@ -88,10 +132,10 @@ class SuggestionGenerationTests(unittest.TestCase):
 
         devices = adapter.list_suggestion_devices()
 
-        self.assertNotIn("port_count", devices[0])
+        self.assertEqual(devices[0]["port_count"], 0)
         self.assertEqual(devices[1]["port_count"], 2)
         self.assertNotIn("port_count", devices[2])
-        self.assertEqual(calls, [2])
+        self.assertEqual(calls, [1, 2])
 
     def test_is_deterministic_and_bounded(self):
         devices = [
@@ -120,8 +164,8 @@ class SuggestionGenerationTests(unittest.TestCase):
             [
                 "a-status-only açık mı?",
                 "b-has-ports port 2 ne durumda?",
-                "b-has-ports'in down portları hangileri?",
-                "d-status-only üzerinde aktif alarm var mı?",
+                "c-status-only üzerinde aktif alarm var mı?",
+                "d-status-only son eventlerini göster",
             ],
         )
 
@@ -173,6 +217,73 @@ class SuggestionRouteTests(unittest.TestCase):
         self.assertEqual(
             response.json()["suggestions"][0]["prompt"],
             "lab-j9775a-01 açık mı?",
+        )
+
+    def test_devices_route_returns_only_bounded_live_inventory_with_semantic_status(self):
+        client = self.make_client(
+            SuggestionAdapter(
+                [
+                    {"device_id": 3, "hostname": "z-unknown", "status": None},
+                    {"device_id": 2, "hostname": "lab-down", "status": "0"},
+                    {"device_id": 1, "hostname": "lab-up", "status": 1},
+                    {"device_id": 4, "hostname": "", "status": 1},
+                ]
+            )
+        )
+
+        self.assertEqual(client.get("/v1/devices").status_code, 401)
+        response = client.get("/v1/devices", headers=bearer())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["devices"],
+            [
+                {
+                    "hostname": "lab-down",
+                    "status": "down",
+                    "examples": [
+                        "lab-down açık mı?",
+                        "lab-down üzerinde aktif alarm var mı?",
+                        "lab-down'da ne sorun var?",
+                    ],
+                },
+                {
+                    "hostname": "lab-up",
+                    "status": "up",
+                    "examples": [
+                        "lab-up açık mı?",
+                        "lab-up üzerinde aktif alarm var mı?",
+                        "lab-up'da ne sorun var?",
+                    ],
+                },
+                {
+                    "hostname": "z-unknown",
+                    "status": "unknown",
+                    "examples": [
+                        "z-unknown açık mı?",
+                        "z-unknown üzerinde aktif alarm var mı?",
+                        "z-unknown'da ne sorun var?",
+                    ],
+                },
+            ],
+        )
+        self.assertNotIn("fixture", response.text)
+
+    def test_suggestion_route_accepts_deterministic_rotation(self):
+        client = self.make_client(
+            SuggestionAdapter(
+                [{"hostname": "lab-j9772a-01", "status": 1}]
+            )
+        )
+
+        first = client.get("/v1/suggestions?rotation=0", headers=bearer())
+        second = client.get("/v1/suggestions?rotation=1", headers=bearer())
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertNotEqual(
+            {item["prompt"] for item in first.json()["suggestions"]},
+            {item["prompt"] for item in second.json()["suggestions"]},
         )
 
     def test_returns_safe_503_without_upstream_details(self):

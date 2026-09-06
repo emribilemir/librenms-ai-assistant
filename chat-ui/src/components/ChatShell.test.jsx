@@ -8,6 +8,125 @@ import { ThreadList } from "./ThreadList";
 import { AssistantChatStore } from "../store";
 import { useLibreNmsExternalStoreRuntime } from "../runtime";
 
+const pickerDevices = [
+  {
+    hostname: "lab-up",
+    status: "up",
+    examples: [
+      "lab-up'ın down portları hangileri?",
+      "lab-up üzerinde aktif alarm var mı?",
+      "lab-up'da ne sorun var?",
+    ],
+  },
+  { hostname: "lab-down", status: "down", examples: [] },
+  { hostname: "core-unknown", status: "unknown", examples: [] },
+];
+
+function PickerFixture({ devices = pickerDevices, onSend = jest.fn(), onRequestDevices = jest.fn() }) {
+  const React = require("react");
+  const [recentDevices, setRecentDevices] = React.useState([]);
+  const runtimeStore = {
+    messages: [],
+    convertMessage: (message) => message,
+    suggestions: [],
+    isRunning: false,
+    onNew: async (message) => onSend(message.content[0].text),
+  };
+  const runtime = useExternalStoreRuntime(runtimeStore);
+  const onDeviceUsed = (hostname) => {
+    setRecentDevices((items) => [hostname, ...items.filter((item) => item !== hostname)].slice(0, 4));
+  };
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <AssistantThread
+        suggestionsUnavailable={false}
+        devices={devices}
+        recentDevices={recentDevices}
+        onDeviceUsed={onDeviceUsed}
+        onRequestDevices={onRequestDevices}
+      />
+    </AssistantRuntimeProvider>
+  );
+}
+
+test("typing an at-query opens the live picker, filters hostnames, and inserts plain text without sending", () => {
+  const send = jest.fn();
+  render(<PickerFixture onSend={send} />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+
+  fireEvent.change(composer, { target: { value: "@lab" } });
+
+  const picker = screen.getByRole("dialog", { name: "Canlı cihaz seçici" });
+  expect(within(picker).getByRole("option", { name: "lab-up Up" })).toBeVisible();
+  expect(within(picker).getByRole("option", { name: "lab-down Down" })).toBeVisible();
+  expect(within(picker).queryByText("core-unknown")).not.toBeInTheDocument();
+  expect(within(picker).getByRole("option", { name: "lab-up Up" }).querySelector("[data-status]")).toHaveAttribute("data-status", "up");
+  expect(within(picker).getByRole("option", { name: "lab-down Down" }).querySelector("[data-status]")).toHaveAttribute("data-status", "down");
+
+  fireEvent.click(within(picker).getByRole("option", { name: "lab-up Up" }));
+
+  expect(composer).toHaveValue("lab-up ");
+  expect(screen.queryByRole("dialog", { name: "Canlı cihaz seçici" })).not.toBeInTheDocument();
+  expect(send).not.toHaveBeenCalled();
+});
+
+test("the device icon opens the same picker with unknown status and keeps recent devices bounded at the top", () => {
+  const requestDevices = jest.fn();
+  render(<PickerFixture onRequestDevices={requestDevices} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Cihaz seç" }));
+  let picker = screen.getByRole("dialog", { name: "Canlı cihaz seçici" });
+  expect(requestDevices).toHaveBeenCalledTimes(1);
+  expect(within(picker).getByRole("option", { name: "core-unknown Unknown" }).querySelector("[data-status]")).toHaveAttribute("data-status", "unknown");
+  fireEvent.click(within(picker).getByRole("option", { name: "lab-down Down" }));
+
+  fireEvent.click(screen.getByRole("button", { name: "Cihaz seç" }));
+  picker = screen.getByRole("dialog", { name: "Canlı cihaz seçici" });
+  const recent = within(picker).getByRole("listbox", { name: "Son kullanılan cihazlar" });
+  expect(within(recent).getByRole("option", { name: "lab-down Down" })).toBeVisible();
+  const allDevices = within(picker).getByRole("listbox", { name: "Canlı cihazlar" });
+  fireEvent.click(within(allDevices).getByRole("option", { name: "lab-up Up" }));
+  fireEvent.click(screen.getByRole("button", { name: "Cihaz seç" }));
+  const reordered = within(screen.getByRole("dialog", { name: "Canlı cihaz seçici" })).getByRole("listbox", { name: "Son kullanılan cihazlar" });
+  expect(within(reordered).getAllByRole("option").map((option) => option.textContent)).toEqual(["lab-upUp", "lab-downDown"]);
+});
+
+test("picker supports arrow selection, Enter, and Escape without disturbing the composer submit contract", () => {
+  const send = jest.fn();
+  render(<PickerFixture onSend={send} />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+  fireEvent.change(composer, { target: { value: "@lab" } });
+  fireEvent.keyDown(composer, { key: "ArrowDown" });
+  fireEvent.keyDown(composer, { key: "Enter" });
+
+  expect(composer).toHaveValue("lab-down ");
+  expect(send).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Cihaz seç" }));
+  expect(screen.getByRole("dialog", { name: "Canlı cihaz seçici" })).toBeVisible();
+  fireEvent.keyDown(screen.getByRole("searchbox", { name: "Cihazlarda ara" }), { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "Canlı cihaz seçici" })).not.toBeInTheDocument();
+});
+
+test("contextual discovery stays collapsed and fills at most three editable examples without auto-submit", () => {
+  const send = jest.fn();
+  render(<PickerFixture onSend={send} />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+  fireEvent.change(composer, { target: { value: "@lab-u" } });
+  fireEvent.click(screen.getByRole("option", { name: "lab-up Up" }));
+
+  const discovery = screen.getByRole("button", { name: "Neler sorabilirim?" });
+  expect(discovery).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("region", { name: "Bağlamsal soru örnekleri" })).not.toBeInTheDocument();
+  fireEvent.click(discovery);
+
+  const examples = screen.getByRole("region", { name: "Bağlamsal soru örnekleri" });
+  expect(within(examples).getAllByRole("button")).toHaveLength(3);
+  fireEvent.click(within(examples).getByRole("button", { name: "lab-up üzerinde aktif alarm var mı?" }));
+  expect(composer).toHaveValue("lab-up üzerinde aktif alarm var mı?");
+  expect(send).not.toHaveBeenCalled();
+});
+
 test("delete confirmation focuses cancel and cancellation leaves the thread intact", () => {
   const cancel = jest.fn();
   render(<DeleteThreadDialog open threadTitle="Core switch" onCancel={cancel} onConfirm={jest.fn()} />);

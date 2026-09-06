@@ -9,9 +9,13 @@ async function request(path, token, options = {}) {
   return response;
 }
 export async function listThreads(token) { return (await request("/threads", token)).json(); }
-export async function getSuggestions(token) {
-  const payload = await (await request("/suggestions", token)).json();
+export async function getSuggestions(token, rotation = 0) {
+  const payload = await (await request(`/suggestions?rotation=${Math.max(0, Math.trunc(rotation))}`, token)).json();
   return Array.isArray(payload.suggestions) ? payload.suggestions : [];
+}
+export async function getDevices(token) {
+  const payload = await (await request("/devices", token)).json();
+  return Array.isArray(payload.devices) ? payload.devices : [];
 }
 export async function getDemoScenarios(token) {
   const payload = await (await request("/demo/scenarios", token)).json();
