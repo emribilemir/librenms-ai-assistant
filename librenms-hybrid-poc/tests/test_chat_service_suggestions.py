@@ -10,6 +10,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from chat_service.app import create_app
+from chat_service.pipeline_adapter import PipelineAdapter
 from chat_service.suggestions import build_suggestions
 
 
@@ -69,6 +70,29 @@ class SuggestionGenerationTests(unittest.TestCase):
         self.assertTrue(all(item["prompt"] and item["label"] for item in result))
         self.assertTrue(all("z-down" not in item["prompt"] for item in result))
 
+    def test_live_adapter_validates_only_port_prompt_candidates(self):
+        calls = []
+
+        def ports_source(*, device_id):
+            calls.append(device_id)
+            return [{"port_id": 10}, {"port_id": 11}] if device_id == 2 else []
+
+        adapter = PipelineAdapter(
+            device_source=lambda: [
+                {"device_id": 1, "hostname": "a-status-only", "status": 1},
+                {"device_id": 2, "hostname": "b-has-ports", "status": 1},
+                {"device_id": 3, "hostname": "c-down", "status": 0},
+            ],
+            ports_source=ports_source,
+        )
+
+        devices = adapter.list_suggestion_devices()
+
+        self.assertNotIn("port_count", devices[0])
+        self.assertEqual(devices[1]["port_count"], 2)
+        self.assertNotIn("port_count", devices[2])
+        self.assertEqual(calls, [2])
+
     def test_is_deterministic_and_bounded(self):
         devices = [
             {"hostname": f"sw-{index:02d}", "status": 1}
@@ -80,6 +104,26 @@ class SuggestionGenerationTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(len(first), 4)
+
+    def test_port_prompts_only_use_devices_with_live_port_rows(self):
+        devices = [
+            {"hostname": "a-status-only", "status": 1, "port_count": 0},
+            {"hostname": "b-has-ports", "status": 1, "port_count": 4},
+            {"hostname": "c-status-only", "status": 1, "port_count": 0},
+            {"hostname": "d-status-only", "status": 1, "port_count": 0},
+        ]
+
+        result = build_suggestions(devices, limit=4)
+
+        self.assertEqual(
+            [item["prompt"] for item in result],
+            [
+                "a-status-only açık mı?",
+                "b-has-ports port 2 ne durumda?",
+                "b-has-ports'in down portları hangileri?",
+                "d-status-only üzerinde aktif alarm var mı?",
+            ],
+        )
 
 
 class SuggestionAdapter:

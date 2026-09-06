@@ -34,19 +34,34 @@ def build_suggestions(
     devices: Iterable[Mapping[str, Any]], limit: int = 4
 ) -> list[dict[str, str]]:
     """Return deterministic prompts for real devices currently marked up."""
-    hostnames = sorted(
-        {
-            str(device.get("hostname", "")).strip()
+    up_devices = sorted(
+        (
+            device
             for device in devices
             if device.get("status") in (1, True, "1", "true", "up")
             and str(device.get("hostname", "")).strip()
-        }
-    )[:limit]
-    return [
-        {
-            "title": PROMPTS[index % len(PROMPTS)][0].format(hostname=hostname),
-            "label": PROMPTS[index % len(PROMPTS)][1],
-            "prompt": PROMPTS[index % len(PROMPTS)][2].format(hostname=hostname),
-        }
-        for index, hostname in enumerate(hostnames)
-    ]
+        ),
+        key=lambda device: str(device.get("hostname", "")).strip(),
+    )
+    hostnames = list(dict.fromkeys(
+        str(device.get("hostname", "")).strip() for device in up_devices
+    ))
+    has_port_metadata = any("port_count" in device for device in up_devices)
+    port_hostnames = list(dict.fromkeys(
+        str(device.get("hostname", "")).strip()
+        for device in up_devices
+        if int(device.get("port_count") or 0) > 0
+    ))
+    suggestions = []
+    for index, template in enumerate(PROMPTS[:limit]):
+        hostname = hostnames[index] if index < len(hostnames) else None
+        if index in (1, 2) and has_port_metadata:
+            hostname = port_hostnames[(index - 1) % len(port_hostnames)] if port_hostnames else None
+        if not hostname:
+            continue
+        suggestions.append({
+            "title": template[0].format(hostname=hostname),
+            "label": template[1],
+            "prompt": template[2].format(hostname=hostname),
+        })
+    return suggestions
