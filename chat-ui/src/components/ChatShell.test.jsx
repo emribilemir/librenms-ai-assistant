@@ -284,6 +284,29 @@ test("validated demo metadata opens a compact summary and JSON view from the sam
   expect(panel.querySelector("pre")).toHaveTextContent(JSON.stringify(inspection, null, 2), { normalizeWhitespace: false });
 });
 
+test("runtime demo mode off hides inspection retained on an earlier answer", () => {
+  const runtimeStore = {
+    messages: [{
+      id: "answer",
+      role: "assistant",
+      content: [{ type: "text", text: "Port 2 down" }],
+      createdAt: new Date(),
+      metadata: { custom: { inspection: { planner: { request_type: "ports" }, route: "ports", tools: [], findings: [], navigation_targets: [] } } },
+    }],
+    convertMessage: (message) => message,
+    isRunning: false,
+    onNew: async () => {},
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} showInspection={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  expect(screen.queryByRole("button", { name: /İşlem ayrıntıları/i })).not.toBeInTheDocument();
+});
+
 test("malformed optional inspection sections are ignored by the frontend safety layer", () => {
   const runtimeStore = {
     messages: [{

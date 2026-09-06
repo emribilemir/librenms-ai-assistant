@@ -11,10 +11,12 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Search, Server, Square, X } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
 import styles from "./AssistantThread.module.css";
+
+const DemoInspectionContext = createContext(true);
 
 // Structure adapted from assistant-ui's official Perplexity Clone example.
 // Only LibreNMS-specific colors, typography and product controls are changed.
@@ -160,6 +162,7 @@ function UserMessage() {
 function AssistantMessage() {
   const usedFallback = useAuiState((state) => Boolean(state.message.metadata?.custom?.usedFallback));
   const inspection = useAuiState((state) => state.message.metadata?.custom?.inspection);
+  const showInspection = useContext(DemoInspectionContext);
   return (
     <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
       <div className={styles.assistantBody}>
@@ -168,7 +171,7 @@ function AssistantMessage() {
         <NavigationActions />
         <div className={styles.messageTools} role="group" aria-label="Mesaj eylemleri">
           <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
-          <PipelineReasoning inspection={inspection} />
+          <PipelineReasoning inspection={showInspection ? inspection : null} />
         </div>
       </div>
     </MessagePrimitive.Root>
@@ -390,9 +393,10 @@ function EmptyState({ suggestionsUnavailable, canRetry, onRetry, composerProps }
   );
 }
 
-export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable, devices = [], recentDevices = [], onDeviceUsed, onRequestDevices, devicesUnavailable = false }) {
+export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable, devices = [], recentDevices = [], onDeviceUsed, onRequestDevices, devicesUnavailable = false, showInspection = true }) {
   const composerProps = { devices, recentDevices, onDeviceUsed, onRequestDevices, devicesUnavailable };
   return (
+    <DemoInspectionContext.Provider value={showInspection}>
     <ThreadPrimitive.Root className={styles.thread} aria-label="AI Assistant sohbeti" data-assistant-ui="thread" style={{ "--thread-max-width": "54rem" }}>
       <AuiIf condition={(state) => state.thread.isEmpty}><EmptyState suggestionsUnavailable={suggestionsUnavailable} canRetry={canRetry} onRetry={onRetry} composerProps={composerProps} /></AuiIf>
       <AuiIf condition={(state) => !state.thread.isEmpty}>
@@ -406,5 +410,6 @@ export function AssistantThread({ canRetry, onRetry, suggestionsUnavailable, dev
         </ThreadPrimitive.Viewport>
       </AuiIf>
     </ThreadPrimitive.Root>
+    </DemoInspectionContext.Provider>
   );
 }
