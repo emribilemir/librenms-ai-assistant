@@ -87,12 +87,13 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     secret = secret if secret is not None else os.environ.get("AI_ASSISTANT_SHARED_SECRET", "").encode()
     verifier = IdentityVerifier(secret)
     store = ChatStore(database_path or os.environ.get("AI_CHAT_DB", "ai-chat.sqlite3"))
-    demo_mode = os.environ.get("AI_DEMO_MODE") == "1"
-    adapter = adapter or PipelineAdapter(include_inspection=demo_mode)
+    demo_allowed = os.environ.get("AI_DEMO_MODE_ALLOWED") == "1"
+    demo_state = {"enabled": False}
+    adapter = adapter or PipelineAdapter(include_inspection=lambda: demo_state["enabled"])
     registry = ActiveRunRegistry()
     logger = logger or RestrictedJsonLogger(sys.stderr)
     app = FastAPI()
-    demo_runner = load_simulation_runner() if demo_mode else None
+    demo_runner = load_simulation_runner() if demo_allowed else None
     demo_lock = threading.Lock()
 
     def identity(authorization: str | None):
@@ -110,6 +111,33 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
             return store.get_thread(thread_id, user.sub)
         except NotFoundError:
             raise HTTPException(404, "thread not found") from None
+
+    def demo_enabled():
+        return demo_allowed and demo_state["enabled"]
+
+    def require_demo_enabled():
+        if not demo_enabled():
+            raise HTTPException(404, "demo mode unavailable")
+
+    if demo_allowed:
+        @app.get("/v1/demo-mode")
+        async def get_demo_mode(authorization: str | None = Header(default=None)):
+            identity(authorization)
+            return {"allowed": True, "enabled": demo_state["enabled"]}
+
+        @app.post("/v1/demo-mode")
+        async def set_demo_mode(request: Request, authorization: str | None = Header(default=None)):
+            identity(authorization)
+            try:
+                body = await request.json()
+            except json.JSONDecodeError:
+                raise HTTPException(400, "malformed JSON") from None
+            if not isinstance(body, dict) or set(body) != {"enabled"}:
+                raise HTTPException(400, "request must contain only enabled")
+            if type(body["enabled"]) is not bool:
+                raise HTTPException(422, "enabled must be a boolean")
+            demo_state["enabled"] = body["enabled"]
+            return {"allowed": True, "enabled": demo_state["enabled"]}
 
     @app.post("/v1/threads", status_code=201)
     async def create_thread(request: Request, authorization: str | None = Header(default=None)):
@@ -165,10 +193,11 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
             ) from None
         return {"devices": build_picker_devices(devices)}
 
-    if demo_mode:
+    if demo_allowed:
         @app.get("/v1/demo/scenarios")
         async def list_demo_scenarios(authorization: str | None = Header(default=None)):
             identity(authorization)
+            require_demo_enabled()
             metadata = demo_runner.load_scenarios()
             return {
                 "scenarios": [
@@ -184,6 +213,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
         @app.post("/v1/demo/scenarios")
         async def run_demo_scenario(request: Request, authorization: str | None = Header(default=None)):
             identity(authorization)
+            require_demo_enabled()
             try:
                 body = await request.json()
             except json.JSONDecodeError:
@@ -209,6 +239,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
         @app.post("/v1/demo/reset")
         async def reset_demo(authorization: str | None = Header(default=None)):
             identity(authorization)
+            require_demo_enabled()
             if not demo_lock.acquire(blocking=False):
                 raise HTTPException(409, "a demo action is already running")
             try:
@@ -377,7 +408,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     completed["navigation_targets"] = result["navigation_targets"]
                 if result.get("structured_result"):
                     completed["structured_result"] = result["structured_result"]
-                if demo_mode and isinstance(result.get("inspection"), dict):
+                if demo_enabled() and isinstance(result.get("inspection"), dict):
                     completed["inspection"] = result["inspection"]
                 yield _sse("completed", completed)
             except Exception:

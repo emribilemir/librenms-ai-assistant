@@ -26,6 +26,8 @@
 .status { color: #86cf9b; font-size: 11px; font-weight: 700; margin-left: auto; white-space: nowrap; }
 .status::before { background: #48b96a; border-radius: 50%; content: ""; display: inline-block; height: 7px; margin-right: 6px; width: 7px; }
 .demoEntry { background: transparent; border: 1px solid #56616a; border-radius: 4px; color: #b8c1c8; cursor: pointer; font-size: 11px; margin-left: auto; min-height: 30px; padding: 5px 9px; }
+.demoMode { align-items: center; color: #b8c1c8; display: inline-flex; font-size: 11px; gap: 7px; margin-left: auto; white-space: nowrap; }
+.demoMode input { accent-color: #69a9e8; cursor: pointer; margin: 0; }
 .demoEntry + .status { margin-left: 0; }
 .menu { display: none; min-height: 36px; min-width: 36px; }
 .skip { background: #d9232e; color: #fff; left: 10px; padding: 9px 12px; position: fixed; top: -80px; z-index: 20; }

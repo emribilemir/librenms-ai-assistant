@@ -17,6 +17,8 @@ export async function getDevices(token) {
   const payload = await (await request("/devices", token)).json();
   return Array.isArray(payload.devices) ? payload.devices : [];
 }
+export async function getDemoMode(token) { return (await request("/demo-mode", token)).json(); }
+export async function setDemoMode(enabled, token) { return (await request("/demo-mode", token, { method: "POST", body: JSON.stringify({ enabled }) })).json(); }
 export async function getDemoScenarios(token) {
   const payload = await (await request("/demo/scenarios", token)).json();
   return Array.isArray(payload.scenarios) ? payload.scenarios : [];
