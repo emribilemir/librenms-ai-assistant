@@ -47,7 +47,7 @@ class AiAssistantPluginContractTests(unittest.TestCase):
         self.assertIn("JSON_HEX_TAG", read("Page.php"))
         self.assertIn("ai-assistant.css", page)
         self.assertIn("ai-assistant.js", page)
-        self.assertEqual(page.count("?v=20260908-emr79"), 2)
+        self.assertEqual(page.count("?v=20260908-emr81"), 2)
         self.assertNotIn("emr76", page)
         self.assertIn("'/ai-api/v1'", read("Page.php"))
         self.assertNotIn("shared_secret", page)
