@@ -23,8 +23,8 @@
 .synthesis { align-items: center; border-top: 1px solid #2d343a; display: flex; font-size: 10px; justify-content: space-between; margin: 0; padding-top: 10px; }
 .synthesis span { color: #7f8b94; }
 .synthesis strong { color: #dce1e4; font-weight: 650; }
-.code { background: #11161a; border: 1px solid #2c353c; border-radius: 6px; color: #cbd2d7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.55; margin: 4px 0 5px; max-height: 22rem; overflow: auto; padding: 10px; tab-size: 2; white-space: pre; }
-.json { color: #c8d7df; }
-.python { color: #d3cfbd; }
+.embedded .code, .panel .code { background: #11161a; border: 1px solid #2c353c; border-radius: 6px; color: #cbd2d7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.55; margin: 4px 0 5px; max-height: 22rem; overflow: auto; padding: 10px; tab-size: 2; white-space: pre; }
+.embedded .json, .panel .json { color: #c8d7df; }
+.embedded .python, .panel .python { color: #d3cfbd; }
 @media (max-width: 700px) { .field { grid-template-columns: 90px minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .trigger svg { transition-duration: .01ms; } }

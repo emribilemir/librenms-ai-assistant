@@ -8,9 +8,10 @@ test("authorized UTM suite retains explicit live-progress, metric, and retry-ord
   expect(suite).toContain('aria-live", "polite"');
   expect(suite).toContain("persistedRunFor");
   expect(suite).toContain("assertCoherentMetrics");
-  expect(suite).toContain("Soruyu sınıflandırdı");
-  expect(suite).toContain("Cihazı çözümledi");
-  expect(suite).toContain("LibreNMS verisini okuyor");
+  expect(suite).toContain("Soruyu sınıflandır");
+  expect(suite).toContain("Cihaz çözümlen");
+  expect(suite).toContain("LibreNMS verisi okunuyor");
+  expect(suite).toContain('[data-streaming] button[aria-expanded]');
   expect(suite).toContain("/ai-api/v1/suggestions");
   expect(suite).not.toContain("AI_UTM_RETRY_STAGE_GATE");
   expect(suite).toContain("live target must be configured to expose this sequence");

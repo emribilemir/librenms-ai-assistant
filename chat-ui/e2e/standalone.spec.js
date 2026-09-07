@@ -166,6 +166,12 @@ test("uses the same sanitized inspection for dark JSON and Python code views", a
     });
   });
   await page.reload();
+  await page.evaluate(() => {
+    document.documentElement.classList.add("dark");
+    const hostTheme = document.createElement("style");
+    hostTheme.textContent = ".dark pre { background-color: rgb(245, 245, 245); color: rgb(58, 63, 68); }";
+    document.head.append(hostTheme);
+  });
   const demoMode = page.getByLabel("Demo Mode");
   await expect(demoMode).toBeChecked();
   await ask(page, "inspector code surface");
