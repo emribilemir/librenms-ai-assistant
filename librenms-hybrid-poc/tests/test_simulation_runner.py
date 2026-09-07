@@ -126,7 +126,7 @@ class ScenarioManifestTests(unittest.TestCase):
                 "location-change": "Konumu değiştir",
                 "device-down-up": "Cihazı düşür / geri getir",
                 "port-down-up-event": "Port olayı üret",
-                "investigation-incident": "Investigation olayı hazırla",
+                "investigation-incident": "İnceleme olayı hazırla",
             },
         )
 
@@ -305,7 +305,7 @@ class ScenarioManifestTests(unittest.TestCase):
             )
 
         self.assertTrue(changed)
-        self.assertEqual(verified, "Investigation olayı hazır")
+        self.assertEqual(verified, "İnceleme olayı hazır")
         self.assertEqual([event["event_id"] for event in events], [201, 202, 203])
         self.assertEqual(details["proof"][2]["event_id"], 203)
         self.assertEqual(details["proof"][3]["alert_id"], 88)

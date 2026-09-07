@@ -22,7 +22,7 @@ SCENARIOS = {
     "location-change": {"label": "Konumu değiştir", "example_ai_question": "Where?"},
     "device-down-up": {"label": "Cihazı düşür / geri getir", "example_ai_question": "Last down?"},
     "port-down-up-event": {"label": "Port olayı üret", "example_ai_question": "Events?"},
-    "investigation-incident": {"label": "Investigation olayı hazırla", "example_ai_question": "Investigate?"},
+    "investigation-incident": {"label": "İnceleme olayı hazırla", "example_ai_question": "Investigate?"},
 }
 TARGETS = [
     {

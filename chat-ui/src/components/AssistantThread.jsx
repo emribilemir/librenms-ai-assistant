@@ -12,7 +12,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Search, Server, Square, X } from "lucide-react";
+import { Activity, ArrowRight, ArrowUp, Check, ChevronDown, Copy, ExternalLink, Search, Server, Square, X } from "lucide-react";
 import { PipelineReasoning } from "./PipelineReasoning";
 import styles from "./AssistantThread.module.css";
 
@@ -263,7 +263,6 @@ function LiveSuggestion() {
   return (
     <SuggestionPrimitive.Trigger send className={styles.suggestion}>
       <span><SuggestionPrimitive.Title className={styles.suggestionTitle} /><SuggestionPrimitive.Description className={styles.suggestionLabel} /></span>
-      <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
     </SuggestionPrimitive.Trigger>
   );
 }
@@ -502,13 +501,13 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
               <ComposerPrimitive.Cancel className={`${styles.primaryButton} ${styles.stopButton}`} aria-label="Çalışmayı iptal et"><Square size={13} fill="currentColor" aria-hidden="true" /></ComposerPrimitive.Cancel>
             </AuiIf>
             <AuiIf condition={(state) => state.thread.isRunning && !state.composer.isEmpty}>
-              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu sıraya ekle" onClick={clearSubmittedText}><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
+              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu sıraya ekle" onClick={clearSubmittedText}><ArrowUp size={19} aria-hidden="true" /></ComposerPrimitive.Send>
             </AuiIf>
             <AuiIf condition={(state) => !state.thread.isRunning && !state.composer.isEmpty}>
-              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu gönder" onClick={clearSubmittedText}><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
+              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu gönder" onClick={clearSubmittedText}><ArrowUp size={19} aria-hidden="true" /></ComposerPrimitive.Send>
             </AuiIf>
             <AuiIf condition={(state) => !state.thread.isRunning && state.composer.isEmpty}>
-              <button type="button" className={styles.primaryButton} aria-label="Bir soru yazın" disabled><ArrowRight size={19} aria-hidden="true" /></button>
+              <button type="button" className={styles.primaryButton} aria-label="Bir soru yazın" disabled><ArrowUp size={19} aria-hidden="true" /></button>
             </AuiIf>
           </span>
         </div>
