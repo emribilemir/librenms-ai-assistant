@@ -390,7 +390,6 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     // update. Persist the browser value before picker state can re-render the
     // textarea and restore the previous device selection.
     aui.composer.setText(value);
-    event.preventDefault();
     const detected = triggerAt(value, cursor);
     if (detected) {
       if (!picker.open || picker.triggerStart !== detected.start) onRequestDevices?.();
