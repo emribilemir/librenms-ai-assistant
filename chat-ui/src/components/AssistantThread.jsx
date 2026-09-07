@@ -338,6 +338,15 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     setInputText(value);
     aui.composer.setText(value);
   };
+  const clearSubmittedText = () => {
+    const submittedText = inputText;
+    queueMicrotask(() => {
+      if (inputRef.current?.value !== submittedText) return;
+      inputOwnedRef.current = false;
+      setInputText("");
+      aui.composer.setText("");
+    });
+  };
   const filteredDevices = useMemo(() => {
     const query = picker.query.trim().toLocaleLowerCase("tr-TR");
     return devices.filter((device) => !query || device.hostname.toLocaleLowerCase("tr-TR").includes(query));
@@ -400,6 +409,16 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
       selectDevice(filteredDevices[activeIndex]);
     }
   };
+  const handleComposerKeyDown = (event) => {
+    handlePickerKey(event);
+    if (
+      !event.defaultPrevented
+      && event.key === "Enter"
+      && !event.shiftKey
+      && !event.nativeEvent?.isComposing
+      && inputText.trim()
+    ) clearSubmittedText();
+  };
   const handleComposerChange = (event) => {
     const value = event.target.value;
     const cursor = event.target.selectionStart ?? value.length;
@@ -414,6 +433,13 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     } else if (picker.triggerStart !== null) {
       closePicker();
     }
+  };
+  const handleComposerInputCapture = (event) => {
+    // Browser automation, paste, and replacement edits can reach the native
+    // input event before assistant-ui publishes its composer snapshot. Own
+    // that value during capture so an unrelated runtime refresh cannot put
+    // the previously selected device back into the textarea.
+    commitComposerText(event.currentTarget.value);
   };
   const examplePool = Array.isArray(selectedDevice?.examples) ? selectedDevice.examples : [];
   const exampleStart = discoveryRotation * 3;
@@ -455,7 +481,7 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
           </section>
         </div>
       ) : null}
-      <ComposerPrimitive.Input ref={inputRef} value={inputText} rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" onChange={handleComposerChange} onKeyDown={handlePickerKey} />
+      <ComposerPrimitive.Input ref={inputRef} value={inputText} rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" onInputCapture={handleComposerInputCapture} onChange={handleComposerChange} onKeyDown={handleComposerKeyDown} />
       {discoveryOpen && examples.length ? (
         <section className={styles.discovery} role="region" aria-label="Bağlamsal soru örnekleri">
           <p>Düzenleyebileceğin örnek başlangıçlar</p>
@@ -476,10 +502,10 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
               <ComposerPrimitive.Cancel className={`${styles.primaryButton} ${styles.stopButton}`} aria-label="Çalışmayı iptal et"><Square size={13} fill="currentColor" aria-hidden="true" /></ComposerPrimitive.Cancel>
             </AuiIf>
             <AuiIf condition={(state) => state.thread.isRunning && !state.composer.isEmpty}>
-              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu sıraya ekle"><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
+              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu sıraya ekle" onClick={clearSubmittedText}><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
             </AuiIf>
             <AuiIf condition={(state) => !state.thread.isRunning && !state.composer.isEmpty}>
-              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu gönder"><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
+              <ComposerPrimitive.Send className={styles.primaryButton} aria-label="Soruyu gönder" onClick={clearSubmittedText}><ArrowRight size={19} aria-hidden="true" /></ComposerPrimitive.Send>
             </AuiIf>
             <AuiIf condition={(state) => !state.thread.isRunning && state.composer.isEmpty}>
               <button type="button" className={styles.primaryButton} aria-label="Bir soru yazın" disabled><ArrowRight size={19} aria-hidden="true" /></button>

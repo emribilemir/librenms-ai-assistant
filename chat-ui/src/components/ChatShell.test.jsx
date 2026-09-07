@@ -657,6 +657,31 @@ test("running thread keeps the composer enabled and exposes removable queued fol
   expect(send).not.toHaveBeenCalled();
 });
 
+test("clears the controlled composer after submitting a question", async () => {
+  const send = jest.fn().mockResolvedValue(undefined);
+  const store = new AssistantChatStore({
+    threads: [{ id: "a", title: "Core" }],
+    selectedThreadId: "a",
+    messages: { a: [] },
+    runs: {},
+    runHistory: {},
+    drawerOpen: false,
+  });
+
+  function Fixture() {
+    const runtime = useLibreNmsExternalStoreRuntime(store, "a", send, jest.fn(), []);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+  fireEvent.change(composer, { target: { value: "Cihaz ne durumda?" } });
+  fireEvent.click(screen.getByRole("button", { name: "Soruyu gönder" }));
+
+  await waitFor(() => expect(send).toHaveBeenCalledWith("Cihaz ne durumda?"));
+  await waitFor(() => expect(composer).toHaveValue(""));
+});
+
 test("saved conversations are rendered and switched by assistant-ui thread-list primitives", async () => {
   const switchThread = jest.fn();
   const createThread = jest.fn();
