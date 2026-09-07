@@ -87,18 +87,22 @@ def build_picker_devices(
 def build_suggestions(
     devices: Iterable[Mapping[str, Any]], limit: int = 4, rotation: int = 0
 ) -> list[dict[str, str]]:
-    """Return a rotating capability-first window for real devices marked up."""
-    up_devices = sorted(
+    """Return a rotating capability-first window for the current live inventory."""
+    live_devices = sorted(
         (
             device
             for device in devices
-            if device.get("status") in (1, True, "1", "true", "up")
-            and str(device.get("hostname", "")).strip()
+            if str(device.get("hostname", "")).strip()
         ),
         key=lambda device: str(device.get("hostname", "")).strip(),
     )
+    up_devices = [
+        device for device in live_devices
+        if device.get("status") in (1, True, "1", "true", "up")
+    ]
+    suggestion_devices = up_devices or live_devices
     hostnames = list(dict.fromkeys(
-        str(device.get("hostname", "")).strip() for device in up_devices
+        str(device.get("hostname", "")).strip() for device in suggestion_devices
     ))
     port_hostnames = list(dict.fromkeys(
         str(device.get("hostname", "")).strip()

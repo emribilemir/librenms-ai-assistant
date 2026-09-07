@@ -132,6 +132,35 @@ class SuggestionGenerationTests(unittest.TestCase):
         self.assertTrue(all(item["prompt"] and item["label"] for item in result))
         self.assertTrue(all("z-down" not in item["prompt"] for item in result))
 
+    def test_uses_safe_non_port_starters_when_every_live_device_is_down(self):
+        result = build_suggestions(
+            [
+                {"hostname": "z-down", "status": 0, "port_count": 48},
+                {"hostname": "a-down", "status": "down", "port_count": 24},
+            ],
+            limit=4,
+        )
+
+        self.assertEqual(
+            [item["label"] for item in result],
+            [
+                "Model bilgisi",
+                "Son 24 saat incelemesi",
+                "Cihaz incelemesi",
+                "İşletim sistemi",
+            ],
+        )
+        self.assertTrue(all("port" not in item["label"].lower() for item in result))
+        self.assertEqual(
+            [item["prompt"] for item in result],
+            [
+                "a-down modeli ne?",
+                "z-down son 24 saatte neler olmuş?",
+                "a-down'de ne sorun var?",
+                "z-down işletim sistemi ne?",
+            ],
+        )
+
     def test_live_adapter_validates_only_port_prompt_candidates(self):
         calls = []
 
