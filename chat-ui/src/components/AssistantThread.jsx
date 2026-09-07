@@ -81,6 +81,29 @@ function safeStructuredPortResult(value) {
   return ports.length ? { kind: "ports", device, ports } : null;
 }
 
+function safeStructuredAlertResult(value) {
+  if (!value || value.kind !== "alerts" || typeof value.device !== "object" || !Array.isArray(value.alerts)) return null;
+  const deviceId = positiveInteger(value.device.device_id);
+  if (!deviceId) return null;
+  const device = { device_id: deviceId, hostname: boundedText(value.device.hostname, 160) };
+  const alerts = value.alerts.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || positiveInteger(candidate.device_id) !== deviceId) return [];
+    const row = { device_id: deviceId };
+    const alertId = positiveInteger(candidate.alert_id);
+    if (alertId) row.alert_id = alertId;
+    const severity = boundedText(candidate.severity, 32);
+    const name = boundedText(candidate.name, 240);
+    if (severity) row.severity = severity;
+    if (name) row.name = name;
+    return [row];
+  }).slice(0, 24);
+  return { kind: "alerts", device, alerts };
+}
+
+function safeStructuredResult(value) {
+  return safeStructuredPortResult(value) || safeStructuredAlertResult(value);
+}
+
 function titleCaseStatus(value) {
   if (value === "up") return "Up";
   if (value === "down") return "Down";
@@ -126,19 +149,73 @@ function StructuredPortResult({ result, navigationTargets }) {
   );
 }
 
+const ALERT_SEVERITIES = {
+  critical: { label: "Kritik", semantic: "critical" },
+  danger: { label: "Kritik", semantic: "critical" },
+  error: { label: "Hata", semantic: "critical" },
+  major: { label: "Yüksek", semantic: "critical" },
+  warning: { label: "Uyarı", semantic: "warning" },
+  minor: { label: "Düşük", semantic: "warning" },
+  notice: { label: "Bildirim", semantic: "info" },
+  info: { label: "Bilgi", semantic: "info" },
+  ok: { label: "Normal", semantic: "positive" },
+  normal: { label: "Normal", semantic: "positive" },
+};
+
+function alertSeverity(value) {
+  return ALERT_SEVERITIES[value?.toLocaleLowerCase("en-US")] || { label: "Bilinmiyor", semantic: "neutral" };
+}
+
+function StructuredAlertResult({ result, navigationTargets }) {
+  const targets = safeNavigationTargets(navigationTargets);
+  const expectedHref = `/device/${result.device.device_id}/alerts`;
+  const target = targets.find((candidate) => candidate.kind === "alerts" && candidate.entity_id === result.device.device_id && candidate.href === expectedHref);
+  const hostname = result.device.hostname || `Cihaz ${result.device.device_id}`;
+  return (
+    <section className={styles.structuredResult} data-slot="assistant-answer">
+      <div className={styles.alertHeading}>
+        <div>
+          <p className={styles.structuredTitle}>{hostname}</p>
+          {result.alerts.length ? <p className={styles.alertCount}>{result.alerts.length} aktif alarm</p> : null}
+        </div>
+        {target ? <a className={styles.inlineResultAction} href={target.href} target="_blank" rel="noopener noreferrer">LibreNMS'te aç<ExternalLink size={12} aria-hidden="true" /></a> : null}
+      </div>
+      {result.alerts.length ? (
+        <table className={`${styles.portTable} ${styles.alertTable}`} aria-label={`${hostname} aktif alarmları`}>
+          <thead><tr><th>Seviye</th><th>Alarm</th><th>ID</th></tr></thead>
+          <tbody>{result.alerts.map((alert, index) => {
+            const severity = alertSeverity(alert.severity);
+            return (
+              <tr key={alert.alert_id || `${alert.name || "alert"}-${index}`}>
+                <td data-severity={severity.semantic}>{severity.label}</td>
+                <td>{alert.name || "Adı belirtilmemiş alarm"}</td>
+                <td>{alert.alert_id ? `#${alert.alert_id}` : "—"}</td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      ) : <p className={styles.alertEmpty}>Aktif alarm bulunmuyor.</p>}
+    </section>
+  );
+}
+
 function AssistantText() {
   const structuredValue = useAuiState((state) => state.message.metadata?.custom?.structuredResult);
-  const structuredResult = safeStructuredPortResult(structuredValue);
+  const structuredResult = safeStructuredResult(structuredValue);
   const navigationTargets = useAuiState((state) => state.message.metadata?.custom?.navigationTargets);
-  if (structuredResult) return <StructuredPortResult result={structuredResult} navigationTargets={navigationTargets} />;
+  if (structuredResult?.kind === "ports") return <StructuredPortResult result={structuredResult} navigationTargets={navigationTargets} />;
+  if (structuredResult?.kind === "alerts") return <StructuredAlertResult result={structuredResult} navigationTargets={navigationTargets} />;
   return <div data-slot="assistant-answer"><MarkdownTextPrimitive smooth defer className={styles.markdown} /></div>;
 }
 
 function NavigationActions() {
   const navigationTargets = useAuiState((state) => state.message.metadata?.custom?.navigationTargets);
   const structuredValue = useAuiState((state) => state.message.metadata?.custom?.structuredResult);
-  const structuredResult = safeStructuredPortResult(structuredValue);
-  const targets = safeNavigationTargets(navigationTargets).filter((target) => !(structuredResult && target.kind === "port"));
+  const structuredResult = safeStructuredResult(structuredValue);
+  const targets = safeNavigationTargets(navigationTargets).filter((target) => !(
+    (structuredResult?.kind === "ports" && target.kind === "port")
+    || (structuredResult?.kind === "alerts" && target.kind === "alerts")
+  ));
   if (!targets.length) return null;
   return (
     <nav className={styles.navigationActions} aria-label="LibreNMS bağlantıları">
@@ -162,17 +239,21 @@ function UserMessage() {
 function AssistantMessage() {
   const usedFallback = useAuiState((state) => Boolean(state.message.metadata?.custom?.usedFallback));
   const inspection = useAuiState((state) => state.message.metadata?.custom?.inspection);
+  const streaming = useAuiState((state) => state.message.status?.type === "running");
   const showInspection = useContext(DemoInspectionContext);
   return (
     <MessagePrimitive.Root className={`${styles.message} ${styles.assistantMessage}`}>
       <div className={styles.assistantBody}>
         {usedFallback && <span className={styles.fallback}>Doğrulanmış güvenli yanıt</span>}
+        <PipelineReasoning inspection={showInspection ? inspection : null} variant="progress" />
         <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: () => null, Empty: () => null }} />
         <NavigationActions />
-        <div className={styles.messageTools} role="group" aria-label="Mesaj eylemleri">
-          <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
-          <PipelineReasoning inspection={showInspection ? inspection : null} />
-        </div>
+        {!streaming ? (
+          <div className={styles.messageTools} role="group" aria-label="Mesaj eylemleri">
+            <ActionBarPrimitive.Root className={styles.actionBar}><CopyAction /></ActionBarPrimitive.Root>
+            <PipelineReasoning inspection={showInspection ? inspection : null} variant="details" />
+          </div>
+        ) : null}
       </div>
     </MessagePrimitive.Root>
   );
@@ -301,7 +382,13 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     }
   };
   const handleComposerChange = (event) => {
-    const detected = triggerAt(event.target.value, event.target.selectionStart ?? event.target.value.length);
+    const value = event.target.value;
+    const cursor = event.target.selectionStart ?? value.length;
+    // assistant-ui composes this callback before its own controlled-input
+    // update. Persist the browser value before picker state can re-render the
+    // textarea and restore the previous device selection.
+    aui.composer.setText(value);
+    const detected = triggerAt(value, cursor);
     if (detected) {
       if (!picker.open || picker.triggerStart !== detected.start) onRequestDevices?.();
       setPicker({ open: true, query: detected.query, triggerStart: detected.start });

@@ -132,6 +132,66 @@ test("renders compact structured port rows, inline links, and the action row aft
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+test("renders structured alert rows and empty state from persisted metadata", async ({ page }) => {
+  await ask(page, "structured alert list");
+  const table = page.getByRole("table", { name: "lab-j9772a-01 aktif alarmları" });
+  await expect(table).toBeVisible();
+  await expect(page.getByText(/severity=critical|state=1/)).toHaveCount(0);
+  await expect(page.getByText("3 aktif alarm")).toBeVisible();
+  await expect(table.getByRole("cell", { name: "Kritik" })).toHaveAttribute("data-severity", "critical");
+  await expect(table.getByRole("cell", { name: "Uyarı" })).toHaveAttribute("data-severity", "warning");
+  await expect(table.getByRole("cell", { name: "Bilinmiyor" })).toHaveAttribute("data-severity", "neutral");
+  await expect(page.getByRole("link", { name: /LibreNMS'te aç/ })).toHaveAttribute("href", "/device/7/alerts");
+  await expect(page.getByRole("link", { name: "Cihaz alarmlarını aç" })).toHaveCount(0);
+
+  await page.reload();
+  await page.getByRole("navigation", { name: "Kayıtlı sohbetler" }).getByRole("button", { name: "structured alert list", exact: true }).click();
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("cell", { name: "#88" })).toBeVisible();
+
+  await createThread(page);
+  await ask(page, "structured alert empty");
+  await expect(page.getByText("Aktif alarm bulunmuyor.")).toBeVisible();
+  await expect(page.getByText("developer empty fallback")).toHaveCount(0);
+  await expect(page.getByRole("table")).toHaveCount(0);
+});
+
+test("uses the same sanitized inspection for dark JSON and Python code views", async ({ page }) => {
+  await page.evaluate(async () => {
+    const token = window.__LIBRENMS_AI_ASSISTANT__?.token;
+    await fetch("/ai-api/v1/demo-mode", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+  });
+  await page.reload();
+  const demoMode = page.getByLabel("Demo Mode");
+  await expect(demoMode).toBeChecked();
+  await ask(page, "inspector code surface");
+  await expect(page.getByText("Validated inspector result.")).toBeVisible();
+  await page.getByRole("button", { name: /İşlem ayrıntılarını göster/ }).click();
+  const panel = page.getByRole("region", { name: "İşleme ayrıntıları" });
+  await panel.getByRole("tab", { name: "JSON" }).click();
+  const jsonCode = panel.locator("pre");
+  await expect(jsonCode).toContainText('"route": "alerts"');
+  const jsonStyle = await jsonCode.evaluate((element) => ({
+    background: getComputedStyle(element).backgroundColor,
+    overflowX: getComputedStyle(element).overflowX,
+    font: getComputedStyle(element).fontFamily,
+  }));
+  expect(jsonStyle.background).toBe("rgb(17, 22, 26)");
+  expect(jsonStyle.overflowX).toBe("auto");
+  expect(jsonStyle.font).toContain("monospace");
+
+  await panel.getByRole("tab", { name: "Python" }).click();
+  const pythonCode = panel.locator("pre");
+  await expect(pythonCode).toContainText("'route': 'alerts'");
+  await expect(pythonCode).toContainText("'synthesis_llm_called': False");
+  await expect(pythonCode).not.toContainText(/secret|token|system prompt|raw model/i);
+  await expect(pythonCode).toHaveCSS("background-color", jsonStyle.background);
+});
+
 test("builds assistant-ui starter prompts from currently up devices", async ({ page }) => {
   const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 açık mı/i });
   await expect(liveSuggestion).toBeVisible();
@@ -152,6 +212,8 @@ test("uses one live device picker for icon and at-search without auto-submitting
   await expect(composer).toHaveValue("lab-offline-01 ");
   await expect(page.locator("[data-message-id]")).toHaveCount(0);
 
+  await composer.fill("");
+  await expect(composer).toHaveValue("");
   await composer.fill("@lab-j9775");
   picker = page.getByRole("dialog", { name: "Canlı cihaz seçici" });
   await expect(picker.getByRole("listbox", { name: "Canlı cihazlar" }).getByRole("option")).toHaveCount(1);
@@ -493,11 +555,10 @@ test("creates, selects, and deletes a saved thread only after confirmation", asy
 test("renders only real received stage progress for a successful no-match result", async ({ page }) => {
   await createThread(page);
   await ask(page, "no-match branch switch");
-  const reasoning = page.locator("[data-streaming] button[aria-expanded]");
-  const live = page.locator("[aria-live='polite']").last();
-  await expect(reasoning).toHaveAttribute("aria-expanded", "true");
+  const live = page.locator("[data-streaming] [aria-live='polite']");
+  await expect(page.locator("[data-streaming] button[aria-expanded]")).toHaveCount(0);
   await expect(live).toContainText(/Soruyu sınıflandır/);
-  await expect(live).toContainText(/Cihazı çözüml/);
+  await expect(live).toContainText(/Cihaz çözüml/);
   await expect(page.getByText("No monitored device matches that name.")).toBeVisible();
   await expect(page.locator('[data-assistant-ui="thread"]')).toBeVisible();
   await expect(page.locator("[data-message-id]")).toHaveCount(2);
@@ -547,15 +608,15 @@ test("completed process disclosure follows the answer without a closed layout ro
   });
   expect(open.triggerToPanelGap).toBeLessThanOrEqual(12);
   expect(open.panelHeight).toBeGreaterThan(0);
-  expect(open.panelDisplay).toBe("grid");
+  expect(open.panelDisplay).toBe("block");
   expect(open.panelHidden).toBe(false);
 });
 
 test("shows a retryable backend failure and allows a real retried stream to succeed", async ({ page }) => {
   await createThread(page);
   await ask(page, "retryable backend question");
-  const live = page.locator("[aria-live='polite']").last();
-  await expect(live).toContainText(/Soruyu sınıflandırdı.*Cihazı çözümledi.*LibreNMS verisini okuyor/);
+  const live = page.locator("[data-streaming] [aria-live='polite']");
+  await expect(live).toContainText(/LibreNMS verisi okunuyor/);
   expect(await page.evaluate(async () => (await fetch("/ai-api/__test__/release-retryable-failure", { method: "POST" })).status)).toBe(204);
   await expect(page.getByRole("alert")).toHaveText("LibreNMS is temporarily unavailable.");
   const retry = page.getByRole("button", { name: "Yeniden dene" });
@@ -585,7 +646,8 @@ test("labels a validated fallback answer and keeps telemetry in its single proce
   expect(persistedRun).toMatchObject({ planner_ms: 7, resolver_ms: 11, backend_ms: 13, synthesis_ms: 17 });
   expect(persistedRun.total_ms).toBeGreaterThanOrEqual(48);
   expect(persistedRun.total_ms).toBeGreaterThanOrEqual(persistedRun.time_to_first_visible_chunk_ms);
-  await expect(disclosure).toContainText(`${persistedRun.total_ms} ms`);
+  await expect(disclosure).not.toContainText(`${persistedRun.total_ms} ms`);
+  await expect(page.getByText(`${persistedRun.total_ms} ms`, { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("fallback-metrics.png"), fullPage: true });
 });
 

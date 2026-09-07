@@ -170,6 +170,47 @@ class DeterministicPipelineAdapter:
                 ],
             }
             return result
+        if "structured alert list" in question:
+            result = self._result(
+                "88: Port status up/down (severity=critical, state=1)\n133: LAB - Port admin up oper down (severity=warning, state=1)",
+                backend=13,
+            )
+            result["navigation_targets"] = [{
+                "kind": "alerts", "label": "Cihaz alarmlarını aç", "entity_id": 7, "href": "/device/7/alerts",
+            }]
+            result["structured_result"] = {
+                "kind": "alerts",
+                "device": {"device_id": 7, "hostname": "lab-j9772a-01"},
+                "alerts": [
+                    {"device_id": 7, "alert_id": 88, "severity": "critical", "name": "Port status up/down"},
+                    {"device_id": 7, "alert_id": 133, "severity": "warning", "name": "LAB - Port admin up oper down"},
+                    {"device_id": 7, "alert_id": 144, "severity": "unexpected", "name": "Yeni alarm"},
+                ],
+            }
+            return result
+        if "structured alert empty" in question:
+            result = self._result("developer empty fallback", backend=13)
+            result["navigation_targets"] = [{
+                "kind": "alerts", "label": "Cihaz alarmlarını aç", "entity_id": 7, "href": "/device/7/alerts",
+            }]
+            result["structured_result"] = {
+                "kind": "alerts",
+                "device": {"device_id": 7, "hostname": "lab-j9772a-01"},
+                "alerts": [],
+            }
+            return result
+        if "inspector code surface" in question:
+            result = self._result("Validated inspector result.", backend=13)
+            result["inspection"] = {
+                "planner": {"request_type": "alerts", "intent": "device_alerts"},
+                "resolution": {"hostname": "lab-j9772a-01", "device_id": 7},
+                "route": "alerts",
+                "tools": [{"name": "get_alerts", "args": {"device_id": 7}}],
+                "findings": [{"type": "active_alert", "alert_id": 88, "severity": "critical", "name": "Port status up/down"}],
+                "synthesis_llm_called": False,
+                "navigation_targets": [{"kind": "alerts", "label": "Cihaz alarmlarını aç", "entity_id": 7, "href": "/device/7/alerts"}],
+            }
+            return result
         if "malformed navigation" in question:
             result = self._result("Validated result without an action.", backend=13)
             result["navigation_targets"] = [{

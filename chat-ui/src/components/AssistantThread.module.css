@@ -32,6 +32,22 @@
 .portTable td[data-status="positive"] { color: #79c995; font-weight: 650; }
 .portTable td[data-status="problem"] { color: #f08087; font-weight: 650; }
 .portTable td[data-status="neutral"] { color: #a3adb5; font-weight: 620; }
+.alertHeading { align-items: flex-end; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 7px; }
+.alertHeading .structuredTitle { margin-bottom: 2px; }
+.alertCount { color: #a9b2b9; font-size: 11px; margin: 0; }
+.inlineResultAction { align-items: center; color: #b9c1c7; display: inline-flex; flex: none; font-size: 11px; gap: 5px; padding: 3px 0; text-decoration: none; }
+.inlineResultAction:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.inlineResultAction:focus-visible { border-radius: 3px; outline: 2px solid #ef7a82; outline-offset: 2px; }
+.inlineResultAction svg { color: #d85a62; }
+.alertTable th:nth-child(1), .alertTable td:nth-child(1) { width: 18%; }
+.alertTable th:nth-child(2), .alertTable td:nth-child(2) { width: 67%; }
+.alertTable th:nth-child(3), .alertTable td:nth-child(3) { width: 15%; }
+.alertTable td[data-severity="critical"] { color: #f08087; font-weight: 650; }
+.alertTable td[data-severity="warning"] { color: #e6b96f; font-weight: 650; }
+.alertTable td[data-severity="info"] { color: #87b9df; font-weight: 620; }
+.alertTable td[data-severity="positive"] { color: #79c995; font-weight: 620; }
+.alertTable td[data-severity="neutral"] { color: #a3adb5; font-weight: 620; }
+.alertEmpty { color: #aab3ba; font-size: 12px; margin: 3px 0 0; }
 .navigationActions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .navigationAction { align-items: center; background: #292f34; border: 1px solid #46515a; border-radius: 8px; color: #dce1e4; display: inline-flex; font-size: 12px; font-weight: 580; gap: 7px; line-height: 1; padding: 8px 10px; text-decoration: none; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
 .navigationAction:hover { background: #32393f; border-color: #69757e; color: #fff; }

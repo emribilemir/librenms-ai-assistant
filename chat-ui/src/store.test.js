@@ -141,6 +141,26 @@ test("attaches structured port metadata from SSE and hydrates it after a full re
   expect(state.messages.a[0].structuredResult).toEqual(structuredResult);
 });
 
+test("hydrates persisted structured alert rows and empty states after a full refresh", () => {
+  for (const alerts of [
+    [{ device_id: 1, alert_id: 88, severity: "critical", name: "Port status up/down" }],
+    [],
+  ]) {
+    const structuredResult = {
+      kind: "alerts",
+      device: { device_id: 1, hostname: "lab-j9772a-01" },
+      alerts,
+    };
+    const state = reduceAssistantChat(createInitialState({ threads: [{ id: "a", title: "Alerts" }] }), { type: "thread.loaded", thread: {
+      id: "a", title: "Alerts",
+      messages: [{ id: "m", role: "assistant", content: "fallback text", structured_result: structuredResult }],
+      runs: [{ id: "r", status: "completed" }],
+    } });
+
+    expect(state.messages.a[0].structuredResult).toEqual(structuredResult);
+  }
+});
+
 test("attaches completed inspection to the accepted message and preserves it across in-memory refresh", () => {
   const inspection = {
     planner: { request_type: "ports", intent: "device_ports" },

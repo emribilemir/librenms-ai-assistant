@@ -185,6 +185,64 @@ class PipelineInspectionTests(unittest.TestCase):
         })
         self.assertNotIn("secret", json.dumps(response["structured_result"]))
 
+    def test_alert_route_carries_bounded_rows_without_raw_state_or_private_fields(self):
+        result = {
+            "final_answer": "88: Port status up/down (severity=critical, state=1)",
+            "route": "alerts",
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "alerts": [
+                    {
+                        "device_id": 1,
+                        "alert_id": 88,
+                        "severity": "critical",
+                        "name": "Port status up/down",
+                        "state": 1,
+                        "secret": "must not cross the boundary",
+                    },
+                    {
+                        "device_id": 1,
+                        "alert_id": 133,
+                        "severity": "warning",
+                        "rule": "LAB - Port admin up oper down",
+                        "state": 1,
+                    },
+                    {"device_id": 2, "alert_id": 999, "severity": "critical", "name": "Other device"},
+                ],
+            },
+        }
+
+        response = self._run(result, demo_mode=False)
+
+        self.assertEqual(response["structured_result"], {
+            "kind": "alerts",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+            "alerts": [
+                {"device_id": 1, "alert_id": 88, "severity": "critical", "name": "Port status up/down"},
+                {"device_id": 1, "alert_id": 133, "severity": "warning", "name": "LAB - Port admin up oper down"},
+            ],
+        })
+        serialized = json.dumps(response["structured_result"])
+        self.assertNotIn("state", serialized)
+        self.assertNotIn("secret", serialized)
+        self.assertNotIn("Other device", serialized)
+
+    def test_alert_route_carries_a_structured_empty_state(self):
+        response = self._run({
+            "final_answer": "lab-j9772a-01 üzerinde aktif alarm bulunmuyor.",
+            "route": "alerts",
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "alerts": [],
+            },
+        }, demo_mode=False)
+
+        self.assertEqual(response["structured_result"], {
+            "kind": "alerts",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+            "alerts": [],
+        })
+
     def test_investigation_reuses_bounded_structured_findings(self):
         findings = [
             {

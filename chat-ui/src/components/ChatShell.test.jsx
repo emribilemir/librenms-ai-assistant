@@ -70,6 +70,21 @@ test("typing an at-query opens the live picker, filters hostnames, and inserts p
   expect(send).not.toHaveBeenCalled();
 });
 
+test("a device inserted from the picker can be cleared before starting a new at-query", () => {
+  render(<PickerFixture />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Cihaz seç" }));
+  fireEvent.click(screen.getByRole("option", { name: "lab-down Down" }));
+  expect(composer).toHaveValue("lab-down ");
+
+  fireEvent.change(composer, { target: { value: "" } });
+  expect(composer).toHaveValue("");
+  fireEvent.change(composer, { target: { value: "@lab-u" } });
+  expect(composer).toHaveValue("@lab-u");
+  expect(screen.getByRole("option", { name: "lab-up Up" })).toBeVisible();
+});
+
 test("the device icon opens the same picker with unknown status and keeps recent devices bounded at the top", () => {
   const requestDevices = jest.fn();
   render(<PickerFixture onRequestDevices={requestDevices} />);
@@ -226,7 +241,7 @@ test("assistant messages expose an assistant-ui copy action", () => {
   expect(screen.queryByRole("button", { name: "Nasıl işlendi?" })).not.toBeInTheDocument();
 });
 
-test("validated demo metadata opens a compact summary and JSON view from the same inspection", () => {
+test("validated demo metadata opens compact summary, JSON, and Python views from the same inspection", () => {
   const inspection = {
     planner: { request_type: "ports", intent: "device_ports" },
     resolution: { hostname: "lab-j9772a-01", device_id: 1, port_id: 2, ifIndex: 2 },
@@ -275,13 +290,20 @@ test("validated demo metadata opens a compact summary and JSON view from the sam
 
   const summaryTab = within(panel).getByRole("tab", { name: "Özet" });
   const jsonTab = within(panel).getByRole("tab", { name: "JSON" });
+  const pythonTab = within(panel).getByRole("tab", { name: "Python" });
   expect(summaryTab).toHaveAttribute("aria-controls", within(panel).getByRole("tabpanel").id);
   expect(jsonTab).toHaveAttribute("tabindex", "-1");
+  expect(pythonTab).toHaveAttribute("tabindex", "-1");
   summaryTab.focus();
   fireEvent.keyDown(summaryTab, { key: "ArrowRight" });
   expect(jsonTab).toHaveFocus();
   expect(jsonTab).toHaveAttribute("aria-selected", "true");
   expect(panel.querySelector("pre")).toHaveTextContent(JSON.stringify(inspection, null, 2), { normalizeWhitespace: false });
+  fireEvent.keyDown(jsonTab, { key: "ArrowRight" });
+  expect(pythonTab).toHaveFocus();
+  expect(pythonTab).toHaveAttribute("aria-selected", "true");
+  expect(panel.querySelector("pre")).toHaveTextContent("'route': 'ports'");
+  expect(panel.querySelector("pre")).toHaveTextContent("'synthesis_llm_called': False");
 });
 
 test("runtime demo mode off hides inspection retained on an earlier answer", () => {
@@ -464,6 +486,68 @@ test("unresolved structured port rows show only the compact device fallback acti
   expect(screen.getByRole("link", { name: "LibreNMS'te cihaz portlarını aç" })).toBeVisible();
 });
 
+test("structured alert metadata renders readable severity rows and one trusted device action", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "88: Port status up/down (severity=critical, state=1)" }],
+    createdAt: new Date(),
+    metadata: { custom: {
+      structuredResult: {
+        kind: "alerts",
+        device: { device_id: 7, hostname: "lab-j9772a-01" },
+        alerts: [
+          { device_id: 7, alert_id: 88, severity: "critical", name: "Port status up/down" },
+          { device_id: 7, alert_id: 133, severity: "warning", name: "LAB - Port admin up oper down" },
+          { device_id: 7, alert_id: 144, severity: "unexpected", name: "Yeni alarm" },
+        ],
+      },
+      navigationTargets: [{ kind: "alerts", label: "Cihaz alarmlarını aç", entity_id: 7, href: "/device/7/alerts" }],
+    } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.queryByText(/severity=critical|state=1/)).not.toBeInTheDocument();
+  expect(screen.getByText("3 aktif alarm")).toBeVisible();
+  expect(screen.getByRole("table", { name: "lab-j9772a-01 aktif alarmları" })).toBeVisible();
+  expect(screen.getByRole("cell", { name: "Kritik" })).toHaveAttribute("data-severity", "critical");
+  expect(screen.getByRole("cell", { name: "Uyarı" })).toHaveAttribute("data-severity", "warning");
+  expect(screen.getByRole("cell", { name: "Bilinmiyor" })).toHaveAttribute("data-severity", "neutral");
+  expect(screen.getByRole("cell", { name: "#88" })).not.toHaveAttribute("href");
+  expect(screen.getByRole("link", { name: /LibreNMS'te aç/ })).toHaveAttribute("href", "/device/7/alerts");
+  expect(screen.queryByRole("link", { name: "Cihaz alarmlarını aç" })).not.toBeInTheDocument();
+});
+
+test("structured alert empty state renders no table and ignores final developer text", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "developer fallback that must stay hidden" }],
+    createdAt: new Date(),
+    metadata: { custom: {
+      structuredResult: { kind: "alerts", device: { device_id: 7, hostname: "lab-j9772a-01" }, alerts: [] },
+      navigationTargets: [{ kind: "alerts", label: "Cihaz alarmlarını aç", entity_id: 7, href: "/device/7/alerts" }],
+    } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.getByText("Aktif alarm bulunmuyor.")).toBeVisible();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(screen.queryByText("developer fallback that must stay hidden")).not.toBeInTheDocument();
+});
+
 test("completed messages place copy and one accessible details disclosure in a compact action row", () => {
   const inspection = { route: "ports", tools: [], findings: [], synthesis_llm_called: false, navigation_targets: [] };
   const messages = [{
@@ -485,14 +569,15 @@ test("completed messages place copy and one accessible details disclosure in a c
   const actions = screen.getByRole("group", { name: "Mesaj eylemleri" });
   expect(within(actions).getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
   const details = within(actions).getByRole("button", { name: /İşlem ayrıntıları/i });
-  expect(details).toHaveTextContent("14.5 sn");
+  expect(details).not.toHaveTextContent("14.5 sn");
+  expect(within(actions).getByText("14.5 sn")).toBeVisible();
   expect(screen.queryByRole("button", { name: "Nasıl işlendi?" })).not.toBeInTheDocument();
   expect(details.nextElementSibling).toHaveAttribute("hidden");
   fireEvent.click(details);
   expect(screen.getByRole("region", { name: "İşleme ayrıntıları" })).toBeVisible();
 });
 
-test("assistant-ui keeps the copy action in the message layout while a validated answer is streaming", () => {
+test("streaming answers reserve completed message actions until the response finishes", () => {
   const runtimeStore = {
     messages: [{
       id: "answer",
@@ -511,7 +596,7 @@ test("assistant-ui keeps the copy action in the message layout while a validated
   }
 
   render(<Fixture />);
-  expect(screen.getByRole("button", { name: "Yanıtı kopyala" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Yanıtı kopyala" })).not.toBeInTheDocument();
 });
 
 test("running thread keeps the composer enabled and exposes removable queued follow-ups", async () => {
@@ -604,7 +689,8 @@ test("completed assistant answers keep stage and timing details in one reasoning
   render(<Fixture />);
   const disclosure = screen.getByRole("button", { name: /İşlem ayrıntıları/i });
   expect(disclosure).toHaveAttribute("aria-expanded", "false");
-  expect(disclosure).toHaveTextContent("2.06 sn");
+  expect(disclosure).not.toHaveTextContent("2.06 sn");
+  expect(screen.getByText("2.06 sn")).toBeVisible();
   expect(screen.queryByText("Çalışma ayrıntıları")).not.toBeInTheDocument();
   fireEvent.click(disclosure);
   expect(screen.getByText("İlk model yanıtı 21 ms")).toBeVisible();
@@ -646,7 +732,7 @@ test("completed reasoning follows the answer and its closed panel reserves no la
   expect(panel).not.toHaveAttribute("hidden");
 });
 
-test("live SSE stages appear as an expanded assistant-ui reasoning disclosure inside the assistant message", () => {
+test("live SSE stages replace the checklist with one compact assistant-side status", () => {
   const store = new AssistantChatStore({
     threads: [{ id: "a", title: "Core" }],
     selectedThreadId: "a",
@@ -676,9 +762,9 @@ test("live SSE stages appear as an expanded assistant-ui reasoning disclosure in
 
   render(<Fixture />);
 
-  expect(screen.getByRole("button", { name: /Cihazı çözümlüyor/i })).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByText(/Soruyu sınıflandırdı/)).toBeVisible();
-  expect(screen.getAllByText(/Cihazı çözümlüyor/)).toHaveLength(2);
+  expect(screen.getByRole("status")).toHaveTextContent("Cihaz çözümleniyor…");
+  expect(screen.queryByRole("button", { name: /Cihazı çözümlüyor/i })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Soruyu sınıflandırdı/)).not.toBeInTheDocument();
   expect(screen.queryByText("Validating…")).not.toBeInTheDocument();
 });
 

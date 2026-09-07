@@ -146,35 +146,69 @@ function Summary({ inspection }) {
   );
 }
 
+function pythonString(value) {
+  return `'${value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'")
+    .replaceAll("\n", "\\n")
+    .replaceAll("\r", "\\r")
+    .replaceAll("\t", "\\t")}'`;
+}
+
+function pythonLiteral(value, depth = 0) {
+  if (value == null) return "None";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return pythonString(value);
+  const indent = "  ".repeat(depth);
+  const childIndent = "  ".repeat(depth + 1);
+  if (Array.isArray(value)) {
+    if (!value.length) return "[]";
+    return `[\n${value.map((item) => `${childIndent}${pythonLiteral(item, depth + 1)}`).join(",\n")}\n${indent}]`;
+  }
+  const entries = Object.entries(value);
+  if (!entries.length) return "{}";
+  return `{\n${entries.map(([key, item]) => `${childIndent}${pythonString(key)}: ${pythonLiteral(item, depth + 1)}`).join(",\n")}\n${indent}}`;
+}
+
 export function ProcessingInspector({ value, embedded = false }) {
   const inspection = safeInspection(value);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("summary");
   const summaryTabRef = useRef(null);
   const jsonTabRef = useRef(null);
+  const pythonTabRef = useRef(null);
   const id = useId();
   if (!inspection) return null;
   const panelId = `${id}-panel`;
   const summaryTabId = `${id}-summary-tab`;
   const jsonTabId = `${id}-json-tab`;
+  const pythonTabId = `${id}-python-tab`;
   const tabPanelId = `${id}-tab-panel`;
   const selectTab = (nextTab) => {
     setTab(nextTab);
-    (nextTab === "summary" ? summaryTabRef : jsonTabRef).current?.focus();
+    ({ summary: summaryTabRef, json: jsonTabRef, python: pythonTabRef })[nextTab].current?.focus();
   };
   const handleTabKey = (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    selectTab(event.key === "ArrowLeft" || event.key === "Home" ? "summary" : "json");
+    const tabs = ["summary", "json", "python"];
+    if (event.key === "Home") return selectTab(tabs[0]);
+    if (event.key === "End") return selectTab(tabs.at(-1));
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    selectTab(tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length]);
   };
   const content = (
     <>
       <div className={styles.tabs} role="tablist" aria-label="Inspector görünümü">
         <button ref={summaryTabRef} id={summaryTabId} type="button" role="tab" aria-selected={tab === "summary"} aria-controls={tabPanelId} tabIndex={tab === "summary" ? 0 : -1} onClick={() => setTab("summary")} onKeyDown={handleTabKey}>Özet</button>
         <button ref={jsonTabRef} id={jsonTabId} type="button" role="tab" aria-selected={tab === "json"} aria-controls={tabPanelId} tabIndex={tab === "json" ? 0 : -1} onClick={() => setTab("json")} onKeyDown={handleTabKey}>JSON</button>
+        <button ref={pythonTabRef} id={pythonTabId} type="button" role="tab" aria-selected={tab === "python"} aria-controls={tabPanelId} tabIndex={tab === "python" ? 0 : -1} onClick={() => setTab("python")} onKeyDown={handleTabKey}>Python</button>
       </div>
-      <div id={tabPanelId} role="tabpanel" aria-labelledby={tab === "summary" ? summaryTabId : jsonTabId}>
-        {tab === "summary" ? <Summary inspection={inspection} /> : <pre className={styles.json}>{JSON.stringify(inspection, null, 2)}</pre>}
+      <div id={tabPanelId} role="tabpanel" aria-labelledby={{ summary: summaryTabId, json: jsonTabId, python: pythonTabId }[tab]}>
+        {tab === "summary" ? <Summary inspection={inspection} /> : (
+          <pre className={`${styles.code} ${tab === "json" ? styles.json : styles.python}`}>{tab === "json" ? JSON.stringify(inspection, null, 2) : pythonLiteral(inspection)}</pre>
+        )}
       </div>
     </>
   );
