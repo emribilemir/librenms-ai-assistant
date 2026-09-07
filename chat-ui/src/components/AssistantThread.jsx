@@ -314,6 +314,9 @@ function triggerAt(text, cursor) {
 function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices = [], onDeviceUsed, onRequestDevices, devicesUnavailable }) {
   const aui = useAui();
   const composerText = useAuiState((state) => state.composer.text);
+  const threadIsRunning = useAuiState((state) => state.thread.isRunning);
+  const [inputText, setInputText] = useState(composerText);
+  const inputOwnedRef = useRef(false);
   const inputRef = useRef(null);
   const searchRef = useRef(null);
   const [picker, setPicker] = useState({ open: false, query: "", triggerStart: null });
@@ -321,6 +324,20 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
   const [discoveryRotation, setDiscoveryRotation] = useState(0);
+  useEffect(() => {
+    if (composerText === inputText) return;
+    if (inputOwnedRef.current && !(threadIsRunning && composerText === "")) {
+      aui.composer.setText(inputText);
+      return;
+    }
+    inputOwnedRef.current = false;
+    setInputText(composerText);
+  }, [aui, composerText, inputText, threadIsRunning]);
+  const commitComposerText = (value) => {
+    inputOwnedRef.current = true;
+    setInputText(value);
+    aui.composer.setText(value);
+  };
   const filteredDevices = useMemo(() => {
     const query = picker.query.trim().toLocaleLowerCase("tr-TR");
     return devices.filter((device) => !query || device.hostname.toLocaleLowerCase("tr-TR").includes(query));
@@ -339,18 +356,18 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     if (focusSearch) requestAnimationFrame(() => searchRef.current?.focus());
   };
   const selectDevice = (device) => {
-    const cursor = inputRef.current?.selectionStart ?? composerText.length;
+    const cursor = inputRef.current?.selectionStart ?? inputText.length;
     let nextText;
     if (picker.triggerStart !== null) {
-      const suffix = composerText.slice(cursor).replace(/^\s+/, "");
-      nextText = `${composerText.slice(0, picker.triggerStart)}${device.hostname} ${suffix}`;
+      const suffix = inputText.slice(cursor).replace(/^\s+/, "");
+      nextText = `${inputText.slice(0, picker.triggerStart)}${device.hostname} ${suffix}`;
     } else {
-      const prefix = composerText.slice(0, cursor);
-      const suffix = composerText.slice(cursor).replace(/^\s+/, "");
+      const prefix = inputText.slice(0, cursor);
+      const suffix = inputText.slice(cursor).replace(/^\s+/, "");
       const separator = prefix && !/\s$/.test(prefix) ? " " : "";
       nextText = `${prefix}${separator}${device.hostname} ${suffix}`;
     }
-    aui.composer.setText(nextText);
+    commitComposerText(nextText);
     setSelectedDevice(device);
     setDiscoveryOpen(false);
     setDiscoveryRotation(0);
@@ -389,7 +406,7 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     // assistant-ui composes this callback before its own controlled-input
     // update. Persist the browser value before picker state can re-render the
     // textarea and restore the previous device selection.
-    aui.composer.setText(value);
+    commitComposerText(value);
     const detected = triggerAt(value, cursor);
     if (detected) {
       if (!picker.open || picker.triggerStart !== detected.start) onRequestDevices?.();
@@ -438,11 +455,11 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
           </section>
         </div>
       ) : null}
-      <ComposerPrimitive.Input ref={inputRef} rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" onChange={handleComposerChange} onKeyDown={handlePickerKey} />
+      <ComposerPrimitive.Input ref={inputRef} value={inputText} rows={2} className={styles.input} maxLength={8000} placeholder={placeholder} submitMode="enter" aria-label="Ask LibreNMS" onChange={handleComposerChange} onKeyDown={handlePickerKey} />
       {discoveryOpen && examples.length ? (
         <section className={styles.discovery} role="region" aria-label="Bağlamsal soru örnekleri">
           <p>Düzenleyebileceğin örnek başlangıçlar</p>
-          {examples.map((example) => <button type="button" key={example} onClick={() => { aui.composer.setText(example); setDiscoveryOpen(false); requestAnimationFrame(() => inputRef.current?.focus()); }}>{example}</button>)}
+          {examples.map((example) => <button type="button" key={example} onClick={() => { commitComposerText(example); setDiscoveryOpen(false); requestAnimationFrame(() => inputRef.current?.focus()); }}>{example}</button>)}
           {canRotateExamples ? <button type="button" className={styles.discoveryMore} onClick={rotateExamples}>Başka örnekler</button> : null}
         </section>
       ) : null}
