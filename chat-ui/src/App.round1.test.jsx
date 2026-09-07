@@ -31,7 +31,7 @@ const demoScenarios = [
   { id: "location-change", label: "Konumu değiştir", example_question: "Where?", supported_target_ids: ["lab-j9772a-01"] },
   { id: "device-down-up", label: "Cihazı düşür / geri getir", example_question: "Last down?", supported_target_ids: ["lab-j9772a-01"] },
   { id: "port-down-up-event", label: "Port olayı üret", example_question: "Events?", supported_target_ids: ["lab-j9772a-01"] },
-  { id: "investigation-incident", label: "Investigation olayı hazırla", example_question: "Investigate?", supported_target_ids: ["lab-j9772a-01"] },
+  { id: "investigation-incident", label: "İnceleme olayı hazırla", example_question: "Investigate?", supported_target_ids: ["lab-j9772a-01"] },
 ];
 const demoMetadata = {
   supportedTargets: [
@@ -153,7 +153,7 @@ test("investigation suggestion uses normal chat once and verifies the matching f
       target_id: "lab-j9772a-01",
       snmp_state_changed: true,
       librenms_completed: true,
-      verified: "Investigation olayı hazır",
+      verified: "İnceleme olayı hazır",
       proof: [
         { id: "port", status: "passed", label: "Port 2: admin up / oper down" },
         { id: "event", status: "passed", label: "Event #203: ifOperStatus up -> down", event_id: 203 },
@@ -186,7 +186,7 @@ test("investigation suggestion uses normal chat once and verifies the matching f
   }));
   render(<App chatStore={store} identity={{ token: "plugin-token" }} api={api} />);
   fireEvent.click(await screen.findByRole("button", { name: "Demo Kontrolleri" }));
-  fireEvent.click(screen.getByRole("button", { name: "Investigation olayı hazırla" }));
+  fireEvent.click(screen.getByRole("button", { name: "İnceleme olayı hazırla" }));
   expect(await screen.findByText("✓ Event #203: ifOperStatus up -> down")).toBeVisible();
   const ask = screen.getByRole("button", { name: `Sormayı dene: ${question}` });
   fireEvent.click(ask);
@@ -196,6 +196,7 @@ test("investigation suggestion uses normal chat once and verifies the matching f
   expect(api.runThread.mock.calls[0][2]).toBe(question);
   expect(store.getSnapshot().messages["thread-a"].filter((message) => message.role === "user")).toHaveLength(1);
   expect(await screen.findByText("✓ Route: investigation")).toBeVisible();
+  expect(screen.getByRole("status", { name: "İnceleme doğrulaması" })).toBeVisible();
   expect(screen.getByText("✓ Beklenen event kanıtı görüldü")).toBeVisible();
   expect(screen.getByText("✓ Restricted synthesis çalıştı")).toBeVisible();
 });

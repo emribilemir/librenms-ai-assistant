@@ -46,8 +46,8 @@ export function DemoControls({ open, scenarios, targets, selectedTargetId, runni
         </section>
       ) : null}
       {verification ? (
-        <section className={styles.verification} aria-label="Investigation doğrulaması" role="status">
-          <h3>Investigation doğrulaması</h3>
+        <section className={styles.verification} aria-label="İnceleme doğrulaması" role="status">
+          <h3>İnceleme doğrulaması</h3>
           {verification.checks.map((item) => <p key={item.id}>{item.status === "passed" ? "✓" : "✕"} {item.label}</p>)}
         </section>
       ) : null}

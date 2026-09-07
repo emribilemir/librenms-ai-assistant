@@ -529,7 +529,7 @@ def run_investigation_incident(backend, target):
     history_event_ids = [int(event["event_id"]) for event in device_events]
     return (
         bool(changed),
-        "Investigation olayı hazır",
+        "İnceleme olayı hazır",
         [*device_events, port_event],
         {
             "proof": proof,

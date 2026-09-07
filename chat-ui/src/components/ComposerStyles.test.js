@@ -17,6 +17,13 @@ test("composer owns one accessible focus treatment without a visible textarea ri
   expect(css).not.toMatch(/\.input\s*\{[^}]*outline:\s*none/i);
 });
 
+test("suggestion surface communicates clickability with restrained underline, hover, and keyboard focus", () => {
+  expect(css).toMatch(/\.suggestion\s*\{[^}]*cursor:\s*pointer/i);
+  expect(css).toMatch(/\.suggestionTitle\s*\{[^}]*text-decoration-line:\s*underline[^}]*text-decoration-color:\s*rgba\(/i);
+  expect(css).toMatch(/\.suggestion:hover \.suggestionTitle\s*\{[^}]*color:[^}]*text-decoration-color:/i);
+  expect(css).toMatch(/\.suggestion:focus-visible\s*\{[^}]*outline:\s*2px solid/i);
+});
+
 test("collapsed inspector is a compact continuation with no reserved height", () => {
   expect(inspectorCss).toMatch(/\.root\s*\{[^}]*margin-top:\s*(?:[0-8])px/i);
   expect(inspectorCss).not.toMatch(/\.root\s*\{[^}]*min-height/i);

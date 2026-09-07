@@ -25,7 +25,7 @@
     "example_ai_question": "{hostname} son eventlerini göster"
   },
   "investigation-incident": {
-    "label": "Investigation olayı hazırla",
+    "label": "İnceleme olayı hazırla",
     "expected": "Correlated current and historical evidence is verified",
     "example_ai_question": "{hostname} cihazında şu an ne sorun var, son 24 saatte neler olmuş?"
   }

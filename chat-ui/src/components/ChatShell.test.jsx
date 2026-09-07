@@ -209,7 +209,7 @@ test("closed mobile drawer removes its controls from keyboard focus", async () =
   expect(screen.queryByRole("button", { name: "Saved thread" })).not.toBeInTheDocument();
 });
 
-test("assistant-ui suggestions send the exact live-device prompt", async () => {
+test("assistant-ui suggestions are focusable, omit the decorative link glyph, and send the exact live-device prompt", async () => {
   const send = jest.fn();
   const suggestions = [{
     title: "a-up durumunu kontrol et",
@@ -234,7 +234,11 @@ test("assistant-ui suggestions send the exact live-device prompt", async () => {
   }
 
   render(<Fixture />);
-  fireEvent.click(screen.getByRole("button", { name: /a-up durumunu kontrol et/i }));
+  const suggestion = screen.getByRole("button", { name: /a-up durumunu kontrol et/i });
+  suggestion.focus();
+  expect(suggestion).toHaveFocus();
+  expect(suggestion.querySelector("svg")).not.toBeInTheDocument();
+  fireEvent.click(suggestion);
 
   await waitFor(() => {
     expect(send).toHaveBeenCalledWith("a-up cihazının mevcut durumunu göster.");
@@ -680,6 +684,36 @@ test("clears the controlled composer after submitting a question", async () => {
 
   await waitFor(() => expect(send).toHaveBeenCalledWith("Cihaz ne durumda?"));
   await waitFor(() => expect(composer).toHaveValue(""));
+});
+
+test("composer uses upward send iconography while preserving empty and active submit states", async () => {
+  const send = jest.fn().mockResolvedValue(undefined);
+  const runtimeStore = {
+    messages: [],
+    convertMessage: (message) => message,
+    suggestions: [],
+    isRunning: false,
+    onNew: async (message) => send(message.content[0].text),
+  };
+
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+  const emptyAction = screen.getByRole("button", { name: "Bir soru yazın" });
+  expect(emptyAction).toBeDisabled();
+  expect(emptyAction.querySelector(".lucide-arrow-up")).toBeInTheDocument();
+
+  fireEvent.change(composer, { target: { value: "Cihaz ne durumda?" } });
+  const sendAction = screen.getByRole("button", { name: "Soruyu gönder" });
+  expect(sendAction).toBeEnabled();
+  expect(sendAction.querySelector(".lucide-arrow-up")).toBeInTheDocument();
+  fireEvent.click(sendAction);
+
+  await waitFor(() => expect(send).toHaveBeenCalledWith("Cihaz ne durumda?"));
 });
 
 test("saved conversations are rendered and switched by assistant-ui thread-list primitives", async () => {
