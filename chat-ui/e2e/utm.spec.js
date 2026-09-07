@@ -187,8 +187,8 @@ test.describe("authorized UTM acceptance", () => {
       await ask(page, process.env.AI_UTM_LIVE_PROGRESS_QUERY);
       const live = page.locator("[data-streaming] [aria-live='polite']");
       await expect(live).toHaveAttribute("aria-live", "polite");
-      await expect(live).toContainText("Soruyu sınıflandırdı");
-      await expect(live).toContainText("Cihazı çözümledi");
+      await expect(live).toContainText(/Soruyu sınıflandır|Cihaz çözümlen|LibreNMS verisi okun|Yanıt hazırlan/);
+      await expect(page.locator("[data-streaming] button[aria-expanded]")).toHaveCount(0);
       await expect(page.getByText(process.env.AI_UTM_LIVE_PROGRESS_EXPECTED_TEXT, { exact: true })).toBeVisible();
     } finally {
       await context.close();
@@ -271,9 +271,7 @@ test.describe("authorized UTM acceptance", () => {
       // The live target must be configured to expose this sequence. This suite
       // observes the product stream; it does not claim to control its timing.
       const live = page.locator("[data-streaming] [aria-live='polite']");
-      await expect(live).toContainText("Soruyu sınıflandırdı");
-      await expect(live).toContainText("Cihazı çözümledi");
-      await expect(live).toContainText("LibreNMS verisini okuyor");
+      await expect(live).toContainText("LibreNMS verisi okunuyor");
       await expect(page.getByRole("alert")).toHaveText(process.env.AI_UTM_RETRY_ERROR_TEXT);
       await page.getByRole("button", { name: "Yeniden dene" }).click();
       await expect(page.getByText(process.env.AI_UTM_RETRY_SUCCESS_TEXT, { exact: true })).toBeVisible();

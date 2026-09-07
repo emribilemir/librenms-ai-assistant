@@ -116,7 +116,7 @@ class ChatStore:
 
     @staticmethod
     def _encoded_structured_result(result):
-        if not isinstance(result, dict) or result.get("kind") != "ports":
+        if not isinstance(result, dict) or result.get("kind") not in {"ports", "alerts"}:
             return None
         encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
         return encoded if len(encoded.encode("utf-8")) <= 32768 else None

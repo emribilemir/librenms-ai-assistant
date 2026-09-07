@@ -99,3 +99,20 @@ class ChatStoreTests(unittest.TestCase):
         self.store.complete_run(run["id"], "completed", {}, answer="answer", structured_result=structured_result)
 
         self.assertEqual(self.store.get_thread(thread["id"], "owner")["messages"][-1]["structured_result"], structured_result)
+
+    def test_completed_answer_persists_structured_alert_rows_and_empty_state(self):
+        for index, alerts in enumerate((
+            [{"device_id": 1, "alert_id": 88, "severity": "critical", "name": "Port status"}],
+            [],
+        )):
+            thread = self.store.create_thread("owner")
+            run = self.store.start_run(thread["id"], "owner", f"client-{index}", "question")
+            structured_result = {
+                "kind": "alerts",
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "alerts": alerts,
+            }
+
+            self.store.complete_run(run["id"], "completed", {}, answer="answer", structured_result=structured_result)
+
+            self.assertEqual(self.store.get_thread(thread["id"], "owner")["messages"][-1]["structured_result"], structured_result)

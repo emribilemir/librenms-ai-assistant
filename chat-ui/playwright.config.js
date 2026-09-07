@@ -10,7 +10,7 @@ const utmOnlyInvocation =
   (requestedUtmProject && !requestedChromiumProject);
 const standaloneWebServers = [
   {
-    command: "../.venv/bin/python3 e2e/standalone_server.py --database /private/tmp/librenms-ai-assistant-playwright.sqlite3",
+    command: "AI_DEMO_MODE_ALLOWED=1 ../.venv/bin/python3 e2e/standalone_server.py --database /private/tmp/librenms-ai-assistant-playwright.sqlite3",
     url: "http://127.0.0.1:8765/docs",
     reuseExistingServer: false,
     timeout: 30_000,
