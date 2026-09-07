@@ -52,23 +52,26 @@ test("loads only the bounded live device picker payload", async () => {
   );
 });
 
-test("demo requests send only the bounded scenario id and an empty reset body", async () => {
+test("demo requests send only the bounded scenario and target ids", async () => {
   global.fetch = jest.fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ scenarios: [{ id: "port-down" }] }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ supported_targets: [{ id: "lab-01" }], scenarios: [{ id: "port-down" }] }) })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ scenario_id: "port-down" }) })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ scenario_id: "reset" }) });
 
-  await expect(getDemoScenarios("token")).resolves.toEqual([{ id: "port-down" }]);
-  await runDemoScenario("port-down", "token");
-  await resetDemo("token");
+  await expect(getDemoScenarios("token")).resolves.toEqual({
+    supportedTargets: [{ id: "lab-01" }],
+    scenarios: [{ id: "port-down" }],
+  });
+  await runDemoScenario("port-down", "lab-01", "token");
+  await resetDemo("lab-01", "token");
 
   expect(global.fetch.mock.calls[1]).toEqual([
     "/ai-api/v1/demo/scenarios",
-    expect.objectContaining({ method: "POST", body: JSON.stringify({ scenario_id: "port-down" }) }),
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ scenario_id: "port-down", target_id: "lab-01" }) }),
   ]);
   expect(global.fetch.mock.calls[2]).toEqual([
     "/ai-api/v1/demo/reset",
-    expect.objectContaining({ method: "POST", body: "{}" }),
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ target_id: "lab-01" }) }),
   ]);
 });
 

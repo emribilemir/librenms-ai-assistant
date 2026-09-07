@@ -1,27 +1,32 @@
 {
   "port-down": {
-    "label": "Port Down",
+    "label": "Portu düşür",
     "expected": "Port 2 admin=up oper=down",
-    "example_ai_question": "lab-j9772a-01 port 2 ne durumda?"
+    "example_ai_question": "{hostname} port 2 ne durumda?"
   },
   "port-up": {
-    "label": "Port Up",
+    "label": "Portu kaldır",
     "expected": "Port 2 admin=up oper=up",
-    "example_ai_question": "lab-j9772a-01 port 2 ne durumda?"
+    "example_ai_question": "{hostname} port 2 ne durumda?"
   },
   "location-change": {
-    "label": "Location Change",
+    "label": "Konumu değiştir",
     "expected": "Device location=EMR-55 Demo Lab",
-    "example_ai_question": "lab-j9772a-01'in location bilgisi ne?"
+    "example_ai_question": "{hostname}'in location bilgisi ne?"
   },
   "device-down-up": {
-    "label": "Device Down/Up",
+    "label": "Cihazı düşür / geri getir",
     "expected": "Device transitions down and returns up",
-    "example_ai_question": "lab-j9772a-01 en son ne zaman down oldu?"
+    "example_ai_question": "{hostname} en son ne zaman down oldu?"
   },
   "port-down-up-event": {
-    "label": "Generate Port Event",
+    "label": "Port olayı üret",
     "expected": "A new Port 2 ifOperStatus transition event is recorded",
-    "example_ai_question": "lab-j9772a-01 son eventlerini göster"
+    "example_ai_question": "{hostname} son eventlerini göster"
+  },
+  "investigation-incident": {
+    "label": "Investigation olayı hazırla",
+    "expected": "Correlated current and historical evidence is verified",
+    "example_ai_question": "{hostname} cihazında şu an ne sorun var, son 24 saatte neler olmuş?"
   }
 }

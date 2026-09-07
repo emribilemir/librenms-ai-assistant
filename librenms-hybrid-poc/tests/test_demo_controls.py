@@ -17,12 +17,21 @@ import chat_service.app as app_module
 
 SECRET = b"0123456789abcdef0123456789abcdef"
 SCENARIOS = {
-    "port-down": {"label": "Port Down", "example_ai_question": "Port down?"},
-    "port-up": {"label": "Port Up", "example_ai_question": "Port up?"},
-    "location-change": {"label": "Location Change", "example_ai_question": "Where?"},
-    "device-down-up": {"label": "Device Down/Up", "example_ai_question": "Last down?"},
-    "port-down-up-event": {"label": "Generate Port Event", "example_ai_question": "Events?"},
+    "port-down": {"label": "Portu düşür", "example_ai_question": "Port down?"},
+    "port-up": {"label": "Portu kaldır", "example_ai_question": "Port up?"},
+    "location-change": {"label": "Konumu değiştir", "example_ai_question": "Where?"},
+    "device-down-up": {"label": "Cihazı düşür / geri getir", "example_ai_question": "Last down?"},
+    "port-down-up-event": {"label": "Port olayı üret", "example_ai_question": "Events?"},
+    "investigation-incident": {"label": "Investigation olayı hazırla", "example_ai_question": "Investigate?"},
 }
+TARGETS = [
+    {
+        "id": "lab-j9772a-01",
+        "hostname": "lab-j9772a-01",
+        "device_id": 1,
+        "supported_scenarios": list(SCENARIOS),
+    }
+]
 
 
 def bearer():
@@ -53,13 +62,27 @@ class FakeSimulationRunner:
     def load_scenarios(self):
         return SCENARIOS
 
-    def execute_scenario(self, scenario_id):
-        self.calls.append(scenario_id)
+    def demo_metadata(self):
+        return {
+            "supported_targets": TARGETS,
+            "scenarios": [
+                {
+                    "id": scenario_id,
+                    **metadata,
+                    "supported_target_ids": ["lab-j9772a-01"],
+                }
+                for scenario_id, metadata in SCENARIOS.items()
+            ],
+        }
+
+    def execute_scenario(self, scenario_id, target_id):
+        self.calls.append((scenario_id, target_id))
         self.started.set()
         if self.release is not None:
             self.release.wait(timeout=2)
         return {
             "scenario_id": scenario_id,
+            "target_id": target_id,
             "snmp_state_changed": True,
             "librenms_completed": True,
             "verified": SCENARIOS[scenario_id]["label"] + " verified",
@@ -67,8 +90,8 @@ class FakeSimulationRunner:
             "example_question": SCENARIOS[scenario_id]["example_ai_question"],
         }
 
-    def reset_baseline(self):
-        self.calls.append("reset")
+    def reset_baseline(self, target_id):
+        self.calls.append(("reset", target_id))
         return {
             "changed": True,
             "location": "Test Lab",
@@ -115,7 +138,7 @@ class DemoControlRouteTests(unittest.TestCase):
         )
         self.assertEqual(client.post("/v1/demo/reset", headers=bearer()).status_code, 404)
 
-    def test_demo_mode_on_lists_and_runs_only_the_five_scenarios(self):
+    def test_demo_mode_on_lists_targets_and_runs_only_bounded_pairs(self):
         runner = FakeSimulationRunner()
         client = self.make_client(enabled=True, runner=runner)
 
@@ -124,17 +147,21 @@ class DemoControlRouteTests(unittest.TestCase):
         self.assertEqual(
             {item["id"] for item in listing.json()["scenarios"]}, set(SCENARIOS)
         )
+        self.assertEqual(listing.json()["supported_targets"], TARGETS)
 
         for scenario_id in SCENARIOS:
             response = client.post(
                 "/v1/demo/scenarios",
                 headers=bearer(),
-                json={"scenario_id": scenario_id},
+                json={"scenario_id": scenario_id, "target_id": "lab-j9772a-01"},
             )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["scenario_id"], scenario_id)
 
-        self.assertEqual(runner.calls, list(SCENARIOS))
+        self.assertEqual(
+            runner.calls,
+            [(scenario_id, "lab-j9772a-01") for scenario_id in SCENARIOS],
+        )
 
     def test_rejects_invalid_or_extra_browser_input(self):
         client = self.make_client(enabled=True)
@@ -142,26 +169,50 @@ class DemoControlRouteTests(unittest.TestCase):
         invalid = client.post(
             "/v1/demo/scenarios",
             headers=bearer(),
-            json={"scenario_id": "shell-command"},
+            json={"scenario_id": "shell-command", "target_id": "lab-j9772a-01"},
         )
         extra = client.post(
             "/v1/demo/scenarios",
             headers=bearer(),
-            json={"scenario_id": "port-down", "path": "/tmp/fixture"},
+            json={
+                "scenario_id": "port-down",
+                "target_id": "lab-j9772a-01",
+                "path": "/tmp/fixture",
+            },
+        )
+        hostname_override = client.post(
+            "/v1/demo/scenarios",
+            headers=bearer(),
+            json={
+                "scenario_id": "port-down",
+                "target_id": "lab-j9772a-01",
+                "hostname": "victim.example",
+            },
+        )
+        unknown_target = client.post(
+            "/v1/demo/scenarios",
+            headers=bearer(),
+            json={"scenario_id": "port-down", "target_id": "victim.example"},
         )
 
         self.assertEqual(invalid.status_code, 422)
         self.assertEqual(extra.status_code, 400)
+        self.assertEqual(hostname_override.status_code, 400)
+        self.assertEqual(unknown_target.status_code, 422)
 
     def test_reset_is_a_separate_bounded_action(self):
         runner = FakeSimulationRunner()
         client = self.make_client(enabled=True, runner=runner)
 
-        response = client.post("/v1/demo/reset", headers=bearer())
+        response = client.post(
+            "/v1/demo/reset",
+            headers=bearer(),
+            json={"target_id": "lab-j9772a-01"},
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["verified"], "Baseline restored")
-        self.assertEqual(runner.calls, ["reset"])
+        self.assertEqual(runner.calls, [("reset", "lab-j9772a-01")])
 
     def test_duplicate_trigger_is_rejected_while_a_scenario_is_running(self):
         runner = FakeSimulationRunner()
@@ -173,20 +224,20 @@ class DemoControlRouteTests(unittest.TestCase):
                 client.post,
                 "/v1/demo/scenarios",
                 headers=bearer(),
-                json={"scenario_id": "port-down"},
+                json={"scenario_id": "port-down", "target_id": "lab-j9772a-01"},
             )
             self.assertTrue(runner.started.wait(timeout=1))
             duplicate = client.post(
                 "/v1/demo/scenarios",
                 headers=bearer(),
-                json={"scenario_id": "port-up"},
+                json={"scenario_id": "port-up", "target_id": "lab-j9772a-01"},
             )
             runner.release.set()
             completed = first.result(timeout=2)
 
         self.assertEqual(completed.status_code, 200)
         self.assertEqual(duplicate.status_code, 409)
-        self.assertEqual(runner.calls, ["port-down"])
+        self.assertEqual(runner.calls, [("port-down", "lab-j9772a-01")])
 
 
 if __name__ == "__main__":

@@ -36,6 +36,9 @@ export function reduceAssistantChat(state, action) {
       const persistedMetrics = latest ? Object.fromEntries(Object.entries(latest).filter(([key]) => key.endsWith("_ms"))) : null;
       const run = latest ? {
         ...latest,
+        clientMessageId: latest.client_message_id || (
+          currentRun?.id === latest.id ? currentRun.clientMessageId : undefined
+        ),
         usedFallback: Boolean(latest.used_fallback),
         metrics: persistedMetrics,
         // The REST summary intentionally excludes the safe error message and

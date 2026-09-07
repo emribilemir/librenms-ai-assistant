@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Restore the EMR-55 lab device to its verified baseline."""
 
-from run import preflight, reset_baseline
+from run import reset_baseline, resolve_target
 
 
 def main():
-    preflight()
-    result = reset_baseline()
+    target = resolve_target("lab-j9772a-01")
+    result = reset_baseline(target)
     print("Reset: complete")
     print(f"SNMP state changed: {'yes' if result['changed'] else 'no'}")
     print(f"Verified: location={result['location']}")

@@ -111,6 +111,7 @@ class ScenarioManifestTests(unittest.TestCase):
                 "location-change",
                 "device-down-up",
                 "port-down-up-event",
+                "investigation-incident",
             },
         )
         for scenario in scenarios.values():
@@ -118,17 +119,89 @@ class ScenarioManifestTests(unittest.TestCase):
             self.assertTrue(scenario["expected"])
 
         self.assertEqual(
+            {key: value["label"] for key, value in scenarios.items()},
+            {
+                "port-down": "Portu düşür",
+                "port-up": "Portu kaldır",
+                "location-change": "Konumu değiştir",
+                "device-down-up": "Cihazı düşür / geri getir",
+                "port-down-up-event": "Port olayı üret",
+                "investigation-incident": "Investigation olayı hazırla",
+            },
+        )
+
+        self.assertEqual(
             {
                 scenario_id: scenario["example_ai_question"]
                 for scenario_id, scenario in scenarios.items()
             },
             {
-                "port-down": "lab-j9772a-01 port 2 ne durumda?",
-                "port-up": "lab-j9772a-01 port 2 ne durumda?",
-                "location-change": "lab-j9772a-01'in location bilgisi ne?",
-                "device-down-up": "lab-j9772a-01 en son ne zaman down oldu?",
-                "port-down-up-event": "lab-j9772a-01 son eventlerini göster",
+                "port-down": "{hostname} port 2 ne durumda?",
+                "port-up": "{hostname} port 2 ne durumda?",
+                "location-change": "{hostname}'in location bilgisi ne?",
+                "device-down-up": "{hostname} en son ne zaman down oldu?",
+                "port-down-up-event": "{hostname} son eventlerini göster",
+                "investigation-incident": (
+                    "{hostname} cihazında şu an ne sorun var, son 24 saatte neler olmuş?"
+                ),
             },
+        )
+
+    def test_target_resolution_is_allowlisted_and_keeps_operational_values_together(self):
+        alpha = simulation_run.DemoTarget(
+            target_id="alpha",
+            hostname="alpha.lab",
+            device_id=11,
+            fixture="/fixtures/alpha/public.snmprec",
+            offline_fixture="/fixtures/alpha/offline.snmprec",
+            snmp_endpoint="udp:127.0.0.31:1611",
+            supported_scenarios=("port-down",),
+        )
+        beta = simulation_run.DemoTarget(
+            target_id="beta",
+            hostname="beta.lab",
+            device_id=12,
+            fixture="/fixtures/beta/public.snmprec",
+            offline_fixture="/fixtures/beta/offline.snmprec",
+            snmp_endpoint="udp:127.0.0.32:1611",
+            supported_scenarios=("port-up",),
+        )
+
+        self.assertEqual(
+            simulation_run.resolve_target("alpha", {"alpha": alpha, "beta": beta}),
+            alpha,
+        )
+        self.assertEqual(
+            simulation_run.resolve_target("beta", {"alpha": alpha, "beta": beta}),
+            beta,
+        )
+        with self.assertRaisesRegex(ValueError, "unsupported target"):
+            simulation_run.resolve_target("alpha.lab", {"alpha": alpha, "beta": beta})
+
+    def test_production_metadata_exposes_only_verified_mutable_targets(self):
+        metadata = simulation_run.demo_metadata()
+
+        self.assertEqual(
+            metadata["supported_targets"],
+            [
+                {
+                    "id": "lab-j9772a-01",
+                    "hostname": "lab-j9772a-01",
+                    "device_id": 1,
+                    "supported_scenarios": [
+                        "port-down",
+                        "port-up",
+                        "location-change",
+                        "device-down-up",
+                        "port-down-up-event",
+                        "investigation-incident",
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(
+            metadata["scenarios"][-1]["example_question"],
+            "lab-j9772a-01 cihazında şu an ne sorun var, son 24 saatte neler olmuş?",
         )
 
     def test_execute_scenario_reuses_the_existing_runner_and_bounds_result(self):
@@ -140,30 +213,41 @@ class ScenarioManifestTests(unittest.TestCase):
         }
         with (
             patch.object(simulation_run, "preflight") as preflight,
+            patch.object(simulation_run, "ensure_online") as ensure_online,
             patch.object(simulation_run, "api_backend", return_value="backend"),
             patch.dict(
                 simulation_run.SCENARIO_RUNNERS,
-                {"port-down": lambda backend: (True, f"{backend} verified", [event])},
+                {
+                    "port-down": lambda backend, target: (
+                        True,
+                        f"{backend} {target.hostname} verified",
+                        [event],
+                    )
+                },
                 clear=True,
             ),
             patch.object(
                 simulation_run,
                 "load_scenarios",
                 return_value={
-                    "port-down": {"example_ai_question": "Port 2 ne durumda?"}
+                    "port-down": {"example_ai_question": "{hostname} Port 2 ne durumda?"}
                 },
             ),
         ):
-            result = simulation_run.execute_scenario("port-down")
+            result = simulation_run.execute_scenario("port-down", "lab-j9772a-01")
 
-        preflight.assert_called_once_with()
+        preflight.assert_called_once_with(simulation_run.TARGETS["lab-j9772a-01"])
+        ensure_online.assert_called_once_with(
+            simulation_run.TARGETS["lab-j9772a-01"]
+        )
         self.assertEqual(
             result,
             {
                 "scenario_id": "port-down",
                 "snmp_state_changed": True,
                 "librenms_completed": True,
-                "verified": "backend verified",
+                "target_id": "lab-j9772a-01",
+                "verified": "backend lab-j9772a-01 verified",
                 "events": [
                     {
                         "event_id": 42,
@@ -171,9 +255,101 @@ class ScenarioManifestTests(unittest.TestCase):
                         "message": "ifOperStatus: up -> down",
                     }
                 ],
-                "example_question": "Port 2 ne durumda?",
+                "proof": [],
+                "expected_investigation": None,
+                "example_question": "lab-j9772a-01 Port 2 ne durumda?",
             },
         )
+
+    def test_investigation_incident_returns_real_verified_contract(self):
+        target = simulation_run.TARGETS["lab-j9772a-01"]
+        down_event = {
+            "event_id": 201,
+            "timestamp": "2026-09-07 09:00:00",
+            "type": "down",
+            "message": "Device status changed to Down",
+        }
+        up_event = {
+            "event_id": 202,
+            "timestamp": "2026-09-07 09:01:00",
+            "type": "up",
+            "message": "Device status changed to Up",
+        }
+        port_event = {
+            "event_id": 203,
+            "timestamp": "2026-09-07 09:02:00",
+            "type": "interface",
+            "reference": "2",
+            "message": "ifOperStatus: up -> down",
+        }
+        backend = unittest.mock.Mock()
+        backend.get_alerts.return_value = [
+            {
+                "alert_id": 88,
+                "rule_id": 13,
+                "severity": "warning",
+                "name": "LAB - Port admin up oper down",
+            }
+        ]
+
+        with (
+            patch.object(simulation_run, "ensure_online", return_value=False),
+            patch.object(simulation_run, "set_record", side_effect=[False, True, True]),
+            patch.object(simulation_run, "poll_device", return_value=True),
+            patch.object(simulation_run, "run_device_down_up", return_value=(True, "ok", [down_event, up_event])),
+            patch.object(simulation_run, "current_events", side_effect=[[], [port_event]]),
+            patch.object(simulation_run, "require_port", return_value={"ifAdminStatus": "up", "ifOperStatus": "down"}),
+        ):
+            changed, verified, events, details = simulation_run.run_investigation_incident(
+                backend, target
+            )
+
+        self.assertTrue(changed)
+        self.assertEqual(verified, "Investigation olayı hazır")
+        self.assertEqual([event["event_id"] for event in events], [201, 202, 203])
+        self.assertEqual(details["proof"][2]["event_id"], 203)
+        self.assertEqual(details["proof"][3]["alert_id"], 88)
+        self.assertEqual(
+            details["expected_investigation"],
+            {
+                "target_id": "lab-j9772a-01",
+                "hostname": "lab-j9772a-01",
+                "device_id": 1,
+                "required_route": "investigation",
+                "required_tools": ["get_device", "get_ports", "get_alerts", "get_events"],
+                "required_finding_types": [
+                    "device_current_status",
+                    "port_admin_up_oper_down",
+                    "active_alert",
+                    "historical_status_transition",
+                ],
+                "required_event_ids": [201, 202],
+                "required_synthesis_llm_called": True,
+            },
+        )
+
+    def test_failed_scenario_recovers_only_the_selected_target_baseline(self):
+        target = simulation_run.TARGETS["lab-j9772a-01"]
+
+        with (
+            patch.object(simulation_run, "preflight"),
+            patch.object(simulation_run, "api_backend", return_value="backend"),
+            patch.dict(
+                simulation_run.SCENARIO_RUNNERS,
+                {
+                    "port-down": unittest.mock.Mock(
+                        side_effect=RuntimeError("poll verification failed")
+                    )
+                },
+                clear=True,
+            ),
+            patch.object(simulation_run, "load_scenarios", return_value={"port-down": {}}),
+            patch.object(simulation_run, "reset_baseline") as reset,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "poll verification failed"):
+                simulation_run.execute_scenario("port-down", target.target_id)
+
+        reset.assert_called_once_with(target)
 
 
 if __name__ == "__main__":

@@ -26,13 +26,21 @@ import { AssistantChatStore, createInitialState } from "./store";
 
 const currentMetrics = { planner_ms: 2, resolver_ms: 3, backend_ms: 4, synthesis_ms: null, time_to_first_token_ms: null, time_to_first_visible_chunk_ms: 6, total_ms: 8 };
 const demoScenarios = [
-  { id: "port-down", label: "Port Down", example_question: "Port down?" },
-  { id: "port-up", label: "Port Up", example_question: "Port up?" },
-  { id: "location-change", label: "Location Change", example_question: "Where?" },
-  { id: "device-down-up", label: "Device Down/Up", example_question: "Last down?" },
-  { id: "port-down-up-event", label: "Generate Port Event", example_question: "Events?" },
+  { id: "port-down", label: "Portu düşür", example_question: "Port down?", supported_target_ids: ["lab-j9772a-01"] },
+  { id: "port-up", label: "Portu kaldır", example_question: "Port up?", supported_target_ids: ["lab-j9772a-01", "lab-j9772a-02"] },
+  { id: "location-change", label: "Konumu değiştir", example_question: "Where?", supported_target_ids: ["lab-j9772a-01"] },
+  { id: "device-down-up", label: "Cihazı düşür / geri getir", example_question: "Last down?", supported_target_ids: ["lab-j9772a-01"] },
+  { id: "port-down-up-event", label: "Port olayı üret", example_question: "Events?", supported_target_ids: ["lab-j9772a-01"] },
+  { id: "investigation-incident", label: "Investigation olayı hazırla", example_question: "Investigate?", supported_target_ids: ["lab-j9772a-01"] },
 ];
-const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDevices: jest.fn().mockResolvedValue([]), getDemoMode: jest.fn().mockRejectedValue(new ApiError(404)), setDemoMode: jest.fn(), getDemoScenarios: jest.fn().mockResolvedValue([]), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
+const demoMetadata = {
+  supportedTargets: [
+    { id: "lab-j9772a-01", hostname: "lab-j9772a-01", device_id: 1, supported_scenarios: demoScenarios.map((item) => item.id) },
+    { id: "lab-j9772a-02", hostname: "lab-j9772a-02", device_id: 2, supported_scenarios: ["port-up"] },
+  ],
+  scenarios: demoScenarios,
+};
+const makeApi = (overrides = {}) => ({ listThreads: jest.fn().mockResolvedValue([]), getSuggestions: jest.fn().mockResolvedValue([]), getDevices: jest.fn().mockResolvedValue([]), getDemoMode: jest.fn().mockRejectedValue(new ApiError(404)), setDemoMode: jest.fn(), getDemoScenarios: jest.fn().mockResolvedValue({ supportedTargets: [], scenarios: [] }), runDemoScenario: jest.fn(), resetDemo: jest.fn(), getThread: jest.fn(), createThread: jest.fn(), deleteThread: jest.fn().mockResolvedValue(), runThread: jest.fn(), ...overrides });
 
 test("demo mode off keeps all simulation UI hidden", async () => {
   const api = makeApi();
@@ -40,31 +48,32 @@ test("demo mode off keeps all simulation UI hidden", async () => {
   render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
 
   await waitFor(() => expect(api.getDemoMode).toHaveBeenCalledWith("plugin-token"));
-  expect(screen.queryByRole("button", { name: "Demo Controls" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Demo Kontrolleri" })).not.toBeInTheDocument();
 });
 
 test("allowed demo mode renders OFF and updates only after the backend confirms ON", async () => {
   const api = makeApi({
     getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: false }),
     setDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
-    getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
+    getDemoScenarios: jest.fn().mockResolvedValue(demoMetadata),
   });
 
   render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
 
-  const toggle = await screen.findByRole("checkbox", { name: "Demo Mode" });
+  const toggle = await screen.findByRole("checkbox", { name: "Demo Modu" });
   expect(toggle).not.toBeChecked();
   fireEvent.click(toggle);
   await waitFor(() => expect(api.setDemoMode).toHaveBeenCalledWith(true, "plugin-token"));
-  expect(await screen.findByRole("button", { name: "Demo Controls" })).toBeVisible();
+  expect(await screen.findByRole("button", { name: "Demo Kontrolleri" })).toBeVisible();
 });
 
-test("demo mode on opens the bounded drawer and triggers all five scenarios", async () => {
+test("demo drawer is Turkish and sends the selected bounded target", async () => {
   const api = makeApi({
     getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
-    getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
-    runDemoScenario: jest.fn((scenarioId) => Promise.resolve({
+    getDemoScenarios: jest.fn().mockResolvedValue(demoMetadata),
+    runDemoScenario: jest.fn((scenarioId, targetId) => Promise.resolve({
       scenario_id: scenarioId,
+      target_id: targetId,
       snmp_state_changed: true,
       librenms_completed: true,
       verified: `${scenarioId} verified`,
@@ -72,15 +81,15 @@ test("demo mode on opens the bounded drawer and triggers all five scenarios", as
     })),
   });
   render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
-  fireEvent.click(await screen.findByRole("button", { name: "Demo Controls" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Demo Kontrolleri" }));
 
-  expect(screen.getByRole("dialog", { name: "Demo Controls" })).toBeVisible();
-  expect(screen.getByText((_, element) => element.textContent === "Target: lab-j9772a-01")).toBeVisible();
-  for (const scenario of demoScenarios) {
-    fireEvent.click(screen.getByRole("button", { name: scenario.label }));
-    await waitFor(() => expect(api.runDemoScenario).toHaveBeenCalledWith(scenario.id, "plugin-token"));
-  }
-  expect(api.runDemoScenario).toHaveBeenCalledTimes(5);
+  expect(screen.getByRole("dialog", { name: "Demo Kontrolleri" })).toBeVisible();
+  const target = screen.getByRole("combobox", { name: "Hedef cihaz" });
+  expect(target).toHaveValue("lab-j9772a-01");
+  fireEvent.change(target, { target: { value: "lab-j9772a-02" } });
+  expect(screen.getByRole("button", { name: "Portu düşür" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Portu kaldır" }));
+  await waitFor(() => expect(api.runDemoScenario).toHaveBeenCalledWith("port-up", "lab-j9772a-02", "plugin-token"));
 });
 
 test("demo drawer blocks duplicate clicks and renders success, failure and reset", async () => {
@@ -88,7 +97,7 @@ test("demo drawer blocks duplicate clicks and renders success, failure and reset
   const pending = new Promise((resolve) => { finishScenario = resolve; });
   const api = makeApi({
     getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
-    getDemoScenarios: jest.fn().mockResolvedValue(demoScenarios),
+    getDemoScenarios: jest.fn().mockResolvedValue(demoMetadata),
     runDemoScenario: jest.fn().mockReturnValue(pending),
     resetDemo: jest.fn().mockResolvedValue({
       snmp_state_changed: true,
@@ -97,13 +106,13 @@ test("demo drawer blocks duplicate clicks and renders success, failure and reset
     }),
   });
   render(<App chatStore={new AssistantChatStore()} identity={{ token: "plugin-token" }} api={api} />);
-  fireEvent.click(await screen.findByRole("button", { name: "Demo Controls" }));
-  const portDown = screen.getByRole("button", { name: "Port Down" });
+  fireEvent.click(await screen.findByRole("button", { name: "Demo Kontrolleri" }));
+  const portDown = screen.getByRole("button", { name: "Portu düşür" });
   fireEvent.click(portDown);
   fireEvent.click(portDown);
 
   expect(api.runDemoScenario).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Running Port Down…")).toBeVisible();
+  expect(screen.getByText("Portu düşür çalıştırılıyor…")).toBeVisible();
   await act(async () => finishScenario({
     scenario_id: "port-down",
     snmp_state_changed: true,
@@ -114,13 +123,81 @@ test("demo drawer blocks duplicate clicks and renders success, failure and reset
   expect(await screen.findByText("✓ Port 2 is now down")).toBeVisible();
   expect(screen.getByText(/lab-j9772a-01 port 2 ne durumda/)).toBeVisible();
 
-  fireEvent.click(screen.getByRole("button", { name: "Reset Lab" }));
+  fireEvent.click(screen.getByRole("button", { name: "Laboratuvarı sıfırla" }));
   expect(await screen.findByText("✓ Baseline restored")).toBeVisible();
-  expect(api.resetDemo).toHaveBeenCalledWith("plugin-token");
+  expect(api.resetDemo).toHaveBeenCalledWith("lab-j9772a-01", "plugin-token");
 
   api.runDemoScenario.mockRejectedValueOnce(new ApiError(503));
-  fireEvent.click(screen.getByRole("button", { name: "Port Up" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Scenario could not be completed");
+  fireEvent.click(screen.getByRole("button", { name: "Portu kaldır" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Senaryo tamamlanamadı");
+});
+
+test("investigation suggestion uses normal chat once and verifies the matching fresh inspection", async () => {
+  const question = "lab-j9772a-01 cihazında şu an ne sorun var, son 24 saatte neler olmuş?";
+  const expectation = {
+    target_id: "lab-j9772a-01",
+    hostname: "lab-j9772a-01",
+    device_id: 1,
+    required_route: "investigation",
+    required_tools: ["get_device", "get_ports", "get_alerts", "get_events"],
+    required_finding_types: ["port_admin_up_oper_down", "active_alert", "historical_status_transition"],
+    required_event_ids: [201, 202],
+    required_synthesis_llm_called: true,
+  };
+  const api = makeApi({
+    listThreads: jest.fn().mockResolvedValue([{ id: "thread-a", title: "" }]),
+    getDemoMode: jest.fn().mockResolvedValue({ allowed: true, enabled: true }),
+    getDemoScenarios: jest.fn().mockResolvedValue(demoMetadata),
+    runDemoScenario: jest.fn().mockResolvedValue({
+      scenario_id: "investigation-incident",
+      target_id: "lab-j9772a-01",
+      snmp_state_changed: true,
+      librenms_completed: true,
+      verified: "Investigation olayı hazır",
+      proof: [
+        { id: "port", status: "passed", label: "Port 2: admin up / oper down" },
+        { id: "event", status: "passed", label: "Event #203: ifOperStatus up -> down", event_id: 203 },
+        { id: "alert", status: "passed", label: "Aktif alarm #88: warning", alert_id: 88 },
+      ],
+      expected_investigation: expectation,
+      example_question: question,
+    }),
+    runThread: jest.fn(async (_threadId, _clientId, _content, _token, _signal, onEvent) => {
+      onEvent("run.started", { run_id: "run-demo", client_message_id: _clientId });
+      onEvent("answer.delta", { run_id: "run-demo", message_id: "answer-demo", delta: "Doğrulandı" });
+      onEvent("completed", {
+        run_id: "run-demo", message_id: "answer-demo", status: "completed", used_fallback: false, metrics: currentMetrics,
+        inspection: {
+          resolution: { hostname: "lab-j9772a-01", device_id: 1 },
+          route: "investigation",
+          tools: expectation.required_tools.map((name) => ({ name, args: { device_id: 1 } })),
+          findings: [
+            { type: "port_admin_up_oper_down", ifIndex: 2 },
+            { type: "active_alert", alert_id: 88 },
+            { type: "historical_status_transition", from_event_id: 201, to_event_id: 202 },
+          ],
+          synthesis_llm_called: true,
+        },
+      });
+    }),
+  });
+  const store = new AssistantChatStore(createInitialState({
+    threads: [{ id: "thread-a", title: "" }], selectedThreadId: "thread-a", messages: { "thread-a": [] },
+  }));
+  render(<App chatStore={store} identity={{ token: "plugin-token" }} api={api} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Demo Kontrolleri" }));
+  fireEvent.click(screen.getByRole("button", { name: "Investigation olayı hazırla" }));
+  expect(await screen.findByText("✓ Event #203: ifOperStatus up -> down")).toBeVisible();
+  const ask = screen.getByRole("button", { name: `Sormayı dene: ${question}` });
+  fireEvent.click(ask);
+  fireEvent.click(ask);
+
+  await waitFor(() => expect(api.runThread).toHaveBeenCalledTimes(1));
+  expect(api.runThread.mock.calls[0][2]).toBe(question);
+  expect(store.getSnapshot().messages["thread-a"].filter((message) => message.role === "user")).toHaveLength(1);
+  expect(await screen.findByText("✓ Route: investigation")).toBeVisible();
+  expect(screen.getByText("✓ Beklenen event kanıtı görüldü")).toBeVisible();
+  expect(screen.getByText("✓ Restricted synthesis çalıştı")).toBeVisible();
 });
 
 test("loads live suggestions into ExternalStoreRuntime", async () => {

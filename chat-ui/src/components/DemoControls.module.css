@@ -3,16 +3,20 @@
 .header p { color: #909aa3; font-size: 10px; font-weight: 700; letter-spacing: .08em; margin: 0; text-transform: uppercase; }
 .header h2 { font-size: 18px; margin: 3px 0 0; }
 .header button { background: transparent; border: 0; color: #b9c1c8; cursor: pointer; font-size: 24px; line-height: 1; padding: 2px 6px; }
-.target { border-bottom: 1px solid #454e56; color: #aeb7be; font-size: 12px; margin: 18px 0 14px; padding-bottom: 14px; }
-.target strong { color: #f1f4f6; font-weight: 600; }
+.target { border-bottom: 1px solid #454e56; color: #aeb7be; display: grid; font-size: 12px; gap: 7px; margin: 18px 0 14px; padding-bottom: 14px; }
+.target select { background: #373f46; border: 1px solid #56616a; border-radius: 4px; color: #f1f4f6; font: inherit; min-height: 36px; padding: 7px 9px; width: 100%; }
+.sectionLabel { color: #909aa3; font-size: 10px; font-weight: 700; letter-spacing: .08em; margin: 0 0 8px; text-transform: uppercase; }
 .actions { display: grid; gap: 8px; }
 .actions button, .reset { background: #373f46; border: 1px solid #56616a; border-radius: 4px; color: #edf1f4; cursor: pointer; font: inherit; font-size: 13px; min-height: 38px; padding: 8px 11px; text-align: left; }
 .actions button:hover:not(:disabled), .reset:hover:not(:disabled) { background: #414a52; border-color: #74818b; }
 .actions button:disabled, .reset:disabled { cursor: wait; opacity: .55; }
 .reset { border-color: #98636a; color: #ffd9dc; margin-top: 18px; width: 100%; }
 .running { color: #9cc4e8; font-size: 12px; margin: 16px 0 0; }
-.result { background: #263d31; border: 1px solid #47745a; border-radius: 4px; margin-top: 16px; padding: 13px; }
-.result h3 { font-size: 14px; margin: 0 0 9px; }
-.result p { color: #cce8d5; font-size: 12px; margin: 5px 0; }
-.result .question { border-top: 1px solid #47745a; color: #e4eee7; line-height: 1.45; margin-top: 11px; padding-top: 10px; }
+.result, .verification { background: #263d31; border: 1px solid #47745a; border-radius: 4px; margin-top: 16px; padding: 13px; }
+.result h3, .verification h3 { font-size: 14px; margin: 0 0 9px; }
+.result p, .verification p { color: #cce8d5; font-size: 12px; margin: 5px 0; }
+.result .question { border-top: 1px solid #47745a; color: #e4eee7; display: grid; font-size: 11px; gap: 5px; line-height: 1.45; margin-top: 11px; padding-top: 10px; }
+.question button { background: transparent; border: 0; color: #d7e8dd; cursor: pointer; font: inherit; line-height: 1.45; padding: 2px 0; text-align: left; }
+.question button:hover:not(:disabled), .question button:focus-visible { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.question button:disabled { cursor: wait; opacity: .55; }
 .error { background: #542e33; border: 1px solid #9e535c; border-radius: 4px; color: #ffd9dd; font-size: 12px; margin: 16px 0 0; padding: 11px; }

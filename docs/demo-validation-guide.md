@@ -1,57 +1,100 @@
-# EMR-55 minimal simulation runner
+# EMR-77 demo ve investigation doğrulama rehberi
 
-Bu CLI yalnız mevcut UTM içindeki `lab-j9772a-01` SNMPSIM fixture'ını ve
-LibreNMS `device_id=1` kaydını kullanır. CLI ve dev-only web kontrolleri aynı
-runner fonksiyonunu çağırır; run store veya genel amaçlı orchestration katmanı
-içermez.
+Demo Kontrolleri yalnız doğrulanmış UTM laboratuvar hedeflerini değiştirir. Web
+arayüzü ve CLI aynı `simulation/run.py` yürütücüsünü kullanır; kullanıcıdan
+hostname, dosya yolu, OID veya shell komutu kabul edilmez.
 
-## Ön koşullar
+## Güvenli hedef seçimi
 
-- UTM erişimi: `ssh -i ~/.ssh/codex_utm emir@192.168.64.3`
-- `sudo -n -u librenms true` başarılı olmalı.
-- `/opt/snmpsim-lab/data/lab-j9772a-01/public.snmprec` dosyası `emir`
-  tarafından yazılabilir olmalı.
-- Yerel shell'de mevcut read-only LibreNMS ayarları yüklenmiş olmalı:
+Üretim allowlist'i şu anda yalnız fixture sahipliği, yazma yetkisi ve Port 2
+OID'leri canlı ortamda doğrulanmış hedefi içerir:
+
+| Hedef kimliği | Hostname | LibreNMS device_id | Desteklenen senaryolar |
+|---|---|---:|---|
+| `lab-j9772a-01` | `lab-j9772a-01` | 1 | Altı senaryonun tamamı |
+
+Inventory'de bulunan fakat fixture'ı güvenli biçimde değiştirilemeyen cihazlar
+seçicide gösterilmez. Yeni hedef eklemek için fixture sahipliği/yazma yetkisi,
+gerekli OID'ler, SNMP endpoint'i ve LibreNMS `device_id` eşleşmesi birlikte
+doğrulanmalıdır.
+
+## CLI kullanımı
+
+Önce `docs/CODEX_VM_ACCESS.md` sözleşmesini izleyin ve yerel shell'de mevcut
+salt-okunur LibreNMS ayarlarını yükleyin. Hedef seçimi `--target` ile allowlist
+içinden yapılır:
 
 ```bash
-set -a
-source librenms-hybrid-poc/.env.runtime
-set +a
+python3 simulation/run.py port-down --target lab-j9772a-01
+python3 simulation/run.py port-up --target lab-j9772a-01
+python3 simulation/run.py location-change --target lab-j9772a-01
+python3 simulation/run.py device-down-up --target lab-j9772a-01
+python3 simulation/run.py port-down-up-event --target lab-j9772a-01
+python3 simulation/run.py investigation-incident --target lab-j9772a-01
 ```
 
-## Kullanım
-
-```bash
-python3 simulation/run.py port-down
-python3 simulation/run.py port-up
-python3 simulation/run.py location-change
-python3 simulation/run.py device-down-up
-python3 simulation/run.py port-down-up-event
-```
-
-| Scenario | Canlı doğrulama | Örnek AI sorusu |
+| Senaryo | Canlı doğrulama | Önerilen soru |
 |---|---|---|
-| `port-down` | Port 2 `admin=up oper=down` | `lab-j9772a-01 port 2 ne durumda?` |
-| `port-up` | Port 2 `admin=up oper=up` | `lab-j9772a-01 port 2 ne durumda?` |
-| `location-change` | Location `EMR-55 Demo Lab` | `lab-j9772a-01'in konumu neresi?` |
-| `device-down-up` | Device down ve ardından up event'i | `lab-j9772a-01 en son ne zaman down oldu?` |
-| `port-down-up-event` | Yeni Port 2 transition event'i | `lab-j9772a-01 son eventlerini göster` |
+| `port-down` | Port 2 `admin=up / oper=down` | `lab-j9772a-01 port 2 ne durumda?` |
+| `port-up` | Port 2 `admin=up / oper=up` | `lab-j9772a-01 port 2 ne durumda?` |
+| `location-change` | Location `EMR-55 Demo Lab` | `lab-j9772a-01'in location bilgisi ne?` |
+| `device-down-up` | Gerçek device down ve up eventleri | `lab-j9772a-01 en son ne zaman down oldu?` |
+| `port-down-up-event` | Gerçek Port 2 transition eventi | `lab-j9772a-01 son eventlerini göster` |
+| `investigation-incident` | Güncel port sorunu + aktif alarm + tarihsel device geçişi | `lab-j9772a-01 cihazında şu an ne sorun var, son 24 saatte neler olmuş?` |
 
-Port ve location kayıtları SNMPSIM tarafından hot-reload edilir. Device
-down/up senaryosu yalnız hedef fixture'ın adını geçici olarak
-`offline.snmprec` yapar. Responder PID'i `librenms` kullanıcısı ve exact command
-prefix'iyle çözülür; PID hardcode edilmez ve broad `pkill -f` kullanılmaz.
-Mevcut launcher root privilege-drop flag'leri içerdiği için passwordless
-`librenms` restart'ında aynı responder ve `devices-up.txt` girdileri doğrudan
-kullanılır; VM launcher dosyası değiştirilmez.
+Yürütücü her senaryodan önce hedef fixture'ını ve SNMP responder'ı çevrimiçi
+duruma getirir. Bir senaryo hata verirse yalnız seçili hedef için best-effort
+baseline kurtarması çalışır.
 
-`port-down-up-event` çıktısı gerçek LibreNMS eventlog kaydının `event id`,
-`timestamp` ve `message` alanlarını gösterir. Aynı alanlar LibreNMS içinde
-`Devices > Eventlog` ekranından doğrulanabilir.
+## Investigation-ready incident
+
+`investigation-incident` aşağıdaki kanıtları tek akışta hazırlar:
+
+1. Cihazı ve Port 2'yi `up/up` durumunda poll eder.
+2. Fixture'ı geçici olarak çevrimdışı/çevrimiçi yaparak gerçek LibreNMS device
+   down ve up eventleri üretir.
+3. Port 2'yi `admin=up / oper=down` durumuna getirir ve gerçek interface eventini
+   doğrular.
+4. Seçili cihaz için tanımlı gerçek aktif alarmı varsa proof listesine ekler;
+   yoksa alarm kontrolünü açıkça `unavailable` gösterir.
+
+Önerilen soru normal sohbet akışını tam bir kez kullanır. Sonuç doğrulaması yanıt
+metnini, gizli reasoning'i veya ikinci bir LLM judge'ı kullanmaz. Tamamlanan
+yanıtın inspection metadata'sında şu alanları deterministik olarak kontrol eder:
+
+- hedef `hostname` ve `device_id`;
+- `investigation` route'u;
+- `get_device`, `get_ports`, `get_alerts`, `get_events` araçları;
+- güncel cihaz, `admin up / oper down` port, varsa aktif alarm ve tarihsel durum
+  geçişi finding tipleri;
+- senaryonun ürettiği gerçek device down/up event kimlikleri;
+- restricted synthesis çağrısı.
+
+## Dev-only web kontrolleri
+
+Servis yalnız `AI_DEMO_MODE_ALLOWED=1` olduğunda demo endpoint'lerini kaydeder.
+Kullanıcı ayrıca header'daki `Demo Modu` anahtarını etkinleştirir. Türkçe
+`Demo Kontrolleri` drawer'ı hedef seçiciyi, yalnız seçili hedefin desteklediği
+senaryoları, proof checklist'ini, düşük profilli `Sormayı dene` aksiyonunu ve
+ayrı reset aksiyonunu gösterir.
+
+Web API yalnız şu bounded payload'ları kabul eder:
+
+```json
+{"scenario_id":"investigation-incident","target_id":"lab-j9772a-01"}
+```
+
+```json
+{"target_id":"lab-j9772a-01"}
+```
+
+Fazladan alanlar, raw hostname/path/OID değerleri ve allowlist dışı kimlikler
+reddedilir.
 
 ## Reset
 
-Her demo sonrasında baseline'a dönün:
+Her demo sonunda drawer'daki `Laboratuvarı sıfırla` aksiyonunu veya CLI'ı
+kullanın:
 
 ```bash
 python3 simulation/reset.py
@@ -66,14 +109,14 @@ port 2 ifAdminStatus=up
 port 2 ifOperStatus=down
 ```
 
-Reset, offline fixture adını geri getirir, gerekirse responder'ı tek instance
+Reset offline fixture adını geri getirir, gerekirse responder'ı tek instance
 olarak başlatır, exact OID değerlerini düzeltir, discovery ve poller çalıştırır
 ve sonucu gerçek LibreNMS API verisiyle doğrular.
 
-## Dev-only web kontrolleri
+## Son canlı kabul
 
-Servisi `AI_DEMO_MODE=1` ile başlatınca chat header'ındaki düşük profilli
-`Demo Controls` girişi beş mevcut scenario'yu ve ayrı reset aksiyonunu açar.
-Flag kapalıyken giriş görünmez ve `/v1/demo/*` endpoint'leri kayıt edilmez.
-Browser yalnız allowlist'teki `scenario_id` değerini gönderir; mutation ve
-canlı doğrulama yukarıdaki mevcut runner tarafından yapılır.
+7 Eylül 2026 tarihinde Codex in-app browser ile masaüstü UTM kabulü tamamlandı.
+`lab-j9772a-01` üzerinde Port 2 `admin up / oper down`, interface event `#259`,
+aktif warning alarm `#133`, gerçek device down/up geçmiş kanıtı ve tüm
+inspection-metadata kontrolleri doğrulandı. Önerilen soru normal sohbetten bir
+kez gönderildi; ardından laboratuvar arayüzden baseline'a sıfırlandı.

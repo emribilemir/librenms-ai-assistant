@@ -28,7 +28,16 @@ DEMO_SCENARIO_IDS = (
     "location-change",
     "device-down-up",
     "port-down-up-event",
+    "investigation-incident",
 )
+
+DEMO_TOOL_NAMES = {"get_device", "get_ports", "get_alerts", "get_events"}
+DEMO_FINDING_TYPES = {
+    "device_current_status",
+    "port_admin_up_oper_down",
+    "active_alert",
+    "historical_status_transition",
+}
 
 
 def load_simulation_runner():
@@ -42,7 +51,70 @@ def load_simulation_runner():
     return module
 
 
-def bounded_demo_result(result, scenario_id):
+def _positive_int(value):
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _bounded_demo_proof(items):
+    proof = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        status = item.get("status")
+        if status not in {"passed", "failed", "unavailable"}:
+            continue
+        bounded = {
+            "id": str(item.get("id") or "")[:40],
+            "status": status,
+            "label": str(item.get("label") or "")[:240],
+        }
+        for key in ("event_id", "alert_id"):
+            value = _positive_int(item.get(key))
+            if value is not None:
+                bounded[key] = value
+        proof.append(bounded)
+        if len(proof) == 8:
+            break
+    return proof
+
+
+def _bounded_expected_investigation(value):
+    if not isinstance(value, dict):
+        return None
+    event_ids = [
+        parsed
+        for parsed in (_positive_int(item) for item in value.get("required_event_ids", [])[:8])
+        if parsed is not None
+    ]
+    return {
+        "target_id": str(value.get("target_id") or "")[:160],
+        "hostname": str(value.get("hostname") or "")[:160],
+        "device_id": _positive_int(value.get("device_id")),
+        "required_route": (
+            value.get("required_route")
+            if value.get("required_route") == "investigation"
+            else "investigation"
+        ),
+        "required_tools": [
+            item for item in value.get("required_tools", [])[:8] if item in DEMO_TOOL_NAMES
+        ],
+        "required_finding_types": [
+            item
+            for item in value.get("required_finding_types", [])[:8]
+            if item in DEMO_FINDING_TYPES
+        ],
+        "required_event_ids": event_ids,
+        "required_synthesis_llm_called": value.get("required_synthesis_llm_called") is True,
+    }
+
+
+def bounded_demo_result(result, scenario_id, target_id):
     events = []
     for event in (result.get("events") or [])[:4]:
         events.append(
@@ -54,10 +126,15 @@ def bounded_demo_result(result, scenario_id):
         )
     return {
         "scenario_id": scenario_id,
+        "target_id": target_id,
         "snmp_state_changed": bool(result.get("snmp_state_changed")),
         "librenms_completed": bool(result.get("librenms_completed")),
         "verified": str(result.get("verified") or "")[:500],
         "events": events,
+        "proof": _bounded_demo_proof(result.get("proof")),
+        "expected_investigation": _bounded_expected_investigation(
+            result.get("expected_investigation")
+        ),
         "example_question": str(result.get("example_question") or "")[:500],
     }
 
@@ -201,16 +278,40 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
         async def list_demo_scenarios(authorization: str | None = Header(default=None)):
             identity(authorization)
             require_demo_enabled()
-            metadata = demo_runner.load_scenarios()
+            metadata = demo_runner.demo_metadata()
+            targets = metadata.get("supported_targets") or []
+            scenarios = metadata.get("scenarios") or []
             return {
+                "supported_targets": [
+                    {
+                        "id": str(target.get("id") or "")[:160],
+                        "hostname": str(target.get("hostname") or "")[:160],
+                        "device_id": _positive_int(target.get("device_id")),
+                        "supported_scenarios": [
+                            item
+                            for item in target.get("supported_scenarios", [])
+                            if item in DEMO_SCENARIO_IDS
+                        ],
+                    }
+                    for target in targets
+                    if isinstance(target, dict) and target.get("id")
+                ],
                 "scenarios": [
                     {
-                        "id": scenario_id,
-                        "label": metadata[scenario_id]["label"],
-                        "example_question": metadata[scenario_id]["example_ai_question"],
+                        "id": scenario["id"],
+                        "label": str(scenario.get("label") or "")[:160],
+                        "example_question": str(
+                            scenario.get("example_question") or ""
+                        )[:500],
+                        "supported_target_ids": [
+                            str(item)[:160]
+                            for item in scenario.get("supported_target_ids", [])
+                        ],
                     }
-                    for scenario_id in DEMO_SCENARIO_IDS
-                ]
+                    for scenario in scenarios
+                    if isinstance(scenario, dict)
+                    and scenario.get("id") in DEMO_SCENARIO_IDS
+                ],
             }
 
         @app.post("/v1/demo/scenarios")
@@ -221,16 +322,32 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 body = await request.json()
             except json.JSONDecodeError:
                 raise HTTPException(400, "malformed JSON") from None
-            if not isinstance(body, dict) or set(body) != {"scenario_id"}:
-                raise HTTPException(400, "request must contain only scenario_id")
+            if not isinstance(body, dict) or set(body) != {"scenario_id", "target_id"}:
+                raise HTTPException(
+                    400, "request must contain only scenario_id and target_id"
+                )
             scenario_id = body.get("scenario_id")
             if not isinstance(scenario_id, str) or scenario_id not in DEMO_SCENARIO_IDS:
                 raise HTTPException(422, "unsupported scenario_id")
+            target_id = body.get("target_id")
+            metadata = demo_runner.demo_metadata()
+            targets = {
+                item.get("id"): item
+                for item in metadata.get("supported_targets", [])
+                if isinstance(item, dict)
+            }
+            target = targets.get(target_id) if isinstance(target_id, str) else None
+            if target is None:
+                raise HTTPException(422, "unsupported target_id")
+            if scenario_id not in target.get("supported_scenarios", []):
+                raise HTTPException(422, "scenario unavailable for target_id")
             if not demo_lock.acquire(blocking=False):
                 raise HTTPException(409, "a demo action is already running")
             try:
-                result = await asyncio.to_thread(demo_runner.execute_scenario, scenario_id)
-                return bounded_demo_result(result, scenario_id)
+                result = await asyncio.to_thread(
+                    demo_runner.execute_scenario, scenario_id, target_id
+                )
+                return bounded_demo_result(result, scenario_id, target_id)
             except Exception:
                 raise HTTPException(
                     503,
@@ -240,19 +357,42 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                 demo_lock.release()
 
         @app.post("/v1/demo/reset")
-        async def reset_demo(authorization: str | None = Header(default=None)):
+        async def reset_demo(request: Request, authorization: str | None = Header(default=None)):
             identity(authorization)
             require_demo_enabled()
+            try:
+                body = await request.json()
+            except json.JSONDecodeError:
+                raise HTTPException(400, "malformed JSON") from None
+            if not isinstance(body, dict) or set(body) != {"target_id"}:
+                raise HTTPException(400, "request must contain only target_id")
+            target_id = body.get("target_id")
+            supported = {
+                item.get("id")
+                for item in demo_runner.demo_metadata().get("supported_targets", [])
+                if isinstance(item, dict)
+            }
+            if not isinstance(target_id, str) or target_id not in supported:
+                raise HTTPException(422, "unsupported target_id")
             if not demo_lock.acquire(blocking=False):
                 raise HTTPException(409, "a demo action is already running")
             try:
-                result = await asyncio.to_thread(demo_runner.reset_baseline)
+                result = await asyncio.to_thread(demo_runner.reset_baseline, target_id)
                 return {
                     "scenario_id": "reset",
+                    "target_id": target_id,
                     "snmp_state_changed": bool(result.get("changed")),
                     "librenms_completed": True,
                     "verified": "Baseline restored",
                     "events": [],
+                    "proof": [
+                        {
+                            "id": "reset",
+                            "status": "passed",
+                            "label": "Seçili hedef başlangıç durumuna döndürüldü",
+                        }
+                    ],
+                    "expected_investigation": None,
                     "example_question": "",
                 }
             except Exception:

@@ -21,12 +21,15 @@ export async function getDemoMode(token) { return (await request("/demo-mode", t
 export async function setDemoMode(enabled, token) { return (await request("/demo-mode", token, { method: "POST", body: JSON.stringify({ enabled }) })).json(); }
 export async function getDemoScenarios(token) {
   const payload = await (await request("/demo/scenarios", token)).json();
-  return Array.isArray(payload.scenarios) ? payload.scenarios : [];
+  return {
+    supportedTargets: Array.isArray(payload.supported_targets) ? payload.supported_targets : [],
+    scenarios: Array.isArray(payload.scenarios) ? payload.scenarios : [],
+  };
 }
-export async function runDemoScenario(scenarioId, token) {
-  return (await request("/demo/scenarios", token, { method: "POST", body: JSON.stringify({ scenario_id: scenarioId }) })).json();
+export async function runDemoScenario(scenarioId, targetId, token) {
+  return (await request("/demo/scenarios", token, { method: "POST", body: JSON.stringify({ scenario_id: scenarioId, target_id: targetId }) })).json();
 }
-export async function resetDemo(token) { return (await request("/demo/reset", token, { method: "POST", body: "{}" })).json(); }
+export async function resetDemo(targetId, token) { return (await request("/demo/reset", token, { method: "POST", body: JSON.stringify({ target_id: targetId }) })).json(); }
 export async function getThread(threadId, token) { return (await request(`/threads/${encodeURIComponent(threadId)}`, token)).json(); }
 export async function createThread(token) { return (await request("/threads", token, { method: "POST", body: "{}" })).json(); }
 export async function deleteThread(threadId, token) { await request(`/threads/${encodeURIComponent(threadId)}`, token, { method: "DELETE" }); }

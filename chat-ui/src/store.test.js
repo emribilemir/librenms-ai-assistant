@@ -176,8 +176,9 @@ test("attaches completed inspection to the accepted message and preserves it acr
   state = reduceAssistantChat(state, { type: "stream.event", threadId: "a", event: "completed", data: { run_id: "r", status: "completed", message_id: "m", used_fallback: false, inspection, metrics } });
   expect(state.messages.a[0].inspection).toEqual(inspection);
 
-  state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Core", messages: [{ id: "m", role: "assistant", content: "Validated" }], runs: [{ id: "r", status: "completed" }] } });
+  state = reduceAssistantChat(state, { type: "thread.loaded", preserveSelection: true, thread: { id: "a", title: "Core", messages: [{ id: "m", role: "assistant", content: "Validated" }], runs: [{ id: "r", client_message_id: "c", status: "completed" }] } });
   expect(state.messages.a[0].inspection).toEqual(inspection);
+  expect(state.runs.a.clientMessageId).toBe("c");
 });
 
 test("does not render an answer delta until the server emits a validated delta", () => {
