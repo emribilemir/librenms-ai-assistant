@@ -273,7 +273,7 @@ test("assistant messages expose an assistant-ui copy action", () => {
   expect(screen.queryByRole("button", { name: "Nasıl işlendi?" })).not.toBeInTheDocument();
 });
 
-test("validated demo metadata opens compact summary, JSON, and Python views from the same inspection", () => {
+test("validated demo metadata offers summary and JSON as the only inspector views", () => {
   const inspection = {
     planner: { request_type: "ports", intent: "device_ports" },
     resolution: { hostname: "lab-j9772a-01", device_id: 1, port_id: 2, ifIndex: 2 },
@@ -322,20 +322,17 @@ test("validated demo metadata opens compact summary, JSON, and Python views from
 
   const summaryTab = within(panel).getByRole("tab", { name: "Özet" });
   const jsonTab = within(panel).getByRole("tab", { name: "JSON" });
-  const pythonTab = within(panel).getByRole("tab", { name: "Python" });
+  expect(within(panel).queryByRole("tab", { name: "Python" })).not.toBeInTheDocument();
   expect(summaryTab).toHaveAttribute("aria-controls", within(panel).getByRole("tabpanel").id);
   expect(jsonTab).toHaveAttribute("tabindex", "-1");
-  expect(pythonTab).toHaveAttribute("tabindex", "-1");
   summaryTab.focus();
   fireEvent.keyDown(summaryTab, { key: "ArrowRight" });
   expect(jsonTab).toHaveFocus();
   expect(jsonTab).toHaveAttribute("aria-selected", "true");
   expect(panel.querySelector("pre")).toHaveTextContent(JSON.stringify(inspection, null, 2), { normalizeWhitespace: false });
   fireEvent.keyDown(jsonTab, { key: "ArrowRight" });
-  expect(pythonTab).toHaveFocus();
-  expect(pythonTab).toHaveAttribute("aria-selected", "true");
-  expect(panel.querySelector("pre")).toHaveTextContent("'route': 'ports'");
-  expect(panel.querySelector("pre")).toHaveTextContent("'synthesis_llm_called': False");
+  expect(summaryTab).toHaveFocus();
+  expect(summaryTab).toHaveAttribute("aria-selected", "true");
 });
 
 test("runtime demo mode off hides inspection retained on an earlier answer", () => {
