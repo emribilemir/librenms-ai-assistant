@@ -320,6 +320,7 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const [discoveryRotation, setDiscoveryRotation] = useState(0);
   const filteredDevices = useMemo(() => {
     const query = picker.query.trim().toLocaleLowerCase("tr-TR");
     return devices.filter((device) => !query || device.hostname.toLocaleLowerCase("tr-TR").includes(query));
@@ -352,6 +353,7 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
     aui.composer.setText(nextText);
     setSelectedDevice(device);
     setDiscoveryOpen(false);
+    setDiscoveryRotation(0);
     closePicker();
     onDeviceUsed?.(device.hostname);
     requestAnimationFrame(() => {
@@ -397,7 +399,13 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
       closePicker();
     }
   };
-  const examples = Array.isArray(selectedDevice?.examples) ? selectedDevice.examples.slice(0, 3) : [];
+  const examplePool = Array.isArray(selectedDevice?.examples) ? selectedDevice.examples : [];
+  const exampleStart = discoveryRotation * 3;
+  const examples = examplePool.slice(exampleStart, exampleStart + 3);
+  const canRotateExamples = examplePool.length > 3;
+  const rotateExamples = () => setDiscoveryRotation((rotation) => (
+    (rotation + 1) * 3 >= examplePool.length ? 0 : rotation + 1
+  ));
 
   return (
     <ComposerPrimitive.Root className={styles.composer}>
@@ -436,6 +444,7 @@ function Composer({ placeholder, canRetry, onRetry, devices = [], recentDevices 
         <section className={styles.discovery} role="region" aria-label="Bağlamsal soru örnekleri">
           <p>Düzenleyebileceğin örnek başlangıçlar</p>
           {examples.map((example) => <button type="button" key={example} onClick={() => { aui.composer.setText(example); setDiscoveryOpen(false); requestAnimationFrame(() => inputRef.current?.focus()); }}>{example}</button>)}
+          {canRotateExamples ? <button type="button" className={styles.discoveryMore} onClick={rotateExamples}>Başka örnekler</button> : null}
         </section>
       ) : null}
       <div className={styles.composerBar}>

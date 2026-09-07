@@ -182,7 +182,10 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     ):
         identity(authorization)
         try:
-            devices = adapter.list_devices()
+            suggestion_source = getattr(
+                adapter, "list_suggestion_devices", adapter.list_devices
+            )
+            devices = suggestion_source()
         except Exception:
             raise HTTPException(
                 503,

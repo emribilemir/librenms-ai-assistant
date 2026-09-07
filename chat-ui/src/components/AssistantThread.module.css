@@ -97,6 +97,8 @@
 .discovery p { color: #7f8a93; flex-basis: 100%; font-size: 10px; margin: 0 0 2px; }
 .discovery button { background: #242a2f; border: 1px solid #3e474f; border-radius: 8px; color: #cfd5d9; font: inherit; font-size: 10px; line-height: 1.35; padding: 6px 8px; text-align: left; }
 .discovery button:hover { background: #333a40; border-color: #59646d; color: #fff; }
+.discovery .discoveryMore { background: transparent; border-color: transparent; color: #929ca4; padding-left: 4px; padding-right: 4px; }
+.discovery .discoveryMore:hover { background: transparent; border-color: transparent; color: #e4e8ea; text-decoration: underline; }
 .composerBar { align-items: center; display: flex; gap: 10px; justify-content: space-between; padding: 5px 8px 8px 12px; }
 .composerTools { align-items: center; display: flex; gap: 5px; min-width: 0; }
 .liveMode { align-items: center; color: #aab2ba; display: inline-flex; font-size: 12px; gap: 6px; }
