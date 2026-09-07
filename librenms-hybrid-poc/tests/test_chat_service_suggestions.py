@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from chat_service.app import create_app
 from chat_service.pipeline_adapter import PipelineAdapter
-from chat_service.suggestions import build_suggestions
+from chat_service.suggestions import CAPABILITIES, build_contextual_examples, build_suggestions
 
 
 SECRET = b"0123456789abcdef0123456789abcdef"
@@ -50,7 +50,12 @@ class SuggestionGenerationTests(unittest.TestCase):
 
         self.assertEqual(
             [item["label"] for item in result],
-            ["Cihaz durumu", "Port durumu", "Aktif alarmlar", "Son olaylar"],
+            [
+                "Model bilgisi",
+                "Bağlantısı düşmüş aktif portlar",
+                "Son 24 saat incelemesi",
+                "Cihaz incelemesi",
+            ],
         )
         self.assertTrue(
             all("lab-j9772a-01" in item["prompt"] for item in result)
@@ -73,19 +78,27 @@ class SuggestionGenerationTests(unittest.TestCase):
                 {item["prompt"] for item in second}
             )
         )
-        self.assertIn("Cihaz incelemesi", [item["label"] for item in second])
+        self.assertIn("İşletim sistemi", [item["label"] for item in second])
         self.assertTrue(
             all(
                 item["label"]
                 in {
-                    "Cihaz durumu",
-                    "Port durumu",
+                    "Model bilgisi",
+                    "Bağlantısı düşmüş aktif portlar",
+                    "Son 24 saat incelemesi",
+                    "Cihaz incelemesi",
+                    "İşletim sistemi",
+                    "Çalışma süresi",
+                    "Konum",
+                    "Port hızı",
+                    "Port açıklaması",
+                    "Down portlar",
+                    "Disabled portlar",
+                    "Port en son ne zaman down oldu?",
                     "Aktif alarmlar",
                     "Son olaylar",
-                    "Cihaz incelemesi",
-                    "Down portlar",
-                    "Konum",
-                    "Çalışma süresi",
+                    "Cihaz durumu",
+                    "Port durumu",
                 }
                 for item in first + second
             )
@@ -106,10 +119,10 @@ class SuggestionGenerationTests(unittest.TestCase):
         self.assertEqual(
             [item["prompt"] for item in result],
             [
-                "a-up açık mı?",
-                "b-up port 2 ne durumda?",
-                "lab-j9772a-01 üzerinde aktif alarm var mı?",
-                "z-up son eventlerini göster",
+                "a-up modeli ne?",
+                "b-up son 24 saatte neler olmuş?",
+                "lab-j9772a-01'de ne sorun var?",
+                "z-up işletim sistemi ne?",
             ],
         )
         self.assertEqual(
@@ -118,6 +131,35 @@ class SuggestionGenerationTests(unittest.TestCase):
         )
         self.assertTrue(all(item["prompt"] and item["label"] for item in result))
         self.assertTrue(all("z-down" not in item["prompt"] for item in result))
+
+    def test_uses_safe_non_port_starters_when_every_live_device_is_down(self):
+        result = build_suggestions(
+            [
+                {"hostname": "z-down", "status": 0, "port_count": 48},
+                {"hostname": "a-down", "status": "down", "port_count": 24},
+            ],
+            limit=4,
+        )
+
+        self.assertEqual(
+            [item["label"] for item in result],
+            [
+                "Model bilgisi",
+                "Son 24 saat incelemesi",
+                "Cihaz incelemesi",
+                "İşletim sistemi",
+            ],
+        )
+        self.assertTrue(all("port" not in item["label"].lower() for item in result))
+        self.assertEqual(
+            [item["prompt"] for item in result],
+            [
+                "a-down modeli ne?",
+                "z-down son 24 saatte neler olmuş?",
+                "a-down'de ne sorun var?",
+                "z-down işletim sistemi ne?",
+            ],
+        )
 
     def test_live_adapter_validates_only_port_prompt_candidates(self):
         calls = []
@@ -167,12 +209,43 @@ class SuggestionGenerationTests(unittest.TestCase):
         self.assertEqual(
             [item["prompt"] for item in result],
             [
-                "a-status-only açık mı?",
-                "b-has-ports port 2 ne durumda?",
-                "c-status-only üzerinde aktif alarm var mı?",
-                "d-status-only son eventlerini göster",
+                "a-status-only modeli ne?",
+                "b-has-ports'ta admin up olup oper down portlar hangileri?",
+                "c-status-only son 24 saatte neler olmuş?",
+                "d-status-only'de ne sorun var?",
             ],
         )
+
+    def test_contextual_examples_rotate_verified_windows_without_repeating_recent_examples(self):
+        first = build_contextual_examples("lab-j9772a-01", has_ports=True, rotation=0)
+        second = build_contextual_examples("lab-j9772a-01", has_ports=True, rotation=1)
+
+        self.assertEqual(first, [
+            "lab-j9772a-01 modeli ne?",
+            "lab-j9772a-01'ta admin up olup oper down portlar hangileri?",
+            "lab-j9772a-01 son 24 saatte neler olmuş?",
+        ])
+        self.assertEqual(len(first), 3)
+        self.assertEqual(len(second), 3)
+        self.assertTrue(set(first).isdisjoint(second))
+
+    def test_contextual_examples_exclude_port_families_without_live_port_rows(self):
+        examples = build_contextual_examples("status-only", has_ports=False)
+
+        self.assertEqual(examples[:3], [
+            "status-only modeli ne?",
+            "status-only son 24 saatte neler olmuş?",
+            "status-only'de ne sorun var?",
+        ])
+        self.assertFalse(any("port" in example.lower() for example in examples))
+
+    def test_capability_catalog_matches_the_established_planner_contract(self):
+        self.assertEqual({capability["id"] for capability in CAPABILITIES}, {
+            "model", "active_down_ports", "recent_history", "investigation",
+            "os", "uptime", "location", "port_speed", "port_description",
+            "down_ports", "disabled_ports", "port_last_down", "alerts", "events",
+            "status", "specific_port",
+        })
 
 
 class SuggestionAdapter:
@@ -221,7 +294,7 @@ class SuggestionRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json()["suggestions"][0]["prompt"],
-            "lab-j9775a-01 açık mı?",
+            "lab-j9775a-01 modeli ne?",
         )
 
     def test_devices_route_returns_only_bounded_live_inventory_with_semantic_status(self):
@@ -240,38 +313,17 @@ class SuggestionRouteTests(unittest.TestCase):
         response = client.get("/v1/devices", headers=bearer())
 
         self.assertEqual(response.status_code, 200)
+        devices = response.json()["devices"]
         self.assertEqual(
-            response.json()["devices"],
-            [
-                {
-                    "hostname": "lab-down",
-                    "status": "down",
-                    "examples": [
-                        "lab-down açık mı?",
-                        "lab-down üzerinde aktif alarm var mı?",
-                        "lab-down'da ne sorun var?",
-                    ],
-                },
-                {
-                    "hostname": "lab-up",
-                    "status": "up",
-                    "examples": [
-                        "lab-up açık mı?",
-                        "lab-up üzerinde aktif alarm var mı?",
-                        "lab-up'da ne sorun var?",
-                    ],
-                },
-                {
-                    "hostname": "z-unknown",
-                    "status": "unknown",
-                    "examples": [
-                        "z-unknown açık mı?",
-                        "z-unknown üzerinde aktif alarm var mı?",
-                        "z-unknown'da ne sorun var?",
-                    ],
-                },
-            ],
+            [(device["hostname"], device["status"]) for device in devices],
+            [("lab-down", "down"), ("lab-up", "up"), ("z-unknown", "unknown")],
         )
+        self.assertEqual(devices[1]["examples"][:3], [
+            "lab-up modeli ne?",
+            "lab-up son 24 saatte neler olmuş?",
+            "lab-up'de ne sorun var?",
+        ])
+        self.assertFalse(any("port" in example.lower() for device in devices for example in device["examples"]))
         self.assertNotIn("fixture", response.text)
 
     def test_suggestion_route_accepts_deterministic_rotation(self):

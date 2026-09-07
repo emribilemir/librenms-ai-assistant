@@ -13,9 +13,12 @@ const pickerDevices = [
     hostname: "lab-up",
     status: "up",
     examples: [
-      "lab-up'ın down portları hangileri?",
-      "lab-up üzerinde aktif alarm var mı?",
-      "lab-up'da ne sorun var?",
+      "lab-up modeli ne?",
+      "lab-up'ta admin up olup oper down portlar hangileri?",
+      "lab-up son 24 saatte neler olmuş?",
+      "lab-up'de ne sorun var?",
+      "lab-up işletim sistemi ne?",
+      "lab-up ne kadar süredir açık?",
     ],
   },
   { hostname: "lab-down", status: "down", examples: [] },
@@ -136,10 +139,35 @@ test("contextual discovery stays collapsed and fills at most three editable exam
   fireEvent.click(discovery);
 
   const examples = screen.getByRole("region", { name: "Bağlamsal soru örnekleri" });
-  expect(within(examples).getAllByRole("button")).toHaveLength(3);
-  fireEvent.click(within(examples).getByRole("button", { name: "lab-up üzerinde aktif alarm var mı?" }));
-  expect(composer).toHaveValue("lab-up üzerinde aktif alarm var mı?");
+  expect(within(examples).getAllByRole("button", { name: /lab-up/ })).toHaveLength(3);
+  fireEvent.click(within(examples).getByRole("button", { name: "lab-up'ta admin up olup oper down portlar hangileri?" }));
+  expect(composer).toHaveValue("lab-up'ta admin up olup oper down portlar hangileri?");
   expect(send).not.toHaveBeenCalled();
+});
+
+test("contextual discovery advances to the next deterministic window without repeating examples", () => {
+  render(<PickerFixture />);
+  const composer = screen.getByRole("textbox", { name: "Ask LibreNMS" });
+  fireEvent.change(composer, { target: { value: "@lab-u" } });
+  fireEvent.click(screen.getByRole("option", { name: "lab-up Up" }));
+  fireEvent.click(screen.getByRole("button", { name: "Neler sorabilirim?" }));
+
+  const examples = screen.getByRole("region", { name: "Bağlamsal soru örnekleri" });
+  const first = within(examples).getAllByRole("button", { name: /lab-up/ }).map((button) => button.textContent);
+  expect(first).toEqual([
+    "lab-up modeli ne?",
+    "lab-up'ta admin up olup oper down portlar hangileri?",
+    "lab-up son 24 saatte neler olmuş?",
+  ]);
+
+  fireEvent.click(within(examples).getByRole("button", { name: "Başka örnekler" }));
+  const second = within(examples).getAllByRole("button", { name: /lab-up/ }).map((button) => button.textContent);
+  expect(second).toEqual([
+    "lab-up'de ne sorun var?",
+    "lab-up işletim sistemi ne?",
+    "lab-up ne kadar süredir açık?",
+  ]);
+  expect(second).not.toEqual(expect.arrayContaining(first));
 });
 
 test("delete confirmation focuses cancel and cancellation leaves the thread intact", () => {

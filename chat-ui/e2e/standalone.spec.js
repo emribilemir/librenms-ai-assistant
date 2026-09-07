@@ -199,10 +199,10 @@ test("uses the same sanitized inspection for dark JSON and Python code views", a
 });
 
 test("builds assistant-ui starter prompts from currently up devices", async ({ page }) => {
-  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 açık mı/i });
+  const liveSuggestion = page.getByRole("button", { name: /lab-j9775a-01 modeli ne/i });
   await expect(liveSuggestion).toBeVisible();
   await liveSuggestion.click();
-  await expect(page.getByText("lab-j9775a-01 açık mı?")).toBeVisible();
+  await expect(page.getByText("lab-j9775a-01 modeli ne?")).toBeVisible();
   await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
   await expect(page.getByRole("button", { name: /lab-offline-01/i })).toHaveCount(0);
 });
@@ -241,9 +241,9 @@ test("keeps contextual discovery optional and leaves its selected example editab
   await expect(page.getByRole("region", { name: "Bağlamsal soru örnekleri" })).toHaveCount(0);
   await discovery.click();
   const examples = page.getByRole("region", { name: "Bağlamsal soru örnekleri" });
-  await expect(examples.getByRole("button")).toHaveCount(3);
-  await examples.getByRole("button", { name: "lab-j9775a-01 üzerinde aktif alarm var mı?" }).click();
-  await expect(composer).toHaveValue("lab-j9775a-01 üzerinde aktif alarm var mı?");
+  await expect(examples.getByRole("button", { name: /lab-j9775a-01/ })).toHaveCount(3);
+  await examples.getByRole("button", { name: "lab-j9775a-01'ta admin up olup oper down portlar hangileri?" }).click();
+  await expect(composer).toHaveValue("lab-j9775a-01'ta admin up olup oper down portlar hangileri?");
   await composer.fill("lab-j9775a-01 için farklı bir doğal dil sorusu");
   await expect(composer).toHaveValue("lab-j9775a-01 için farklı bir doğal dil sorusu");
   await expect(page.locator("[data-message-id]")).toHaveCount(0);
@@ -253,8 +253,8 @@ test("rotates the capability-first suggestion set on a consecutive new chat", as
   const suggestions = page.getByLabel("Canlı cihaz önerileri").getByRole("button");
   await expect(suggestions).toHaveCount(4);
   const firstSet = new Set(await suggestions.allTextContents());
-  expect([...firstSet].some((text) => text.includes("Aktif alarmlar"))).toBe(true);
-  expect([...firstSet].some((text) => text.includes("Son olaylar"))).toBe(true);
+  expect([...firstSet].some((text) => text.includes("Model bilgisi"))).toBe(true);
+  expect([...firstSet].some((text) => text.includes("Son 24 saat incelemesi"))).toBe(true);
 
   await ask(page, "prepare suggestion rotation");
   await expect(page.getByText("Deterministic standalone result.")).toBeVisible();
@@ -263,7 +263,7 @@ test("rotates the capability-first suggestion set on a consecutive new chat", as
   const secondSet = new Set(await suggestions.allTextContents());
   expect(secondSet).not.toEqual(firstSet);
   expect([...secondSet].every((text) => !firstSet.has(text))).toBe(true);
-  expect([...secondSet].some((text) => text.includes("Cihaz incelemesi"))).toBe(true);
+  expect([...secondSet].some((text) => text.includes("İşletim sistemi"))).toBe(true);
 });
 
 test("fills the available conversation height without clipping starter prompts", async ({ page }, testInfo) => {

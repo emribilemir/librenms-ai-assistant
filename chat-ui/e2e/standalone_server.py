@@ -64,6 +64,13 @@ class DeterministicPipelineAdapter:
         ]
 
     @staticmethod
+    def list_suggestion_devices():
+        """Expose verified port availability only for the fixture's port-capable switch."""
+        devices = DeterministicPipelineAdapter.list_devices()
+        devices[0]["port_count"] = 4
+        return devices
+
+    @staticmethod
     def _stage(observer, is_cancelled, stage, duration):
         if is_cancelled():
             return False

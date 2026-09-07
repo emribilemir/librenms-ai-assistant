@@ -7,14 +7,22 @@ from typing import Any
 
 
 CAPABILITIES = (
-    {"id": "status", "label": "Cihaz durumu", "prompt": "{hostname} açık mı?"},
-    {"id": "specific_port", "label": "Port durumu", "prompt": "{hostname} port 2 ne durumda?", "requires_ports": True},
+    {"id": "model", "label": "Model bilgisi", "prompt": "{hostname} modeli ne?"},
+    {"id": "active_down_ports", "label": "Bağlantısı düşmüş aktif portlar", "prompt": "{hostname}'ta admin up olup oper down portlar hangileri?", "requires_ports": True},
+    {"id": "recent_history", "label": "Son 24 saat incelemesi", "prompt": "{hostname} son 24 saatte neler olmuş?"},
+    {"id": "investigation", "label": "Cihaz incelemesi", "prompt": "{hostname}'de ne sorun var?"},
+    {"id": "os", "label": "İşletim sistemi", "prompt": "{hostname} işletim sistemi ne?"},
+    {"id": "uptime", "label": "Çalışma süresi", "prompt": "{hostname} ne kadar süredir açık?"},
+    {"id": "location", "label": "Konum", "prompt": "{hostname}'ın location bilgisi ne?"},
+    {"id": "port_speed", "label": "Port hızı", "prompt": "{hostname} port 2 hızı ne?", "requires_ports": True},
+    {"id": "port_description", "label": "Port açıklaması", "prompt": "{hostname} port 2 açıklaması ne?", "requires_ports": True},
+    {"id": "down_ports", "label": "Down portlar", "prompt": "{hostname}'ın down portları hangileri?", "requires_ports": True},
+    {"id": "disabled_ports", "label": "Disabled portlar", "prompt": "{hostname}'ın disabled portları hangileri?", "requires_ports": True},
+    {"id": "port_last_down", "label": "Port en son ne zaman down oldu?", "prompt": "{hostname} port 2 en son ne zaman down oldu?", "requires_ports": True},
     {"id": "alerts", "label": "Aktif alarmlar", "prompt": "{hostname} üzerinde aktif alarm var mı?"},
     {"id": "events", "label": "Son olaylar", "prompt": "{hostname} son eventlerini göster"},
-    {"id": "investigation", "label": "Cihaz incelemesi", "prompt": "{hostname}'da ne sorun var?"},
-    {"id": "down_ports", "label": "Down portlar", "prompt": "{hostname}'ın down portları hangileri?", "requires_ports": True},
-    {"id": "location", "label": "Konum", "prompt": "{hostname}'ın location bilgisi ne?"},
-    {"id": "uptime", "label": "Çalışma süresi", "prompt": "{hostname} ne kadar süredir açık?"},
+    {"id": "status", "label": "Cihaz durumu", "prompt": "{hostname} açık mı?"},
+    {"id": "specific_port", "label": "Port durumu", "prompt": "{hostname} port 2 ne durumda?", "requires_ports": True},
 )
 
 
@@ -26,13 +34,30 @@ def _status(value: Any) -> str:
     return "unknown"
 
 
-def build_contextual_examples(hostname: str, limit: int = 3) -> list[str]:
-    """Build a small optional discovery set from verified capabilities."""
-    by_id = {capability["id"]: capability for capability in CAPABILITIES}
+def _eligible_capabilities(has_ports: bool) -> list[dict[str, Any]]:
     return [
-        by_id[capability_id]["prompt"].format(hostname=hostname)
-        for capability_id in ("status", "alerts", "investigation")
-    ][:max(0, min(limit, 3))]
+        capability for capability in CAPABILITIES
+        if has_ports or not capability.get("requires_ports")
+    ]
+
+
+def _contextual_example_pool(hostname: str, has_ports: bool) -> list[str]:
+    return [
+        capability["prompt"].format(hostname=hostname)
+        for capability in _eligible_capabilities(has_ports)
+    ]
+
+
+def build_contextual_examples(
+    hostname: str, has_ports: bool = False, limit: int = 3, rotation: int = 0
+) -> list[str]:
+    """Return one deterministic, compact discovery window for a selected device."""
+    examples = _contextual_example_pool(hostname, has_ports)
+    window_size = max(0, min(limit, 3, len(examples)))
+    if not window_size:
+        return []
+    offset = (max(0, int(rotation)) * window_size) % len(examples)
+    return (examples[offset:] + examples[:offset])[:window_size]
 
 
 def build_picker_devices(
@@ -50,7 +75,9 @@ def build_picker_devices(
         by_hostname[key] = {
             "hostname": hostname,
             "status": _status(device.get("status")),
-            "examples": build_contextual_examples(hostname),
+            "examples": _contextual_example_pool(
+                hostname, int(device.get("port_count") or 0) > 0
+            ),
         }
     return sorted(
         by_hostname.values(), key=lambda device: device["hostname"].casefold()
@@ -60,20 +87,23 @@ def build_picker_devices(
 def build_suggestions(
     devices: Iterable[Mapping[str, Any]], limit: int = 4, rotation: int = 0
 ) -> list[dict[str, str]]:
-    """Return a rotating capability-first window for real devices marked up."""
-    up_devices = sorted(
+    """Return a rotating capability-first window for the current live inventory."""
+    live_devices = sorted(
         (
             device
             for device in devices
-            if device.get("status") in (1, True, "1", "true", "up")
-            and str(device.get("hostname", "")).strip()
+            if str(device.get("hostname", "")).strip()
         ),
         key=lambda device: str(device.get("hostname", "")).strip(),
     )
+    up_devices = [
+        device for device in live_devices
+        if device.get("status") in (1, True, "1", "true", "up")
+    ]
+    suggestion_devices = up_devices or live_devices
     hostnames = list(dict.fromkeys(
-        str(device.get("hostname", "")).strip() for device in up_devices
+        str(device.get("hostname", "")).strip() for device in suggestion_devices
     ))
-    has_port_metadata = any("port_count" in device for device in up_devices)
     port_hostnames = list(dict.fromkeys(
         str(device.get("hostname", "")).strip()
         for device in up_devices
@@ -81,10 +111,7 @@ def build_suggestions(
     ))
     if not hostnames:
         return []
-    eligible = [
-        capability for capability in CAPABILITIES
-        if not capability.get("requires_ports") or not has_port_metadata or port_hostnames
-    ]
+    eligible = _eligible_capabilities(bool(port_hostnames))
     if not eligible:
         return []
     window_size = max(0, min(limit, len(eligible)))
@@ -94,7 +121,7 @@ def build_suggestions(
     ordered = eligible[offset:] + eligible[:offset]
     suggestions = []
     for index, capability in enumerate(ordered[:window_size]):
-        candidates = port_hostnames if capability.get("requires_ports") and has_port_metadata else hostnames
+        candidates = port_hostnames if capability.get("requires_ports") else hostnames
         hostname = candidates[index % len(candidates)]
         prompt = capability["prompt"].format(hostname=hostname)
         suggestions.append({
