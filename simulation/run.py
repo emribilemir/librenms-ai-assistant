@@ -19,14 +19,16 @@ sys.path.insert(0, str(POC_DIR))
 from librenms_backend import LibreNMSBackend  # noqa: E402
 
 
-SSH_HOST = "emir@192.168.64.3"
-SSH_KEY = Path.home() / ".ssh" / "codex_utm"
+SSH_HOST = os.environ.get("LAB_SSH_HOST", "librenms-vm")
+SSH_USER = os.environ.get("LAB_SSH_USER", "").strip()
+SSH_KEY = Path(os.path.expanduser(os.environ["LAB_SSH_KEY"])) if os.environ.get("LAB_SSH_KEY") else None
 RESPONDER = "/opt/snmpsim-venv/bin/snmpsim-command-responder"
 RESPONDER_PATTERN = (
     "^/opt/snmpsim-venv/bin/python3 "
     "/opt/snmpsim-venv/bin/snmpsim-command-responder"
 )
 DEVICES_UP = "/opt/snmpsim-lab/devices-up.txt"
+SNMPSIM_UNIT = os.environ.get("LAB_SNMPSIM_UNIT", "librenms-snmpsim.service")
 LOCATION_OID = "1.3.6.1.2.1.1.6.0"
 PORT2_ADMIN_OID = "1.3.6.1.2.1.2.2.1.7.2"
 PORT2_OPER_OID = "1.3.6.1.2.1.2.2.1.8.2"
@@ -68,6 +70,15 @@ TARGETS = {
         supported_scenarios=SCENARIO_IDS,
         alert_rule_id=13,
     ),
+    "lab-j9772a-02": DemoTarget(
+        target_id="lab-j9772a-02",
+        hostname="lab-j9772a-02",
+        device_id=2,
+        fixture="/opt/snmpsim-lab/data/lab-j9772a-02/public.snmprec",
+        offline_fixture="/opt/snmpsim-lab/data/lab-j9772a-02/offline.snmprec",
+        snmp_endpoint="udp:127.0.0.12:1611",
+        supported_scenarios=SCENARIO_IDS,
+    ),
 }
 
 
@@ -79,16 +90,13 @@ def resolve_target(target_id, targets=None):
 
 
 def ssh(command, *, input_text=None, check=True, timeout=180):
+    destination = f"{SSH_USER}@{SSH_HOST}" if SSH_USER else SSH_HOST
+    command_line = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
+    if SSH_KEY is not None:
+        command_line.extend(["-i", os.fspath(SSH_KEY)])
+    command_line.extend([destination, command])
     result = subprocess.run(
-        [
-            "ssh",
-            "-i",
-            os.fspath(SSH_KEY),
-            "-o",
-            "BatchMode=yes",
-            SSH_HOST,
-            command,
-        ],
+        command_line,
         input=input_text,
         text=True,
         capture_output=True,
@@ -114,18 +122,26 @@ def replace_record(text, oid, value_type, value):
 
 
 def read_fixture(target):
-    return ssh(f"cat {shlex.quote(target.fixture)}").stdout
+    return ssh(f"sudo -n cat {shlex.quote(target.fixture)}").stdout
 
 
 def write_fixture(target, text):
-    temporary = target.fixture + ".emr55-tmp"
+    script = """
+set -eu
+path=$1
+tmp="${path}.emr55-tmp"
+trap 'rm -f "$tmp"' EXIT
+cat >"$tmp"
+chown --reference="$path" "$tmp"
+chmod --reference="$path" "$tmp"
+mv "$tmp" "$path"
+trap - EXIT
+""".strip()
     command = (
-        "set -eu; "
-        f"tmp={shlex.quote(temporary)}; "
-        "trap 'rm -f \"$tmp\"' EXIT; "
-        "cat >\"$tmp\"; "
-        f"mv \"$tmp\" {shlex.quote(target.fixture)}; "
-        "trap - EXIT"
+        "sudo -n sh -c "
+        + shlex.quote(script)
+        + " sh "
+        + shlex.quote(target.fixture)
     )
     ssh(command, input_text=text)
 
@@ -159,9 +175,20 @@ def responder_pid(*, required=True):
     return single_responder_pid(result.stdout)
 
 
+def systemd_responder_available():
+    result = ssh(
+        f"systemctl cat {shlex.quote(SNMPSIM_UNIT)} >/dev/null 2>&1",
+        check=False,
+    )
+    return result.returncode == 0
+
+
 def stop_responder():
     pid = responder_pid()
-    ssh(f"sudo -n -u librenms kill {pid}")
+    if systemd_responder_available():
+        ssh(f"sudo -n systemctl stop {shlex.quote(SNMPSIM_UNIT)}")
+    else:
+        ssh(f"sudo -n -u librenms kill {pid}")
     for _ in range(30):
         if responder_pid(required=False) is None:
             return pid
@@ -172,14 +199,17 @@ def stop_responder():
 def start_responder(target, *, target_online):
     if responder_pid(required=False) is not None:
         raise RuntimeError("refusing to start a second responder")
-    start_script = f"""
+    if systemd_responder_available():
+        ssh(f"sudo -n systemctl start {shlex.quote(SNMPSIM_UNIT)}")
+    else:
+        start_script = f"""
 cmd=({shlex.quote(RESPONDER)} --cache-dir=/opt/snmpsim-lab/cache)
 while IFS='|' read -r ip host model; do
   cmd+=(--v3-engine-id auto "--data-dir=/opt/snmpsim-lab/data/$host" "--agent-udpv4-endpoint=$ip:1611")
 done < {shlex.quote(DEVICES_UP)}
 nohup "${{cmd[@]}}" >/tmp/emr55-snmpsim.log 2>&1 &
 """.strip()
-    ssh("sudo -n -u librenms bash -c " + shlex.quote(start_script))
+        ssh("sudo -n -u librenms bash -c " + shlex.quote(start_script))
     for _ in range(30):
         pid = responder_pid(required=False)
         if pid is not None:
@@ -295,7 +325,10 @@ def fixture_state(target):
 def take_device_offline(target):
     if fixture_state(target) != "online":
         raise RuntimeError("target fixture is not in the online state")
-    ssh(f"mv {shlex.quote(target.fixture)} {shlex.quote(target.offline_fixture)}")
+    ssh(
+        f"sudo -n mv {shlex.quote(target.fixture)} "
+        f"{shlex.quote(target.offline_fixture)}"
+    )
 
 
 def restore_online_fixture(target):
@@ -304,7 +337,10 @@ def restore_online_fixture(target):
         return False
     if state != "offline":
         raise RuntimeError("target fixture state is ambiguous")
-    ssh(f"mv {shlex.quote(target.offline_fixture)} {shlex.quote(target.fixture)}")
+    ssh(
+        f"sudo -n mv {shlex.quote(target.offline_fixture)} "
+        f"{shlex.quote(target.fixture)}"
+    )
     return True
 
 
@@ -317,7 +353,7 @@ def set_baseline_records(target):
 
 
 def preflight(target):
-    if not SSH_KEY.is_file():
+    if SSH_KEY is not None and not SSH_KEY.is_file():
         raise RuntimeError(f"SSH key not found: {SSH_KEY}")
     ssh(
         "set -eu; "
@@ -326,7 +362,7 @@ def preflight(target):
         f"test -r {shlex.quote(DEVICES_UP)}"
     )
     if fixture_state(target) == "online":
-        ssh(f"test -w {shlex.quote(target.fixture)}")
+        ssh(f"sudo -n test -w {shlex.quote(target.fixture)}")
     api_backend().get_device(device_id=target.device_id)
 
 

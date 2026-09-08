@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=lab-common
+. "$SCRIPT_DIR/lab-common"
+
+: "${AI_ASSISTANT_SHARED_SECRET:?AI_ASSISTANT_SHARED_SECRET is required}"
+: "${LIBRENMS_TOKEN:?LIBRENMS_TOKEN is required}"
+test -x "$AI_PYTHON" || { printf 'Python runtime is not executable: %s\n' "$AI_PYTHON" >&2; exit 69; }
+
+install -d -m 0700 "$(dirname -- "$AI_CHAT_DB")"
+cd "$REPOSITORY_ROOT/librenms-hybrid-poc"
+exec "$AI_PYTHON" -m uvicorn chat_service.app:create_app --factory \
+    --host "$AI_BACKEND_HOST" --port "$AI_BACKEND_PORT"

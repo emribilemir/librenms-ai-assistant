@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=lab-common
+. "$SCRIPT_DIR/lab-common"
+
+launchctl bootout "gui/$(id -u)/$AI_LAUNCHD_LABEL" >/dev/null 2>&1 || true
+lab_ssh "sudo -n systemctl stop $LAB_SNMPSIM_UNIT"
+
+if [ "${LAB_STOP_VM_ON_DOWN:-0}" = "1" ] && [ -n "${LAB_UTM_VM_ID:-}" ]; then
+    require_command "${LAB_UTM_CLI:-utmctl}"
+    "${LAB_UTM_CLI:-utmctl}" stop "$LAB_UTM_VM_ID"
+fi
+
+printf 'Lab backend and SNMPSim responder stopped. LibreNMS services were left running.\n'

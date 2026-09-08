@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import styles from "./DemoControls.module.css";
 
 export function DemoControls({ open, scenarios, targets, selectedTargetId, runningLabel, result, verification, questionRunning, error, onClose, onTargetChange, onRun, onReset, onAsk }) {
@@ -37,9 +38,9 @@ export function DemoControls({ open, scenarios, targets, selectedTargetId, runni
           )}
           {result.example_question ? (
             <div className={styles.question}>
-              <span>Sormayı dene</span>
               <button type="button" disabled={questionRunning} aria-label={`Sormayı dene: ${result.example_question}`} onClick={() => onAsk(result.example_question, result.expected_investigation)}>
-                {result.example_question} <span aria-hidden="true">↗</span>
+                <span><small>Sormayı dene</small><strong>{result.example_question}</strong></span>
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
             </div>
           ) : null}

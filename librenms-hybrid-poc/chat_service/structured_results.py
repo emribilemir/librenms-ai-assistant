@@ -90,10 +90,40 @@ def _alert_result(context, device):
     return {"kind": "alerts", "device": device, "alerts": rows}
 
 
+def _event_result(context, device):
+    device_id = device["device_id"]
+    rows = []
+    events = context.get("events")
+    for item in events if isinstance(events, list) else []:
+        if not isinstance(item, dict) or _positive_int(item.get("device_id")) != device_id:
+            continue
+        row = {"device_id": device_id}
+        event_id = _positive_int(item.get("event_id"))
+        if event_id is not None:
+            row["event_id"] = event_id
+        timestamp = _text(item.get("timestamp") or item.get("datetime"), 64)
+        if timestamp is not None:
+            row["timestamp"] = timestamp
+        severity_value = item.get("severity")
+        if isinstance(severity_value, int) and not isinstance(severity_value, bool):
+            severity_value = str(severity_value)
+        severity = _text(severity_value, 32)
+        if severity is not None:
+            row["severity"] = severity
+        for source, limit in (("message", 500), ("type", 80), ("reference", 120)):
+            value = _text(item.get(source), limit)
+            if value is not None:
+                row[source] = value
+        rows.append(row)
+        if len(rows) == MAX_RESULT_ROWS:
+            break
+    return {"kind": "events", "device": device, "events": rows}
+
+
 def build_structured_result(result):
     """Return bounded allowlist-only result metadata, never parsed from answer text."""
     route = result.get("route")
-    if route not in {"ports", "alerts"}:
+    if route not in {"ports", "alerts", "events"}:
         return None
     context = result.get("navigation_context")
     if not isinstance(context, dict):
@@ -103,4 +133,6 @@ def build_structured_result(result):
         return None
     if route == "ports":
         return _port_result(context, device)
-    return _alert_result(context, device)
+    if route == "alerts":
+        return _alert_result(context, device)
+    return _event_result(context, device)

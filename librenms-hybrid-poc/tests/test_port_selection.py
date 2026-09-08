@@ -22,7 +22,7 @@ def load_module(name, path):
 
 
 resolver_v5 = load_module(
-    "resolver_v5_port_test", os.path.join(GOLD, "resolver_candidate_v5.py")
+    "resolver_v5_port_test", os.path.join(POC, "resolver_v5.py")
 )
 with open(os.path.join(GOLD, "dummy_inventory.json"), encoding="utf-8") as stream:
     INVENTORY = json.load(stream)

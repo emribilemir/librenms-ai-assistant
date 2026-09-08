@@ -40,6 +40,13 @@ DEMO_FINDING_TYPES = {
 }
 
 
+def default_database_path():
+    state_root = os.environ.get("XDG_STATE_HOME")
+    if state_root:
+        return Path(state_root) / "librenms-ai-assistant" / "chat.sqlite3"
+    return Path.home() / ".local" / "state" / "librenms-ai-assistant" / "chat.sqlite3"
+
+
 def load_simulation_runner():
     path = Path(__file__).resolve().parents[2] / "simulation" / "run.py"
     spec = importlib.util.spec_from_file_location("emr55_simulation_runner", path)
@@ -160,10 +167,15 @@ def iter_answer_chunks(answer, max_chars=72):
 
 
 def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
-               heartbeat_seconds=15):
+               heartbeat_seconds=15, allow_dev_auth=False):
     secret = secret if secret is not None else os.environ.get("AI_ASSISTANT_SHARED_SECRET", "").encode()
     verifier = IdentityVerifier(secret)
-    store = ChatStore(database_path or os.environ.get("AI_CHAT_DB", "ai-chat.sqlite3"))
+    configured_database = database_path or os.environ.get("AI_CHAT_DB")
+    if configured_database is None:
+        configured_database = default_database_path()
+        configured_database.parent.mkdir(parents=True, exist_ok=True)
+    store = ChatStore(os.fspath(configured_database))
+    dev_auth_enabled = allow_dev_auth and os.environ.get("AI_DEV_AUTH") == "1"
     demo_allowed = os.environ.get("AI_DEMO_MODE_ALLOWED") == "1"
     demo_state = {"enabled": False}
     adapter = adapter or PipelineAdapter(include_inspection=lambda: demo_state["enabled"])
@@ -173,8 +185,12 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     demo_runner = load_simulation_runner() if demo_allowed else None
     demo_lock = threading.Lock()
 
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok"}
+
     def identity(authorization: str | None):
-        if authorization is None and os.environ.get("AI_DEV_AUTH") == "1":
+        if authorization is None and dev_auth_enabled:
             return Identity("development", "Development")
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(401, "authentication required")
@@ -182,6 +198,12 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
             return verifier.verify(authorization[7:])
         except AuthError:
             raise HTTPException(401, "authentication required") from None
+
+    def demo_operator(authorization: str | None):
+        user = identity(authorization)
+        if not user.demo_control:
+            raise HTTPException(403, "demo control forbidden")
+        return user
 
     def owned(thread_id, user):
         try:
@@ -199,12 +221,12 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     if demo_allowed:
         @app.get("/v1/demo-mode")
         async def get_demo_mode(authorization: str | None = Header(default=None)):
-            identity(authorization)
+            demo_operator(authorization)
             return {"allowed": True, "enabled": demo_state["enabled"]}
 
         @app.post("/v1/demo-mode")
         async def set_demo_mode(request: Request, authorization: str | None = Header(default=None)):
-            identity(authorization)
+            demo_operator(authorization)
             try:
                 body = await request.json()
             except json.JSONDecodeError:
@@ -276,7 +298,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
     if demo_allowed:
         @app.get("/v1/demo/scenarios")
         async def list_demo_scenarios(authorization: str | None = Header(default=None)):
-            identity(authorization)
+            demo_operator(authorization)
             require_demo_enabled()
             metadata = demo_runner.demo_metadata()
             targets = metadata.get("supported_targets") or []
@@ -316,7 +338,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
 
         @app.post("/v1/demo/scenarios")
         async def run_demo_scenario(request: Request, authorization: str | None = Header(default=None)):
-            identity(authorization)
+            demo_operator(authorization)
             require_demo_enabled()
             try:
                 body = await request.json()
@@ -358,7 +380,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
 
         @app.post("/v1/demo/reset")
         async def reset_demo(request: Request, authorization: str | None = Header(default=None)):
-            identity(authorization)
+            demo_operator(authorization)
             require_demo_enabled()
             try:
                 body = await request.json()

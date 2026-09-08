@@ -22,7 +22,7 @@ def load_module(name, path):
 
 
 resolver_v5 = load_module(
-    "resolver_v5_test", os.path.join(GOLD, "resolver_candidate_v5.py")
+    "resolver_v5_test", os.path.join(POC, "resolver_v5.py")
 )
 dummy_backend = load_module(
     "dummy_backend_test", os.path.join(GOLD, "dummy_backend.py")

@@ -243,6 +243,69 @@ class PipelineInspectionTests(unittest.TestCase):
             "alerts": [],
         })
 
+    def test_event_route_carries_bounded_timeline_rows_from_verified_runtime_objects(self):
+        result = {
+            "final_answer": "2026-09-08 08:12:03 [2] ifOperStatus: up -> down",
+            "route": "events",
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "events": [
+                    {
+                        "device_id": 1,
+                        "event_id": 203,
+                        "timestamp": "2026-09-08 08:12:03",
+                        "severity": 2,
+                        "message": "ifOperStatus: up -> down",
+                        "type": "interface",
+                        "reference": "2",
+                        "secret": "must not cross the boundary",
+                    },
+                    {
+                        "device_id": 2,
+                        "event_id": 999,
+                        "timestamp": "2026-09-08 08:13:03",
+                        "severity": 4,
+                        "message": "Other device",
+                    },
+                ],
+            },
+        }
+
+        response = self._run(result, demo_mode=False)
+
+        self.assertEqual(response["structured_result"], {
+            "kind": "events",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+            "events": [{
+                "device_id": 1,
+                "event_id": 203,
+                "timestamp": "2026-09-08 08:12:03",
+                "severity": "2",
+                "message": "ifOperStatus: up -> down",
+                "type": "interface",
+                "reference": "2",
+            }],
+        })
+        serialized = json.dumps(response["structured_result"])
+        self.assertNotIn("secret", serialized)
+        self.assertNotIn("Other device", serialized)
+
+    def test_event_route_carries_a_structured_empty_state(self):
+        response = self._run({
+            "final_answer": "Bu cihaz için event bulunamadı.",
+            "route": "events",
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "events": [],
+            },
+        }, demo_mode=False)
+
+        self.assertEqual(response["structured_result"], {
+            "kind": "events",
+            "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+            "events": [],
+        })
+
     def test_investigation_reuses_bounded_structured_findings(self):
         findings = [
             {

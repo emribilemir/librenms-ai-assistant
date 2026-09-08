@@ -11,9 +11,10 @@ from librenms_backend import LibreNMSBackend
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-GOLD = ROOT / "librenms-hybrid-poc" / "hybrid-gold-v3"
-INVENTORY_PATH = GOLD / "dummy_inventory.json"
-RESOLVER_PATH = GOLD / "resolver_candidate_v5.py"
+POC = ROOT / "librenms-hybrid-poc"
+EVALUATION = POC / "hybrid-gold-v3"
+INVENTORY_PATH = EVALUATION / "dummy_inventory.json"
+RESOLVER_PATH = POC / "resolver_v5.py"
 
 
 def _load_module(name, path):

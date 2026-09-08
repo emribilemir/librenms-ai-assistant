@@ -17,6 +17,12 @@ venv/
 .env.*
 !.env.example
 
+# Runtime databases belong in a user state directory, never in the repository
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+
 # Editor and temporary files
 .idea/
 .vscode/

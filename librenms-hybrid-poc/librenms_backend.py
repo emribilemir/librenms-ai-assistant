@@ -25,11 +25,12 @@ class LibreNMSBackend:
         event_limit=20,
         event_evidence_cap=200,
     ):
-        self.base_url = (
-            base_url
-            or os.environ.get("LIBRENMS_BASE_URL")
-            or "http://192.168.64.3/api/v0"
-        ).rstrip("/")
+        configured_base_url = base_url or os.environ.get("LIBRENMS_BASE_URL")
+        if not configured_base_url:
+            raise ValueError(
+                "LIBRENMS_BASE_URL is required. Configure the read-only /api/v0 base URL first."
+            )
+        self.base_url = configured_base_url.rstrip("/")
         self.token = token or os.environ.get("LIBRENMS_TOKEN")
         if not self.token:
             raise ValueError(

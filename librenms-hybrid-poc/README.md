@@ -116,24 +116,26 @@ olarak kullanılmaz.
 | [`live_query.py`](live_query.py) | Gold planner + resolver v5 + gerçek LibreNMS backend canlı giriş noktası |
 | [`planner_v2.py`](planner_v2.py) | Structured plan schema ve strict validation |
 | [`investigation_grounding.py`](investigation_grounding.py) | Deterministic finding builder, claim/judge kontratları ve güvenli fallback |
-| [`resolver.py`](resolver.py) | Eski PoC inventory resolver'ı; compatibility ve tarihsel karşılaştırma |
+| [`resolver_v5.py`](resolver_v5.py) | Aktif structured katalog ve identity resolver'ı |
+| [`catalog_ingest.py`](catalog_ingest.py) | Aktif katalog ingest ve identity index yardımcısı |
+| [`resolver.py`](resolver.py) | Resolver v5 için compatibility identity çekirdeği |
 | [`fixtures/`](fixtures/) | PoC inventory, baseline prompt ve acceptance girdileri |
 | [`tests/`](tests/) | Planner, resolver, backend, grounding ve utility regression testleri |
-| [`hybrid-gold-v3/`](hybrid-gold-v3/) | Aktif Gold/Generated acceptance bundle ve resolver v5 |
+| [`hybrid-gold-v3/`](hybrid-gold-v3/) | Dondurulmuş Gold/Generated evaluation bundle'ı ve runtime uyumluluk girişleri |
 
 ## Hızlı offline test
 
 Repo kökünden:
 
 ```bash
-python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
+.venv/bin/python -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
 ```
 
 Bu testler gerçek Ollama veya harici LibreNMS ağı kullanmaz. Backend adapter
 testleri yalnız process içindeki localhost test sunucusunu kullanır.
 
-Güncel full discovery sonucu `90/90`, resolver'ın kendi fixture koşusu ise
-`PASS=47 FAIL=0` olarak geçmiştir. Odaklı gruplar:
+Güncel doğrulama sayıları CI çıktısında tutulur; resolver'ın ayrı fixture
+self-test'i de full discovery içinde çalışır. Odaklı gruplar:
 
 ```bash
 cd librenms-hybrid-poc
@@ -166,7 +168,7 @@ Mac Terminal'de legacy `/api/v0` token'ını process environment'a aktar:
 
 ```bash
 export LIBRENMS_TOKEN
-export LIBRENMS_BASE_URL="http://192.168.64.3/api/v0"
+export LIBRENMS_BASE_URL="http://<librenms-host>/api/v0"
 ```
 
 Ardından:
@@ -181,7 +183,7 @@ python3 librenms-hybrid-poc/live_query.py "lab-j9772a-01'de ne sorun var?"
 ```
 
 `live_query.py` explicit olarak `planner_schema="gold"`,
-`resolver_candidate_v5.py` ve `LibreNMSBackend` kullanır. Resolver yalnızca
+runtime `resolver_v5.py` ve `LibreNMSBackend` kullanır. Resolver yalnızca
 kimlik/katalog çözümü yapar. İlk `get_device(hostname=...)` çağrısından dönen
 gerçek LibreNMS `device_id`, sonraki ports/alerts/events çağrılarının kimliği
 olur; fixture `device_id` backend truth olarak kullanılmaz.

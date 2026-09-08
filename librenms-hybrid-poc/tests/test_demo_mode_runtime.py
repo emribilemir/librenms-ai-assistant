@@ -35,10 +35,11 @@ class DemoModeRuntimeTests(unittest.TestCase):
     def test_allowed_instance_starts_off_and_accepts_only_boolean_enablement(self):
         client = self.client(allowed=True)
 
-        self.assertEqual(client.get("/v1/demo-mode", headers=bearer()).json(), {"allowed": True, "enabled": False})
-        self.assertEqual(client.post("/v1/demo-mode", headers=bearer(), json={"enabled": True}).json(), {"allowed": True, "enabled": True})
-        self.assertEqual(client.post("/v1/demo-mode", headers=bearer(), json={"enabled": "true"}).status_code, 422)
-        self.assertEqual(client.post("/v1/demo-mode", headers=bearer(), json={"enabled": True, "path": "/tmp"}).status_code, 400)
+        operator = bearer(demo_control=True)
+        self.assertEqual(client.get("/v1/demo-mode", headers=operator).json(), {"allowed": True, "enabled": False})
+        self.assertEqual(client.post("/v1/demo-mode", headers=operator, json={"enabled": True}).json(), {"allowed": True, "enabled": True})
+        self.assertEqual(client.post("/v1/demo-mode", headers=operator, json={"enabled": "true"}).status_code, 422)
+        self.assertEqual(client.post("/v1/demo-mode", headers=operator, json={"enabled": True, "path": "/tmp"}).status_code, 400)
 
 
 if __name__ == "__main__":

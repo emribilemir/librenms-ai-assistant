@@ -249,6 +249,7 @@ def main():
         # it ephemeral so the fixture does not embed a reusable credential.
         secret=os.urandom(32),
         adapter=adapter,
+        allow_dev_auth=True,
     )
 
     @app.middleware("http")

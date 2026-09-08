@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RESPONDER=/opt/snmpsim-venv/bin/snmpsim-command-responder
+DEVICES_UP=/opt/snmpsim-lab/devices-up.txt
+COMMAND=("$RESPONDER" --cache-dir=/opt/snmpsim-lab/cache)
+
+while IFS='|' read -r ip host _model; do
+    [ -n "$ip" ] && [ -n "$host" ] || continue
+    COMMAND+=(--v3-engine-id auto "--data-dir=/opt/snmpsim-lab/data/$host" "--agent-udpv4-endpoint=$ip:1611")
+done < "$DEVICES_UP"
+
+exec "${COMMAND[@]}"

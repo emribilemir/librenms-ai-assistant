@@ -3,6 +3,7 @@ import path from "node:path";
 
 const css = fs.readFileSync(path.join(__dirname, "AssistantThread.module.css"), "utf8");
 const inspectorCss = fs.readFileSync(path.join(__dirname, "ProcessingInspector.module.css"), "utf8");
+const demoCss = fs.readFileSync(path.join(__dirname, "DemoControls.module.css"), "utf8");
 
 test("disabled send action is not styled as a white primary circle", () => {
   expect(css).toMatch(/\.primaryButton:disabled\s*\{[^}]*background:\s*#[0-9a-f]{6}/i);
@@ -17,11 +18,17 @@ test("composer owns one accessible focus treatment without a visible textarea ri
   expect(css).not.toMatch(/\.input\s*\{[^}]*outline:\s*none/i);
 });
 
-test("suggestion surface communicates clickability with restrained underline, hover, and keyboard focus", () => {
+test("suggestion surface communicates clickability without default or hover underlines", () => {
   expect(css).toMatch(/\.suggestion\s*\{[^}]*cursor:\s*pointer/i);
-  expect(css).toMatch(/\.suggestionTitle\s*\{[^}]*text-decoration-line:\s*underline[^}]*text-decoration-color:\s*rgba\(/i);
-  expect(css).toMatch(/\.suggestion:hover \.suggestionTitle\s*\{[^}]*color:[^}]*text-decoration-color:/i);
+  expect(css).not.toMatch(/\.suggestionTitle\s*\{[^}]*text-decoration(?:-line)?:\s*underline/i);
+  expect(css).not.toMatch(/\.suggestion:hover \.suggestionTitle\s*\{[^}]*text-decoration(?:-line)?:\s*underline/i);
   expect(css).toMatch(/\.suggestion:focus-visible\s*\{[^}]*outline:\s*2px solid/i);
+});
+
+test("demo follow-up is a whole clickable surface with an aligned trailing icon and no underline", () => {
+  expect(demoCss).toMatch(/\.question button\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/i);
+  expect(demoCss).toMatch(/\.question button:focus-visible\s*\{[^}]*outline:\s*2px solid/i);
+  expect(demoCss).not.toMatch(/\.question button:hover[^}]*text-decoration:\s*underline/i);
 });
 
 test("collapsed inspector is a compact continuation with no reserved height", () => {

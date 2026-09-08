@@ -34,7 +34,7 @@ TARGETS = [
 ]
 
 
-def bearer():
+def bearer(*, demo_control=False):
     now = int(time.time())
     payload = {
         "sub": "alice",
@@ -43,6 +43,7 @@ def bearer():
         "aud": "ai-assistant",
         "iat": now,
         "exp": now + 3600,
+        "demo_control": demo_control,
     }
     body = base64.urlsafe_b64encode(
         json.dumps(payload, separators=(",", ":")).encode()
@@ -120,9 +121,23 @@ class DemoControlRouteTests(unittest.TestCase):
             )
         client = TestClient(app)
         if enabled:
-            response = client.post("/v1/demo-mode", headers=bearer(), json={"enabled": True})
+            response = client.post("/v1/demo-mode", headers=bearer(demo_control=True), json={"enabled": True})
             self.assertEqual(response.status_code, 200)
         return client
+
+    def test_normal_read_identity_cannot_access_demo_controls(self):
+        client = self.make_client(enabled=True)
+
+        self.assertEqual(client.get("/v1/threads", headers=bearer()).status_code, 200)
+        self.assertEqual(client.get("/v1/demo-mode", headers=bearer()).status_code, 403)
+        self.assertEqual(
+            client.post(
+                "/v1/demo/scenarios",
+                headers=bearer(),
+                json={"scenario_id": "port-down", "target_id": "lab-j9772a-01"},
+            ).status_code,
+            403,
+        )
 
     def test_demo_mode_off_does_not_register_endpoints(self):
         client = self.make_client(enabled=False)
@@ -142,7 +157,7 @@ class DemoControlRouteTests(unittest.TestCase):
         runner = FakeSimulationRunner()
         client = self.make_client(enabled=True, runner=runner)
 
-        listing = client.get("/v1/demo/scenarios", headers=bearer())
+        listing = client.get("/v1/demo/scenarios", headers=bearer(demo_control=True))
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(
             {item["id"] for item in listing.json()["scenarios"]}, set(SCENARIOS)
@@ -152,7 +167,7 @@ class DemoControlRouteTests(unittest.TestCase):
         for scenario_id in SCENARIOS:
             response = client.post(
                 "/v1/demo/scenarios",
-                headers=bearer(),
+                headers=bearer(demo_control=True),
                 json={"scenario_id": scenario_id, "target_id": "lab-j9772a-01"},
             )
             self.assertEqual(response.status_code, 200)
@@ -168,12 +183,12 @@ class DemoControlRouteTests(unittest.TestCase):
 
         invalid = client.post(
             "/v1/demo/scenarios",
-            headers=bearer(),
+            headers=bearer(demo_control=True),
             json={"scenario_id": "shell-command", "target_id": "lab-j9772a-01"},
         )
         extra = client.post(
             "/v1/demo/scenarios",
-            headers=bearer(),
+            headers=bearer(demo_control=True),
             json={
                 "scenario_id": "port-down",
                 "target_id": "lab-j9772a-01",
@@ -182,7 +197,7 @@ class DemoControlRouteTests(unittest.TestCase):
         )
         hostname_override = client.post(
             "/v1/demo/scenarios",
-            headers=bearer(),
+            headers=bearer(demo_control=True),
             json={
                 "scenario_id": "port-down",
                 "target_id": "lab-j9772a-01",
@@ -191,7 +206,7 @@ class DemoControlRouteTests(unittest.TestCase):
         )
         unknown_target = client.post(
             "/v1/demo/scenarios",
-            headers=bearer(),
+            headers=bearer(demo_control=True),
             json={"scenario_id": "port-down", "target_id": "victim.example"},
         )
 
@@ -206,7 +221,7 @@ class DemoControlRouteTests(unittest.TestCase):
 
         response = client.post(
             "/v1/demo/reset",
-            headers=bearer(),
+            headers=bearer(demo_control=True),
             json={"target_id": "lab-j9772a-01"},
         )
 
@@ -223,13 +238,13 @@ class DemoControlRouteTests(unittest.TestCase):
             first = executor.submit(
                 client.post,
                 "/v1/demo/scenarios",
-                headers=bearer(),
+                headers=bearer(demo_control=True),
                 json={"scenario_id": "port-down", "target_id": "lab-j9772a-01"},
             )
             self.assertTrue(runner.started.wait(timeout=1))
             duplicate = client.post(
                 "/v1/demo/scenarios",
-                headers=bearer(),
+                headers=bearer(demo_control=True),
                 json={"scenario_id": "port-up", "target_id": "lab-j9772a-01"},
             )
             runner.release.set()

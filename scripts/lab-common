@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPOSITORY_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+LAB_ENV_FILE=${LAB_ENV_FILE:-$REPOSITORY_ROOT/.env}
+
+if [ ! -f "$LAB_ENV_FILE" ]; then
+    printf 'Lab environment file not found: %s\nCopy .env.example to .env and configure it.\n' "$LAB_ENV_FILE" >&2
+    exit 64
+fi
+
+set -a
+# shellcheck source=/dev/null
+. "$LAB_ENV_FILE"
+set +a
+
+: "${LAB_SSH_HOST:?LAB_SSH_HOST is required}"
+: "${LIBRENMS_WEB_URL:?LIBRENMS_WEB_URL is required}"
+: "${LIBRENMS_BASE_URL:?LIBRENMS_BASE_URL is required}"
+
+LAB_SSH_USER=${LAB_SSH_USER:-}
+LAB_SSH_KEY=${LAB_SSH_KEY:-}
+LAB_PHP_FPM_SERVICE=${LAB_PHP_FPM_SERVICE:-php8.4-fpm}
+LAB_SNMPSIM_UNIT=${LAB_SNMPSIM_UNIT:-librenms-snmpsim.service}
+LAB_DEVICES_UP=${LAB_DEVICES_UP:-/opt/snmpsim-lab/devices-up.txt}
+LAB_EXPECTED_UP=${LAB_EXPECTED_UP:-8}
+LAB_EXPECTED_DOWN=${LAB_EXPECTED_DOWN:-3}
+LAB_MAX_CLOCK_SKEW_SECONDS=${LAB_MAX_CLOCK_SKEW_SECONDS:-60}
+AI_BACKEND_HOST=${AI_BACKEND_HOST:-127.0.0.1}
+AI_BACKEND_PORT=${AI_BACKEND_PORT:-8765}
+AI_DEMO_MODE_ALLOWED=${AI_DEMO_MODE_ALLOWED:-0}
+AI_CHAT_DB=${AI_CHAT_DB:-${XDG_STATE_HOME:-$HOME/.local/state}/librenms-ai-assistant/chat.sqlite3}
+AI_PYTHON=${AI_PYTHON:-$REPOSITORY_ROOT/.venv/bin/python}
+AI_LAUNCHD_LABEL=${AI_LAUNCHD_LABEL:-local.librenms.ai-assistant}
+AI_BACKEND_HEALTH_URL=${AI_BACKEND_HEALTH_URL:-http://$AI_BACKEND_HOST:$AI_BACKEND_PORT/healthz}
+
+SSH_DESTINATION=$LAB_SSH_HOST
+if [ -n "$LAB_SSH_USER" ]; then
+    SSH_DESTINATION=$LAB_SSH_USER@$LAB_SSH_HOST
+fi
+SSH_ARGS=(-o BatchMode=yes -o ConnectTimeout=8)
+if [ -n "$LAB_SSH_KEY" ]; then
+    SSH_ARGS+=(-i "$LAB_SSH_KEY")
+fi
+
+lab_ssh() {
+    ssh "${SSH_ARGS[@]}" "$SSH_DESTINATION" "$1"
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || {
+        printf 'Required command not found: %s\n' "$1" >&2
+        exit 69
+    }
+}
+
+clock_skew_seconds() {
+    local local_epoch remote_epoch delta
+    local_epoch=$(date +%s)
+    remote_epoch=$(lab_ssh 'date +%s') || return 1
+    delta=$((local_epoch - remote_epoch))
+    if [ "$delta" -lt 0 ]; then delta=$((-delta)); fi
+    printf '%s\n' "$delta"
+}

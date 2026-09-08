@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  python-and-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: librenms-hybrid-poc/requirements-chat-service.txt
+      - name: Install service test dependencies
+        run: python3 -m pip install -r librenms-hybrid-poc/requirements-chat-service.txt
+      - name: Offline Python suite
+        run: python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
+      - name: Plugin contract suite
+        run: python3 -m unittest discover -s integrations/librenms/AiAssistant/tests -p 'test_*.py' -v
+      - name: Repository secret-pattern guard
+        run: |
+          ! git grep -nE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|X-Auth-Token:[[:space:]]*[A-Za-z0-9_-]{16,})' -- ':!docs/history/**' ':!docs/lab/**'
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chat-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: chat-ui/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm test -- --runInBand
+      - name: Production build
+        run: npm run build

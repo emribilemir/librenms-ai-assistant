@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -40,6 +41,39 @@ class FixtureMutationTests(unittest.TestCase):
                 "1.2.3|2|2\n1.2.3|2|2\n", "1.2.3", "2", "1"
             )
 
+    def test_remote_fixture_io_uses_bounded_sudo_for_mixed_lab_ownership(self):
+        target = simulation_run.TARGETS["lab-j9772a-02"]
+        with patch.object(
+            simulation_run,
+            "ssh",
+            return_value=SimpleNamespace(stdout="fixture body\n", returncode=0),
+        ) as ssh:
+            self.assertEqual(simulation_run.read_fixture(target), "fixture body\n")
+            simulation_run.write_fixture(target, "replacement\n")
+
+        read_call, write_call = ssh.call_args_list
+        self.assertEqual(read_call.args, (f"sudo -n cat {target.fixture}",))
+        self.assertIn("sudo -n sh -c", write_call.args[0])
+        self.assertIn(target.fixture, write_call.args[0])
+        self.assertEqual(write_call.kwargs["input_text"], "replacement\n")
+
+    def test_offline_fixture_moves_use_bounded_sudo(self):
+        target = simulation_run.TARGETS["lab-j9772a-02"]
+        with (
+            patch.object(simulation_run, "fixture_state", side_effect=["online", "offline"]),
+            patch.object(simulation_run, "ssh", return_value=SimpleNamespace(returncode=0)) as ssh,
+        ):
+            simulation_run.take_device_offline(target)
+            self.assertTrue(simulation_run.restore_online_fixture(target))
+
+        self.assertEqual(
+            [call.args[0] for call in ssh.call_args_list],
+            [
+                f"sudo -n mv {target.fixture} {target.offline_fixture}",
+                f"sudo -n mv {target.offline_fixture} {target.fixture}",
+            ],
+        )
+
 
 class ProcessSelectionTests(unittest.TestCase):
     def test_accepts_one_numeric_responder_pid(self):
@@ -50,6 +84,30 @@ class ProcessSelectionTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(RuntimeError, "exactly one responder"):
                     simulation_run.single_responder_pid(value)
+
+    def test_stop_responder_uses_the_boot_persistent_systemd_unit(self):
+        with (
+            patch.object(simulation_run, "systemd_responder_available", return_value=True),
+            patch.object(simulation_run, "responder_pid", side_effect=[24260, None]),
+            patch.object(simulation_run, "ssh", return_value=SimpleNamespace(returncode=0)) as ssh,
+        ):
+            stopped = simulation_run.stop_responder()
+
+        self.assertEqual(stopped, 24260)
+        ssh.assert_called_once_with("sudo -n systemctl stop librenms-snmpsim.service")
+
+    def test_start_responder_uses_systemd_and_waits_for_the_target(self):
+        target = simulation_run.TARGETS["lab-j9772a-01"]
+        with (
+            patch.object(simulation_run, "systemd_responder_available", return_value=True),
+            patch.object(simulation_run, "responder_pid", side_effect=[None, 24261]),
+            patch.object(simulation_run, "snmp_available", return_value=True),
+            patch.object(simulation_run, "ssh", return_value=SimpleNamespace(returncode=0)) as ssh,
+        ):
+            started = simulation_run.start_responder(target, target_online=True)
+
+        self.assertEqual(started, 24261)
+        ssh.assert_called_once_with("sudo -n systemctl start librenms-snmpsim.service")
 
 
 class EventSelectionTests(unittest.TestCase):
@@ -196,9 +254,26 @@ class ScenarioManifestTests(unittest.TestCase):
                         "port-down-up-event",
                         "investigation-incident",
                     ],
-                }
+                },
+                {
+                    "id": "lab-j9772a-02",
+                    "hostname": "lab-j9772a-02",
+                    "device_id": 2,
+                    "supported_scenarios": [
+                        "port-down",
+                        "port-up",
+                        "location-change",
+                        "device-down-up",
+                        "port-down-up-event",
+                        "investigation-incident",
+                    ],
+                },
             ],
         )
+        self.assertTrue(all(
+            scenario["supported_target_ids"] == ["lab-j9772a-01", "lab-j9772a-02"]
+            for scenario in metadata["scenarios"]
+        ))
         self.assertEqual(
             metadata["scenarios"][-1]["example_question"],
             "lab-j9772a-01 cihazında şu an ne sorun var, son 24 saatte neler olmuş?",
@@ -260,6 +335,28 @@ class ScenarioManifestTests(unittest.TestCase):
                 "example_question": "lab-j9772a-01 Port 2 ne durumda?",
             },
         )
+
+    def test_execute_scenario_propagates_the_second_allowlisted_target(self):
+        runner = unittest.mock.Mock(return_value=(False, "second verified", []))
+        with (
+            patch.object(simulation_run, "preflight") as preflight,
+            patch.object(simulation_run, "ensure_online") as ensure_online,
+            patch.object(simulation_run, "api_backend", return_value="backend"),
+            patch.dict(simulation_run.SCENARIO_RUNNERS, {"port-up": runner}, clear=True),
+            patch.object(
+                simulation_run,
+                "load_scenarios",
+                return_value={"port-up": {"example_ai_question": "{hostname} Port 2 ne durumda?"}},
+            ),
+        ):
+            result = simulation_run.execute_scenario("port-up", "lab-j9772a-02")
+
+        second = simulation_run.TARGETS["lab-j9772a-02"]
+        preflight.assert_called_once_with(second)
+        ensure_online.assert_called_once_with(second)
+        runner.assert_called_once_with("backend", second)
+        self.assertEqual(result["target_id"], "lab-j9772a-02")
+        self.assertEqual(result["example_question"], "lab-j9772a-02 Port 2 ne durumda?")
 
     def test_investigation_incident_returns_real_verified_contract(self):
         target = simulation_run.TARGETS["lab-j9772a-01"]
@@ -333,6 +430,7 @@ class ScenarioManifestTests(unittest.TestCase):
 
         with (
             patch.object(simulation_run, "preflight"),
+            patch.object(simulation_run, "ensure_online"),
             patch.object(simulation_run, "api_backend", return_value="backend"),
             patch.dict(
                 simulation_run.SCENARIO_RUNNERS,

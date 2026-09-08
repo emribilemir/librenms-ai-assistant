@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=lab-common
+. "$SCRIPT_DIR/lab-common"
+failures=0
+
+check() {
+    label=$1
+    shift
+    if "$@" >/dev/null 2>&1; then printf 'PASS  %s\n' "$label"; else printf 'FAIL  %s\n' "$label"; failures=$((failures + 1)); fi
+}
+
+check "VM SSH" lab_ssh true
+clock_skew=$(clock_skew_seconds 2>/dev/null) || clock_skew="unavailable"
+if [ "$clock_skew" != "unavailable" ] && [ "$clock_skew" -le "$LAB_MAX_CLOCK_SKEW_SECONDS" ]; then
+    printf 'PASS  VM clock skew=%ss\n' "$clock_skew"
+else
+    printf 'FAIL  VM clock skew=%ss (max %ss)\n' "$clock_skew" "$LAB_MAX_CLOCK_SKEW_SECONDS"
+    failures=$((failures + 1))
+fi
+for service in nginx mariadb "$LAB_PHP_FPM_SERVICE" librenms-scheduler.timer "$LAB_SNMPSIM_UNIT"; do
+    check "service $service active" lab_ssh "systemctl is-active --quiet $service"
+done
+check "SNMPSim enabled at boot" lab_ssh "systemctl is-enabled --quiet $LAB_SNMPSIM_UNIT"
+check "one unprivileged SNMPSim process" lab_ssh "test \"\$(pgrep -u librenms -f snmpsim-command-responder | wc -l)\" -eq 1"
+check "LibreNMS web health" curl --fail --silent --show-error --max-time 5 "$LIBRENMS_WEB_URL"
+check "AI backend health" curl --fail --silent --show-error --max-time 5 "$AI_BACKEND_HEALTH_URL"
+check "launchd backend loaded" launchctl print "gui/$(id -u)/$AI_LAUNCHD_LABEL"
+
+if [ -n "${LIBRENMS_TOKEN:-}" ]; then
+    check "LibreNMS read-only API health" curl --fail --silent --show-error --max-time 5 -H "X-Auth-Token: $LIBRENMS_TOKEN" "$LIBRENMS_BASE_URL/devices?limit=1"
+    inventory_counts=$(curl --fail --silent --show-error --max-time 8 -H "X-Auth-Token: $LIBRENMS_TOKEN" "$LIBRENMS_BASE_URL/devices?limit=100" | python3 -c 'import json,sys; rows=json.load(sys.stdin).get("devices", []); print(sum(str(row.get("status")).lower() in ("1", "true", "up") for row in rows), sum(str(row.get("status")).lower() in ("0", "false", "down") for row in rows))' 2>/dev/null) || inventory_counts=""
+    if [ "$inventory_counts" = "$LAB_EXPECTED_UP $LAB_EXPECTED_DOWN" ]; then
+        printf 'PASS  baseline-up inventory count=%s\n' "$LAB_EXPECTED_UP"
+        printf 'PASS  baseline-down inventory count=%s\n' "$LAB_EXPECTED_DOWN"
+    else
+        printf 'FAIL  baseline inventory counts (expected up=%s down=%s, got %s)\n' "$LAB_EXPECTED_UP" "$LAB_EXPECTED_DOWN" "${inventory_counts:-unavailable}"
+        failures=$((failures + 1))
+    fi
+else
+    printf 'FAIL  LibreNMS read-only API health (LIBRENMS_TOKEN missing)\n'
+    failures=$((failures + 1))
+fi
+
+exit "$failures"

@@ -56,3 +56,9 @@ class IdentityVerifierTests(unittest.TestCase):
             self.verifier.verify(token(claims(iat=self.now - 3600, exp=self.now)))
         with self.assertRaises(AuthError):
             self.verifier.verify(token(claims(iat=self.now, exp=self.now + 3599)))
+
+    def test_keeps_signed_demo_control_capability(self):
+        identity = self.verifier.verify(
+            token(claims(iat=self.now, exp=self.now + 3600, demo_control=True))
+        )
+        self.assertTrue(identity.demo_control)

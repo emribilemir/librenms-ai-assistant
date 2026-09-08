@@ -25,12 +25,23 @@ named target and has a rollback window.
 
    ```sh
    export AI_ASSISTANT_SHARED_SECRET='replace-with-exactly-32-ASCII-characters'
-   cd /path/to/isbaklibrenms/librenms-hybrid-poc
-   uvicorn chat_service.app:create_app --factory --host 192.168.64.1 --port 8765
+   cd /path/to/isbaklibrenms
+   cp .env.example .env
+   # Fill the placeholders, then use the reproducible launchd entrypoint:
+   ./scripts/lab-up
    ```
+
+   The launcher resolves the configured Python runtime and executes
+   `uvicorn chat_service.app:create_app --factory`; bind host, port and state
+   database come from `.env`.
 
    Before a live rollout, run `php -l` on the three deployed PHP hook files;
    PHP CLI was not available for the offline repository check.
+
+   `AI_DEV_AUTH=1` is intentionally insufficient in the deployed app factory.
+   The standalone frontend harness opts into development auth explicitly;
+   production plugin requests must carry a valid signed identity. Demo mutation
+   additionally requires the signed `demo_control` operator capability.
 
 ## Authorized installation sequence
 

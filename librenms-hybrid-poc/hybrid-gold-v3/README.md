@@ -1,8 +1,8 @@
 # LibreNMS Hybrid Gold v3
 
 `hybrid-gold-v3`, LibreNMS doğal dil hybrid PoC'sinin kaynak doğruluğu
-düzeltilmiş acceptance varlıklarını, synthetic backend'ini ve resolver
-adaylarını içerir.
+düzeltilmiş evaluation/acceptance varlıklarını ve synthetic backend'ini içerir.
+Üretim giriş noktaları bu klasörden yüklenmez.
 
 ## Veri kaynağı
 
@@ -43,11 +43,10 @@ yerel çıktılardır ve Git tarafından izlenmez.
 
 - [`resolver_candidate_v4.py`](resolver_candidate_v4.py): dondurulmuş,
   doğrulanmış compatibility resolver'ı.
-- [`catalog_ingest.py`](catalog_ingest.py): model adlarından structured katalog
-  facet'leri ve identity variant'ları üretir.
-- [`resolver_candidate_v5.py`](resolver_candidate_v5.py): v4'ün güvenli kimlik
-  davranışını korur; structured `brand`, `family`, `port_count`, `poe`
-  filtrelerini uygular; UNKNOWN ve ambiguity bilgisini kaybetmez.
+- [`catalog_ingest.py`](catalog_ingest.py): evaluation harness'leri için runtime
+  `../catalog_ingest.py` yardımcısına uyumluluk girişi.
+- [`resolver_candidate_v5.py`](resolver_candidate_v5.py): evaluation
+  harness'leri için aktif `../resolver_v5.py` girişine uyumluluk katmanı.
 
 Resolver v5 serbest Türkçe intent çözmez. Doğal dil planner'a, structured
 filtreleme resolver'a aittir.

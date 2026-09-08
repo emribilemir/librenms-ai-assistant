@@ -20,6 +20,7 @@ class AuthError(ValueError):
 class Identity:
     sub: str
     name: str
+    demo_control: bool = False
 
 
 _BASE64URL = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -70,4 +71,8 @@ class IdentityVerifier:
         now = self._clock()
         if issued > now + 30 or expires <= now:
             raise AuthError("invalid token")
-        return Identity(sub=sub, name=name)
+        return Identity(
+            sub=sub,
+            name=name,
+            demo_control=payload.get("demo_control") is True,
+        )

@@ -6,6 +6,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -296,6 +297,20 @@ class SuggestionRouteTests(unittest.TestCase):
             response.json()["suggestions"][0]["prompt"],
             "lab-j9775a-01 modeli ne?",
         )
+
+    def test_environment_flag_alone_cannot_enable_development_auth(self):
+        with patch.dict(os.environ, {"AI_DEV_AUTH": "1"}, clear=False):
+            client = self.make_client(SuggestionAdapter([]))
+        self.assertEqual(client.get("/v1/threads").status_code, 401)
+
+        with patch.dict(os.environ, {"AI_DEV_AUTH": "1"}, clear=False):
+            app = create_app(
+                os.path.join(self.directory.name, "standalone.sqlite3"),
+                secret=SECRET,
+                adapter=SuggestionAdapter([]),
+                allow_dev_auth=True,
+            )
+        self.assertEqual(TestClient(app).get("/v1/threads").status_code, 200)
 
     def test_devices_route_returns_only_bounded_live_inventory_with_semantic_status(self):
         client = self.make_client(

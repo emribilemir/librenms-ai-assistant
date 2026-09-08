@@ -577,6 +577,71 @@ test("structured alert empty state renders no table and ignores final developer 
   expect(screen.queryByText("developer fallback that must stay hidden")).not.toBeInTheDocument();
 });
 
+test("structured event metadata renders a compact timeline with transition states and one trusted action", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "2026-09-08 08:12:03 [2] ifOperStatus: up -> down" }],
+    createdAt: new Date(),
+    metadata: { custom: {
+      structuredResult: {
+        kind: "events",
+        device: { device_id: 7, hostname: "lab-j9772a-01" },
+        events: [{
+          device_id: 7,
+          event_id: 203,
+          timestamp: "2026-09-08 08:12:03",
+          severity: "2",
+          message: "ifOperStatus: up -> down",
+          type: "interface",
+          reference: "2",
+        }],
+      },
+      navigationTargets: [{ kind: "events", label: "Cihaz eventlerini aç", entity_id: 7, href: "/device/7/logs/eventlog" }],
+    } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.queryByText(/\[2\]/)).not.toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "lab-j9772a-01 eventleri" })).toBeVisible();
+  expect(screen.getByText("8 Eyl 2026 08:12:03")).toBeVisible();
+  expect(screen.getByText("Seviye 2")).toHaveAttribute("data-severity", "warning");
+  expect(screen.getByText("UP")).toHaveAttribute("data-state", "up");
+  expect(screen.getByText("DOWN")).toHaveAttribute("data-state", "down");
+  expect(screen.getByRole("link", { name: /LibreNMS'te aç/ })).toHaveAttribute("href", "/device/7/logs/eventlog");
+  expect(screen.queryByRole("link", { name: "Cihaz eventlerini aç" })).not.toBeInTheDocument();
+});
+
+test("structured event empty state remains useful and hides fallback text", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "developer fallback that must stay hidden" }],
+    createdAt: new Date(),
+    metadata: { custom: {
+      structuredResult: { kind: "events", device: { device_id: 7, hostname: "lab-j9772a-01" }, events: [] },
+      navigationTargets: [{ kind: "events", label: "Cihaz eventlerini aç", entity_id: 7, href: "/device/7/logs/eventlog" }],
+    } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.getByText("Event bulunmuyor.")).toBeVisible();
+  expect(screen.getByRole("link", { name: /LibreNMS'te aç/ })).toBeVisible();
+  expect(screen.queryByText("developer fallback that must stay hidden")).not.toBeInTheDocument();
+});
+
 test("completed messages place copy and one accessible details disclosure in a compact action row", () => {
   const inspection = { route: "ports", tools: [], findings: [], synthesis_llm_called: false, navigation_targets: [] };
   const messages = [{

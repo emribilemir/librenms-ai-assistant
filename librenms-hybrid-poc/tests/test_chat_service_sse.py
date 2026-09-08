@@ -16,9 +16,11 @@ from chat_service.app import create_app
 SECRET = b"0123456789abcdef0123456789abcdef"
 
 
-def bearer(sub="alice"):
+def bearer(sub="alice", *, demo_control=False):
     now = int(time.time())
     payload = {"sub": sub, "name": sub, "iss": "librenms", "aud": "ai-assistant", "iat": now, "exp": now + 3600}
+    if demo_control:
+        payload["demo_control"] = True
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=")
     sig = base64.urlsafe_b64encode(hmac.new(SECRET, body, hashlib.sha256).digest()).rstrip(b"=")
     return {"Authorization": "Bearer v1." + body.decode() + "." + sig.decode()}
@@ -171,7 +173,7 @@ class SseServiceTests(unittest.TestCase):
                 secret=SECRET,
                 adapter=InspectionAdapter(),
             ))
-        headers = bearer()
+        headers = bearer(demo_control=True)
         self.assertEqual(
             client.post("/v1/demo-mode", headers=headers, json={"enabled": True}).status_code,
             200,

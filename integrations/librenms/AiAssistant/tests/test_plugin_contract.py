@@ -63,6 +63,7 @@ class AiAssistantPluginContractTests(unittest.TestCase):
         self.assertIn("strlen($secret) !== 32", page)
         self.assertIn("$settings['shared_secret']", page)
         self.assertNotIn("base64_decode", page)
+        self.assertIn("'demo_control' => $user->hasRole('admin')", page)
 
     def test_reference_plugin_token_roundtrips_through_the_current_python_verifier(self) -> None:
         """A signer drift must make an independently built plugin token unverifiable."""

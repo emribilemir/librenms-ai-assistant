@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=lab-common
+. "$SCRIPT_DIR/lab-common"
+require_command ssh
+require_command curl
+require_command rsync
+
+if [ -n "${LAB_UTM_VM_ID:-}" ]; then
+    require_command "${LAB_UTM_CLI:-utmctl}"
+    "${LAB_UTM_CLI:-utmctl}" start "$LAB_UTM_VM_ID" >/dev/null 2>&1 || true
+fi
+
+connected=0
+for _attempt in $(seq 1 "${LAB_SSH_ATTEMPTS:-30}"); do
+    if lab_ssh 'true' >/dev/null 2>&1; then connected=1; break; fi
+    sleep 2
+done
+if [ "$connected" -ne 1 ]; then
+    printf 'VM SSH did not become reachable within the bounded startup window.\n' >&2
+    exit 70
+fi
+
+clock_skew=$(clock_skew_seconds)
+if [ "$clock_skew" -gt "$LAB_MAX_CLOCK_SKEW_SECONDS" ]; then
+    if [ "${LAB_REPAIR_CLOCK_SKEW:-1}" != "1" ]; then
+        printf 'VM clock skew is %ss; enable LAB_REPAIR_CLOCK_SKEW or repair the guest clock.\n' "$clock_skew" >&2
+        exit 70
+    fi
+    host_epoch=$(date +%s)
+    lab_ssh "sudo -n date -u -s '@$host_epoch' >/dev/null"
+fi
+
+UNIT_SOURCE="$REPOSITORY_ROOT/ops/systemd/librenms-snmpsim.service"
+RESPONDER_SOURCE="$REPOSITORY_ROOT/ops/systemd/run-snmpsim"
+ssh "${SSH_ARGS[@]}" "$SSH_DESTINATION" \
+    'sudo -n install -m 0644 /dev/stdin /etc/systemd/system/librenms-snmpsim.service' < "$UNIT_SOURCE"
+ssh "${SSH_ARGS[@]}" "$SSH_DESTINATION" \
+    'sudo -n install -o root -g root -m 0755 /dev/stdin /opt/snmpsim-lab/run-systemd.sh' < "$RESPONDER_SOURCE"
+lab_ssh "sudo -n systemctl daemon-reload; if ! systemctl is-active --quiet $LAB_SNMPSIM_UNIT; then sudo -n -u librenms pkill -f '^/opt/snmpsim-venv/bin/python3 /opt/snmpsim-venv/bin/snmpsim-command-responder' || true; fi"
+lab_ssh "sudo -n systemctl daemon-reload && sudo -n systemctl enable --now nginx mariadb $LAB_PHP_FPM_SERVICE librenms-scheduler.timer $LAB_SNMPSIM_UNIT"
+lab_ssh "cd /opt/librenms && while IFS='|' read -r _ip host _model; do sudo -n -u librenms ./poller.php -h \"\$host\" >/dev/null; done < '$LAB_DEVICES_UP'"
+
+LAUNCH_AGENTS=$HOME/Library/LaunchAgents
+RUNTIME_ROOT=${AI_RUNTIME_ROOT:-$HOME/Library/Application Support/LibreNMSAiAssistant}
+RUNTIME_PYTHON=${AI_RUNTIME_PYTHON:-$RUNTIME_ROOT/.venv/bin/python3}
+RUNTIME_ENV=$RUNTIME_ROOT/runtime.env
+LOG_ROOT=${XDG_STATE_HOME:-$HOME/.local/state}/librenms-ai-assistant
+PLIST=$LAUNCH_AGENTS/$AI_LAUNCHD_LABEL.plist
+install -d -m 0755 "$LAUNCH_AGENTS"
+install -d -m 0700 "$RUNTIME_ROOT" "$RUNTIME_ROOT/scripts" "$LOG_ROOT" "$(dirname -- "$AI_CHAT_DB")"
+rsync -a --delete \
+    --exclude '.env*' --exclude '__pycache__/' --exclude 'tests/' \
+    --exclude '*.sqlite3*' --exclude '*.db' \
+    "$REPOSITORY_ROOT/librenms-hybrid-poc/" "$RUNTIME_ROOT/librenms-hybrid-poc/"
+rsync -a --delete --exclude '__pycache__/' \
+    "$REPOSITORY_ROOT/simulation/" "$RUNTIME_ROOT/simulation/"
+install -m 0755 "$SCRIPT_DIR/lab-common" "$SCRIPT_DIR/lab-backend" "$RUNTIME_ROOT/scripts/"
+install -m 0600 "$LAB_ENV_FILE" "$RUNTIME_ENV"
+{
+    printf '\nLAB_SSH_HOST=%q\n' "$LAB_SSH_HOST"
+    printf 'LAB_SSH_USER=%q\n' "$LAB_SSH_USER"
+    printf 'LIBRENMS_WEB_URL=%q\n' "$LIBRENMS_WEB_URL"
+    printf 'AI_BACKEND_HOST=%q\n' "$AI_BACKEND_HOST"
+    printf 'AI_BACKEND_PORT=%q\n' "$AI_BACKEND_PORT"
+    printf 'AI_DEMO_MODE_ALLOWED=%q\n' "$AI_DEMO_MODE_ALLOWED"
+    printf 'AI_CHAT_DB=%q\n' "$AI_CHAT_DB"
+    printf 'AI_PYTHON=%q\n' "$RUNTIME_PYTHON"
+    printf 'AI_LAUNCHD_LABEL=%q\n' "$AI_LAUNCHD_LABEL"
+} >> "$RUNTIME_ENV"
+test -x "$RUNTIME_PYTHON" || { printf 'Preprovisioned runtime Python is not executable: %s\n' "$RUNTIME_PYTHON" >&2; exit 69; }
+
+xml_escape() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
+escaped_label=$(xml_escape "$AI_LAUNCHD_LABEL")
+escaped_backend=$(xml_escape "$RUNTIME_ROOT/scripts/lab-backend")
+escaped_root=$(xml_escape "$RUNTIME_ROOT")
+escaped_env=$(xml_escape "$RUNTIME_ENV")
+escaped_stdout=$(xml_escape "$LOG_ROOT/backend.stdout.log")
+escaped_stderr=$(xml_escape "$LOG_ROOT/backend.stderr.log")
+
+PLIST_TMP=$(mktemp "${TMPDIR:-/tmp}/librenms-ai.XXXXXX")
+trap 'rm -f "$PLIST_TMP"' EXIT
+{
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>'
+    printf '<key>Label</key><string>%s</string>\n' "$escaped_label"
+    printf '<key>ProgramArguments</key><array><string>%s</string></array>\n' "$escaped_backend"
+    printf '<key>WorkingDirectory</key><string>%s</string>\n' "$escaped_root"
+    printf '<key>EnvironmentVariables</key><dict><key>LAB_ENV_FILE</key><string>%s</string></dict>\n' "$escaped_env"
+    printf '<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>\n'
+    printf '<key>StandardOutPath</key><string>%s</string>\n' "$escaped_stdout"
+    printf '<key>StandardErrorPath</key><string>%s</string>\n' "$escaped_stderr"
+    printf '%s\n' '</dict></plist>'
+} > "$PLIST_TMP"
+plutil -lint "$PLIST_TMP" >/dev/null
+install -m 0600 "$PLIST_TMP" "$PLIST"
+launchctl bootout "gui/$(id -u)/$AI_LAUNCHD_LABEL" >/dev/null 2>&1 || true
+if ! launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null; then
+    sleep 1
+    launchctl bootstrap "gui/$(id -u)" "$PLIST"
+fi
+launchctl kickstart -k "gui/$(id -u)/$AI_LAUNCHD_LABEL"
+
+for _attempt in $(seq 1 "${AI_HEALTH_ATTEMPTS:-30}"); do
+    if curl --fail --silent --max-time 3 "$AI_BACKEND_HEALTH_URL" >/dev/null; then
+        exec "$SCRIPT_DIR/lab-status"
+    fi
+    sleep 1
+done
+printf 'AI backend health check failed: %s\n' "$AI_BACKEND_HEALTH_URL" >&2
+exit 70

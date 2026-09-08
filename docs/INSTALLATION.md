@@ -4,6 +4,23 @@
 
 macOS ve UTM burada doğrulanmış referans ortamdır; zorunlu değildir. SSH istemcisi olan başka bir masaüstü sistemi ve desteklenen bir Debian/Ubuntu sunucusu da kullanılabilir.
 
+Mevcut lab kurulmuşsa günlük operasyon için bu belgedeki tarihsel alt adımları
+tek tek tekrarlamayın. Repo kökünde `.env.example` dosyasını `.env` olarak
+kopyalayıp ortamınıza göre doldurun ve şu canonical girişleri kullanın:
+
+```bash
+./scripts/lab-up
+./scripts/lab-status
+./scripts/lab-down
+```
+
+Bu komutlar internetten paket indirmez. `lab-up`, guest'teki SNMPSim sürecini
+`ops/systemd/librenms-snmpsim.service` ile `librenms` kullanıcısı altında ve
+boot-persistent biçimde çalıştırır; Mac backend'ini de yeniden üretilebilir bir
+launchd tanımıyla başlatır. `lab-down`, LibreNMS çekirdek servislerini açık
+bırakarak backend ve responder'ı durdurur; VM ancak
+`LAB_STOP_VM_ON_DOWN=1` açıkça ayarlanırsa kapatılır.
+
 Referans lab, UTM içinde çalışan Debian 13 ARM64 VM üzerine native LibreNMS
 kurulumudur. Aşağıdaki komutlarda `<linux-kullanicisi>`, `<vm-ip>` ve
 `<mac-ip-veya-subnet>` alanlarını kendi ortamınıza göre değiştirin. Örnek IP,

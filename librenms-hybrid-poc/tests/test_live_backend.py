@@ -38,7 +38,7 @@ def load_live_backend_module():
     return load_module("librenms_backend_test", BACKEND_PATH)
 
 
-resolver_v5 = load_module("resolver_v5_live_test", GOLD / "resolver_candidate_v5.py")
+resolver_v5 = load_module("resolver_v5_live_test", POC / "resolver_v5.py")
 with (GOLD / "dummy_inventory.json").open(encoding="utf-8") as stream:
     INVENTORY = json.load(stream)
 
@@ -247,6 +247,13 @@ class LocalApiServer:
 
 
 class LibreNMSBackendContractTests(unittest.TestCase):
+    def test_base_url_is_required_when_environment_is_not_configured(self):
+        backend_mod = load_live_backend_module()
+
+        with patch.dict(os.environ, {"LIBRENMS_TOKEN": "test-token"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "LIBRENMS_BASE_URL"):
+                backend_mod.LibreNMSBackend()
+
     def test_list_devices_normalizes_status_and_records_one_read_only_call(self):
         backend_mod = load_live_backend_module()
         backend = backend_mod.LibreNMSBackend(

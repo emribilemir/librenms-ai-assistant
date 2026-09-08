@@ -100,8 +100,27 @@ function safeStructuredAlertResult(value) {
   return { kind: "alerts", device, alerts };
 }
 
+function safeStructuredEventResult(value) {
+  if (!value || value.kind !== "events" || typeof value.device !== "object" || !Array.isArray(value.events)) return null;
+  const deviceId = positiveInteger(value.device.device_id);
+  if (!deviceId) return null;
+  const device = { device_id: deviceId, hostname: boundedText(value.device.hostname, 160) };
+  const events = value.events.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || positiveInteger(candidate.device_id) !== deviceId) return [];
+    const row = { device_id: deviceId };
+    const eventId = positiveInteger(candidate.event_id);
+    if (eventId) row.event_id = eventId;
+    for (const [field, limit] of [["timestamp", 64], ["severity", 32], ["message", 500], ["type", 80], ["reference", 120]]) {
+      const safe = boundedText(candidate[field], limit);
+      if (safe) row[field] = safe;
+    }
+    return [row];
+  }).slice(0, 24);
+  return { kind: "events", device, events };
+}
+
 function safeStructuredResult(value) {
-  return safeStructuredPortResult(value) || safeStructuredAlertResult(value);
+  return safeStructuredPortResult(value) || safeStructuredAlertResult(value) || safeStructuredEventResult(value);
 }
 
 function titleCaseStatus(value) {
@@ -199,12 +218,85 @@ function StructuredAlertResult({ result, navigationTargets }) {
   );
 }
 
+function eventSeverity(value) {
+  const numeric = /^\d+$/.test(value || "") ? Number(value) : null;
+  if (numeric !== null) {
+    if (numeric >= 3) return { label: `Seviye ${numeric}`, semantic: "critical" };
+    if (numeric === 2) return { label: "Seviye 2", semantic: "warning" };
+    return { label: `Seviye ${numeric}`, semantic: "info" };
+  }
+  return alertSeverity(value);
+}
+
+function formatEventTimestamp(value) {
+  if (!value) return "Zaman bilgisi yok";
+  const simple = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (simple) {
+    const [, year, month, day, hour, minute, second = "00"] = simple;
+    const monthNames = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+    const monthLabel = monthNames[Number(month) - 1];
+    if (monthLabel) return `${Number(day)} ${monthLabel} ${year} ${hour}:${minute}:${second}`;
+  }
+  return value;
+}
+
+function EventMessage({ message }) {
+  const transition = /^ifOperStatus:\s*(up|down)\s*->\s*(up|down)$/i.exec(message || "");
+  if (!transition) return <p className={styles.eventMessage}>{message || "Mesaj belirtilmemiş"}</p>;
+  const from = transition[1].toLowerCase();
+  const to = transition[2].toLowerCase();
+  return (
+    <div className={styles.eventTransition} aria-label={`ifOperStatus ${from} durumundan ${to} durumuna geçti`}>
+      <span>ifOperStatus</span>
+      <strong data-state={from}>{from.toUpperCase()}</strong>
+      <ArrowRight size={13} aria-hidden="true" />
+      <strong data-state={to}>{to.toUpperCase()}</strong>
+    </div>
+  );
+}
+
+function StructuredEventResult({ result, navigationTargets }) {
+  const targets = safeNavigationTargets(navigationTargets);
+  const expectedHref = `/device/${result.device.device_id}/logs/eventlog`;
+  const target = targets.find((candidate) => candidate.kind === "events" && candidate.entity_id === result.device.device_id && candidate.href === expectedHref);
+  const hostname = result.device.hostname || `Cihaz ${result.device.device_id}`;
+  return (
+    <section className={styles.structuredResult} data-slot="assistant-answer">
+      <div className={styles.eventHeading}>
+        <div>
+          <p className={styles.structuredTitle}>{hostname}</p>
+          {result.events.length ? <p className={styles.eventCount}>{result.events.length} event</p> : null}
+        </div>
+        {target ? <a className={styles.inlineResultAction} href={target.href} target="_blank" rel="noopener noreferrer">LibreNMS'te aç<ExternalLink size={12} aria-hidden="true" /></a> : null}
+      </div>
+      {result.events.length ? (
+        <ol className={styles.eventList} aria-label={`${hostname} eventleri`}>
+          {result.events.map((event, index) => {
+            const severity = eventSeverity(event.severity);
+            return (
+              <li key={event.event_id || `${event.timestamp || "event"}-${index}`}>
+                <div className={styles.eventMeta}>
+                  <time>{formatEventTimestamp(event.timestamp)}</time>
+                  <span data-severity={severity.semantic}>{severity.label}</span>
+                  {event.event_id ? <span>#{event.event_id}</span> : null}
+                </div>
+                <EventMessage message={event.message} />
+              </li>
+            );
+          })}
+        </ol>
+      ) : <p className={styles.alertEmpty}>Event bulunmuyor.</p>}
+    </section>
+  );
+}
+
 function AssistantText() {
   const structuredValue = useAuiState((state) => state.message.metadata?.custom?.structuredResult);
   const structuredResult = safeStructuredResult(structuredValue);
   const navigationTargets = useAuiState((state) => state.message.metadata?.custom?.navigationTargets);
   if (structuredResult?.kind === "ports") return <StructuredPortResult result={structuredResult} navigationTargets={navigationTargets} />;
   if (structuredResult?.kind === "alerts") return <StructuredAlertResult result={structuredResult} navigationTargets={navigationTargets} />;
+  if (structuredResult?.kind === "events") return <StructuredEventResult result={structuredResult} navigationTargets={navigationTargets} />;
   return <div data-slot="assistant-answer"><MarkdownTextPrimitive smooth defer className={styles.markdown} /></div>;
 }
 
@@ -215,6 +307,7 @@ function NavigationActions() {
   const targets = safeNavigationTargets(navigationTargets).filter((target) => !(
     (structuredResult?.kind === "ports" && target.kind === "port")
     || (structuredResult?.kind === "alerts" && target.kind === "alerts")
+    || (structuredResult?.kind === "events" && target.kind === "events")
   ));
   if (!targets.length) return null;
   return (

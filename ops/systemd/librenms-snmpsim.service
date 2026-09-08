@@ -1,0 +1,17 @@
+[Unit]
+Description=LibreNMS SNMPSim lab responder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=librenms
+Group=librenms
+ExecStart=/opt/snmpsim-lab/run-systemd.sh
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

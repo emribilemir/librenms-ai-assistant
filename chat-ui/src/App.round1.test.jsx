@@ -189,6 +189,7 @@ test("investigation suggestion uses normal chat once and verifies the matching f
   fireEvent.click(screen.getByRole("button", { name: "İnceleme olayı hazırla" }));
   expect(await screen.findByText("✓ Event #203: ifOperStatus up -> down")).toBeVisible();
   const ask = screen.getByRole("button", { name: `Sormayı dene: ${question}` });
+  expect(ask.querySelector("svg")).toBeInTheDocument();
   fireEvent.click(ask);
   fireEvent.click(ask);
 
