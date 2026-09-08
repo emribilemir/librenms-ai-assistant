@@ -1,4 +1,4 @@
-# LibreNMS Natural-Language Hybrid PoC
+# LibreNMS AI Assistant — Natural-Language Hybrid PoC
 
 LibreNMS verilerine doğal dille, güvenli ve doğrulanabilir biçimde erişmenin
 uygulanabilirliğini araştıran read-only bir proof of concept.
@@ -46,6 +46,46 @@ Read-only LibreNMS backend
 | LibreNMS backend | Cihaz, port, alarm ve event gerçeklerini sağlamak | Write endpointi çağırmak veya veri tahmin etmek |
 | Grounding katmanı | Bulguları sabit referanslarla paketlemek ve claim'leri doğrulamak | Kanıtta bulunmayan kök neden üretmek |
 
+## Native Assistant UI
+
+PoC yalnızca bir CLI değildir. [`chat-ui/`](chat-ui/) altında React 19, Vite 8
+ve [assistant-ui](https://www.assistant-ui.com/) primitive'leriyle geliştirilen
+chat deneyimi, [`integrations/librenms/AiAssistant/`](integrations/librenms/AiAssistant/)
+üzerinden LibreNMS'in kendi oturum ve sayfa kabuğuna gömülür.
+
+Arayüzde bugün çalışan başlıca özellikler:
+
+- LibreNMS oturumundan imzalı kullanıcı kimliğiyle açılan native eklenti sayfası
+- Kalıcı sohbet geçmişi, arama, yeni sohbet ve güvenli silme akışı
+- Streaming yanıt, iptal/tekrar deneme ve aynı sohbette sıralı mesaj kuyruğu
+- Canlı envanterden cihaz seçici ve sorguya hazır başlangıç önerileri
+- Cihaz ve port sonuçları için okunabilir tablolar; alarm sonuçları için özet kartlar
+- Event sorguları için zaman, önem seviyesi, mesaj ve `up -> down` geçişlerini
+  ayıran kompakt timeline
+- Doğrulanmış `device`, `port`, `alerts` ve `events` LibreNMS deep-link'leri
+- Investigation sırasında planner, resolver, tool ve finding aşamalarını gösteren
+  işlem durumu; Demo Modu'nda ayrıntılı inspector
+- Allowlist'teki birden fazla hedefi seçebilen Demo Kontrolleri; senaryo çalıştırma,
+  seçili hedefi resetleme ve sonucu doğrudan **Sormayı dene** kartına taşıma
+- Klavye odağı, erişilebilir isimler, boş/tek event durumları ve güvenli hata halleri
+
+```text
+LibreNMS plugin page
+        |
+        v
+React + assistant-ui ExternalStoreRuntime
+        |
+        v
+Signed /v1 chat API + SSE
+        |
+        v
+Hybrid planner / resolver / read-only LibreNMS backend
+```
+
+Normal sohbet ve LibreNMS okumaları salt okunurdur. Lab fixture'larını değiştiren
+Demo Kontrolleri ayrıca `AI_DEMO_MODE_ALLOWED=1` ve imzalı `demo_control`
+capability'si ister; yalnız `AI_DEV_AUTH=1` deployed uygulamada bu yetkiyi açmaz.
+
 ## Desteklenen sorgu kapsamı
 
 - Tekil cihaz veya cihaz seti için canlı durum
@@ -73,6 +113,8 @@ lab-j9772a-01'de ne sorun var?
 
 | Yol | İçerik |
 |---|---|
+| [`chat-ui/`](chat-ui/) | React + assistant-ui tabanlı native sohbet, structured sonuçlar ve demo arayüzü |
+| [`integrations/librenms/AiAssistant/`](integrations/librenms/AiAssistant/) | LibreNMS plugin sayfası, imzalı identity köprüsü ve dağıtım sözleşmesi |
 | [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Güncel planner, orchestration ve backend adapter giriş noktaları |
 | [`librenms-hybrid-poc/tests/`](librenms-hybrid-poc/tests/) | Hybrid, chat, güvenlik ve ops offline regression suite'i |
 | [`librenms-hybrid-poc/fixtures/`](librenms-hybrid-poc/fixtures/) | PoC inventory, prompt ve acceptance girdileri |
@@ -121,6 +163,20 @@ Offline suite, harici LibreNMS veya Ollama bağlantısı gerektirmez. Backend
 adapter testleri yalnızca process içinde açılan localhost test sunucusunu
 kullanır.
 
+Assistant UI test ve production build'i:
+
+```bash
+cd chat-ui
+npm ci
+npm test -- --runInBand
+npm run build
+```
+
+Build çıktısı `chat-ui/dist/` altında oluşur ve native eklentinin yüklediği
+statik asset'lere dağıtılır. Ayrıntılı eklenti adımları için
+[`integrations/librenms/AiAssistant/docs/deployment.md`](integrations/librenms/AiAssistant/docs/deployment.md)
+dosyasına bakın.
+
 ## Opsiyonel uçtan uca lab kurulumu
 
 Offline testler için Debian, UTM, macOS, LibreNMS veya SNMPSim gerekmez.
@@ -157,6 +213,15 @@ SQLite çalışma verisi varsayılan olarak kullanıcının state dizininde tutu
 Demo mutation endpointleri yalnız imzalı `demo_control` capability'sine sahip
 operator kimliğine açıktır; global-read kullanıcıların normal sohbet erişimi
 değişmez.
+
+### Kısa sunum akışı
+
+1. `./scripts/lab-status` ile servisler ve `8 up / 3 down` baseline'ını gösterin.
+2. LibreNMS içindeki **AI Assistant** sayfasında model/durum sorgusu çalıştırın.
+3. Down port, aktif alarm ve son event sorgularındaki structured sonuçları açın.
+4. Bir investigation çalıştırıp işlem aşamalarını ve doğrulanmış deep-link'leri gösterin.
+5. Yetkili Demo Modu'nda ikinci hedefi seçin; bir senaryo çalıştırın, **Sormayı dene**
+   kartını kullanın ve aynı seçili hedefi **Laboratuvarı sıfırla** ile baseline'a döndürün.
 
 ## Yerel Ollama ile PoC harness'i
 
@@ -213,6 +278,11 @@ CI her push ve pull request'te tam offline Python suite'ini, frontend unit
 testlerini, production build'i, LibreNMS plugin contract testlerini ve dar bir
 secret-pattern kontrolünü çalıştırır. Canlı UTM kabulü ise yalnız Codex in-app
 browser ile, `lab-status` yeşil olduktan sonra yürütülür.
+
+EMR-82 tesliminde doğrulanan mevcut kapsam: **196 Python testi**, **98 Assistant
+UI testi**, **9 LibreNMS plugin contract testi** ve başarılı Vite production
+build. Canlı kabulde iki allowlist hedefi, ikinci hedefte senaryo/reset akışı,
+structured event timeline ve `8 up / 3 down` lab baseline'ı doğrulandı.
 
 Canlı Ollama/LibreNMS acceptance koşuları model, token ve erişilebilir lab
 ortamı gerektirdiği için offline suite'in parçası değildir.
