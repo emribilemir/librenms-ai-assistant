@@ -185,6 +185,48 @@ class PipelineInspectionTests(unittest.TestCase):
         })
         self.assertNotIn("secret", json.dumps(response["structured_result"]))
 
+    def test_port_speed_query_carries_requested_fact_and_verified_speed(self):
+        result = {
+            "final_answer": "lab-j9772a-01 portları:\nPort 2: 1 Gbps",
+            "route": "ports",
+            "planner_output": {"plan": {"port_fact": "speed"}},
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "ports": [
+                    {
+                        "device_id": 1,
+                        "port_id": 2,
+                        "ifIndex": 2,
+                        "ifName": "2",
+                        "ifAdminStatus": "up",
+                        "ifOperStatus": "down",
+                        "ifSpeed": 1_000_000_000,
+                    }
+                ],
+            },
+        }
+
+        response = self._run(result, demo_mode=False)
+
+        self.assertEqual(response["structured_result"]["requested_fact"], "speed")
+        self.assertEqual(response["structured_result"]["ports"][0]["speed_bps"], 1_000_000_000)
+
+    def test_port_speed_query_does_not_invent_missing_speed(self):
+        result = {
+            "final_answer": "lab-j9772a-01 Port 2 için LibreNMS'te hız bilgisi bulunmuyor.",
+            "route": "ports",
+            "planner_output": {"plan": {"port_fact": "speed"}},
+            "navigation_context": {
+                "device": {"device_id": 1, "hostname": "lab-j9772a-01"},
+                "ports": [{"device_id": 1, "port_id": 2, "ifIndex": 2, "ifName": "2"}],
+            },
+        }
+
+        response = self._run(result, demo_mode=False)
+
+        self.assertEqual(response["structured_result"]["requested_fact"], "speed")
+        self.assertNotIn("speed_bps", response["structured_result"]["ports"][0])
+
     def test_alert_route_carries_bounded_rows_without_raw_state_or_private_fields(self):
         result = {
             "final_answer": "88: Port status up/down (severity=critical, state=1)",

@@ -65,20 +65,23 @@ function safeStructuredPortResult(value) {
   const deviceId = positiveInteger(value.device.device_id);
   if (!deviceId) return null;
   const device = { device_id: deviceId, hostname: boundedText(value.device.hostname, 160) };
+  const requestedFact = ["state", "speed", "description"].includes(value.requested_fact) ? value.requested_fact : null;
   const ports = value.ports.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object" || positiveInteger(candidate.device_id) !== deviceId) return [];
     const row = { device_id: deviceId };
     const portId = positiveInteger(candidate.port_id);
     const ifIndex = positiveInteger(candidate.ifIndex);
+    const speedBps = positiveInteger(candidate.speed_bps);
     if (portId) row.port_id = portId;
     if (ifIndex) row.ifIndex = ifIndex;
+    if (speedBps) row.speed_bps = speedBps;
     for (const [field, limit] of [["ifName", 120], ["ifDescr", 180], ["ifAlias", 180], ["admin_status", 32], ["oper_status", 32]]) {
       const safe = boundedText(candidate[field], limit);
       if (safe) row[field] = safe;
     }
     return [row];
   }).slice(0, 24);
-  return ports.length ? { kind: "ports", device, ports } : null;
+  return ports.length ? { kind: "ports", device, ports, ...(requestedFact ? { requested_fact: requestedFact } : {}) } : null;
 }
 
 function safeStructuredAlertResult(value) {
@@ -140,15 +143,23 @@ function portLabel(port) {
   return `Port ${port.ifName || port.ifIndex || port.port_id || "—"}`;
 }
 
+function formatSpeed(speedBps) {
+  for (const [divisor, unit] of [[1_000_000_000, "Gbps"], [1_000_000, "Mbps"], [1_000, "Kbps"]]) {
+    if (speedBps >= divisor) return `${Number((speedBps / divisor).toPrecision(6))} ${unit}`;
+  }
+  return `${speedBps} bps`;
+}
+
 function StructuredPortResult({ result, navigationTargets }) {
   const targets = safeNavigationTargets(navigationTargets);
   const rowTargets = new Map(targets.filter((target) => target.kind === "port").map((target) => [target.entity_id, target]));
   const hostname = result.device.hostname || `Cihaz ${result.device.device_id}`;
+  const showSpeed = result.requested_fact === "speed";
   return (
     <section className={styles.structuredResult} data-slot="assistant-answer">
       <p className={styles.structuredTitle}>{hostname} portları</p>
       <table className={styles.portTable} aria-label={`${hostname} portları`}>
-        <thead><tr><th>Port</th><th>Durum</th><th>Admin</th><th>Açıklama</th></tr></thead>
+        <thead><tr><th>Port</th><th>Durum</th><th>Admin</th>{showSpeed ? <th>Hız</th> : null}<th>Açıklama</th></tr></thead>
         <tbody>{result.ports.map((port, index) => {
           const status = portStatus(port);
           const target = port.port_id ? rowTargets.get(port.port_id) : null;
@@ -159,6 +170,7 @@ function StructuredPortResult({ result, navigationTargets }) {
               <td>{target?.href === expectedHref ? <a href={target.href} target="_blank" rel="noopener noreferrer" aria-label={label}>{label}<ExternalLink size={12} aria-hidden="true" /></a> : <span>{label}</span>}</td>
               <td data-status={status.semantic}>{status.label}</td>
               <td>{titleCaseStatus(port.admin_status)}</td>
+              {showSpeed ? <td>{port.speed_bps ? formatSpeed(port.speed_bps) : "Hız bilgisi yok"}</td> : null}
               <td>{port.ifAlias || port.ifDescr || "—"}</td>
             </tr>
           );
