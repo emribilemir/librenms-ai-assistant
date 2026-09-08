@@ -489,6 +489,55 @@ test("structured port metadata renders semantic rows with inline verified links 
   expect(screen.queryByRole("link", { name: "Port detayını aç" })).not.toBeInTheDocument();
 });
 
+test("a structured speed query visibly renders the verified LibreNMS speed", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "lab-j9772a-01 portları:\nPort 2: 1 Gbps" }],
+    createdAt: new Date(),
+    metadata: { custom: { structuredResult: {
+      kind: "ports",
+      requested_fact: "speed",
+      device: { device_id: 7, hostname: "lab-j9772a-01" },
+      ports: [{ device_id: 7, port_id: 41, ifIndex: 2, ifName: "2", admin_status: "up", oper_status: "down", speed_bps: 1_000_000_000 }],
+    } } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.getByRole("columnheader", { name: "Hız" })).toBeVisible();
+  expect(screen.getByRole("cell", { name: "1 Gbps" })).toBeVisible();
+});
+
+test("a structured speed query explicitly reports missing LibreNMS speed", () => {
+  const messages = [{
+    id: "answer",
+    role: "assistant",
+    content: [{ type: "text", text: "fallback" }],
+    createdAt: new Date(),
+    metadata: { custom: { structuredResult: {
+      kind: "ports",
+      requested_fact: "speed",
+      device: { device_id: 7, hostname: "lab-j9772a-01" },
+      ports: [{ device_id: 7, port_id: 41, ifIndex: 2, ifName: "2", admin_status: "up", oper_status: "down" }],
+    } } },
+  }];
+  const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
+  function Fixture() {
+    const runtime = useExternalStoreRuntime(runtimeStore);
+    return <AssistantRuntimeProvider runtime={runtime}><AssistantThread suggestionsUnavailable={false} /></AssistantRuntimeProvider>;
+  }
+
+  render(<Fixture />);
+
+  expect(screen.getByRole("cell", { name: "Hız bilgisi yok" })).toBeVisible();
+});
+
 test("unresolved structured port rows show only the compact device fallback action", () => {
   const messages = [{
     id: "answer",

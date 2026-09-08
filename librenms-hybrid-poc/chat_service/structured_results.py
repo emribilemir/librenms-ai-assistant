@@ -35,7 +35,7 @@ def _safe_device(context):
     return safe
 
 
-def _port_result(context, device):
+def _port_result(context, device, requested_fact=None):
     device_id = device["device_id"]
 
     rows = []
@@ -49,6 +49,9 @@ def _port_result(context, device):
         if_index = _positive_int(item.get("ifIndex"))
         if if_index is not None:
             row["ifIndex"] = if_index
+        speed_bps = _positive_int(item.get("ifSpeed"))
+        if speed_bps is not None:
+            row["speed_bps"] = speed_bps
         for source, target, limit in (
             ("ifName", "ifName", 120),
             ("ifDescr", "ifDescr", 180),
@@ -64,7 +67,10 @@ def _port_result(context, device):
             break
     if not rows:
         return None
-    return {"kind": "ports", "device": device, "ports": rows}
+    result = {"kind": "ports", "device": device, "ports": rows}
+    if requested_fact in {"state", "speed", "description"}:
+        result["requested_fact"] = requested_fact
+    return result
 
 
 def _alert_result(context, device):
@@ -132,7 +138,10 @@ def build_structured_result(result):
     if device is None:
         return None
     if route == "ports":
-        return _port_result(context, device)
+        planner_output = result.get("planner_output")
+        plan = planner_output.get("plan") if isinstance(planner_output, dict) else None
+        requested_fact = plan.get("port_fact") if isinstance(plan, dict) else None
+        return _port_result(context, device, requested_fact)
     if route == "alerts":
         return _alert_result(context, device)
     return _event_result(context, device)
