@@ -309,6 +309,11 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                         "id": str(target.get("id") or "")[:160],
                         "hostname": str(target.get("hostname") or "")[:160],
                         "device_id": _positive_int(target.get("device_id")),
+                        "baseline_status": (
+                            target.get("baseline_status")
+                            if target.get("baseline_status") in {"up", "down"}
+                            else "down"
+                        ),
                         "supported_scenarios": [
                             item
                             for item in target.get("supported_scenarios", [])
@@ -338,7 +343,7 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
 
         @app.post("/v1/demo/scenarios")
         async def run_demo_scenario(request: Request, authorization: str | None = Header(default=None)):
-            demo_operator(authorization)
+            operator = demo_operator(authorization)
             require_demo_enabled()
             try:
                 body = await request.json()
@@ -370,10 +375,33 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                     demo_runner.execute_scenario, scenario_id, target_id
                 )
                 return bounded_demo_result(result, scenario_id, target_id)
-            except Exception:
+            except Exception as error:
+                boundary = str(getattr(error, "boundary", "scenario_execution"))[:80]
+                error_code = str(
+                    getattr(error, "error_code", "demo_scenario_failed")
+                )[:120]
+                safe_message = str(
+                    getattr(
+                        error,
+                        "safe_message",
+                        (
+                            "Senaryo güvenli doğrulama adımında tamamlanamadı. "
+                            "Hedefi sıfırlayıp yeniden dene."
+                        ),
+                    )
+                )[:300]
+                try:
+                    logger.write(
+                        user_id=operator.sub,
+                        route="/v1/demo/scenarios",
+                        stage=boundary,
+                        error_code=error_code,
+                    )
+                except Exception:
+                    pass
                 raise HTTPException(
                     503,
-                    {"code": "demo_scenario_failed", "message": "Scenario could not be completed."},
+                    {"code": error_code, "message": safe_message},
                 ) from None
             finally:
                 demo_lock.release()

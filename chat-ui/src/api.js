@@ -1,11 +1,31 @@
 export const API_BASE = "/ai-api/v1";
-export class ApiError extends Error { constructor(status) { super(`Request failed (${status})`); this.name = "ApiError"; this.status = status; } }
+export class ApiError extends Error {
+  constructor(status, { code = "", userMessage = "" } = {}) {
+    super(`Request failed (${status})`);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.userMessage = userMessage;
+  }
+}
 export class IncompleteStreamError extends Error { constructor() { super("The event stream ended before completion."); this.name = "IncompleteStreamError"; } }
 
 function headers(token, json = false) { return { Authorization: `Bearer ${token}`, ...(json ? { "Content-Type": "application/json" } : {}) }; }
 async function request(path, token, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { ...headers(token, Boolean(options.body)), ...options.headers } });
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) {
+    let detail = null;
+    try {
+      const payload = await response.json();
+      detail = payload?.detail && typeof payload.detail === "object" ? payload.detail : null;
+    } catch {
+      detail = null;
+    }
+    throw new ApiError(response.status, {
+      code: typeof detail?.code === "string" ? detail.code.slice(0, 120) : "",
+      userMessage: typeof detail?.message === "string" ? detail.message.slice(0, 300) : "",
+    });
+  }
   return response;
 }
 export async function listThreads(token) { return (await request("/threads", token)).json(); }

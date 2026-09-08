@@ -15,9 +15,12 @@
   min-height: 0;
   overflow: hidden;
   position: relative;
+  transition: grid-template-columns 220ms cubic-bezier(.22, .8, .28, 1);
   width: 100%;
 }
 .shell[data-sidebar-collapsed] { grid-template-columns: 56px minmax(0, 1fr); }
+.shell[data-demo-open] { grid-template-columns: 272px minmax(0, 1fr) 340px; }
+.shell[data-sidebar-collapsed][data-demo-open] { grid-template-columns: 56px minmax(0, 1fr) 340px; }
 .main { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .header { align-items: center; background: #2d3338; border-bottom: 1px solid #40484f; display: flex; gap: 12px; min-height: 56px; padding: 8px 18px; }
 .header div { min-width: 0; }
@@ -29,16 +32,17 @@
 .demoMode { align-items: center; color: #b8c1c8; display: inline-flex; font-size: 11px; gap: 7px; margin-left: auto; white-space: nowrap; }
 .demoMode input { accent-color: #69a9e8; cursor: pointer; margin: 0; }
 .demoEntry + .status { margin-left: 0; }
+.demoMode + .status { margin-left: 0; }
 .menu { display: none; min-height: 36px; min-width: 36px; }
 .skip { background: #d9232e; color: #fff; left: 10px; padding: 9px 12px; position: fixed; top: -80px; z-index: 20; }
 .skip:focus { top: 10px; }
 .error { background: #542e33; border-bottom: 1px solid #a9545d; color: #ffd9dd; flex: none; margin: 0; padding: 10px 20px; }
 .shell button:focus-visible, .shell textarea:focus-visible, .shell a:focus-visible { outline: 2px solid #69a9e8; outline-offset: 2px; }
 @media (max-width: 700px) {
-  .shell, .shell[data-sidebar-collapsed] { display: block; min-height: 0; }
+  .shell, .shell[data-sidebar-collapsed], .shell[data-demo-open], .shell[data-sidebar-collapsed][data-demo-open] { display: block; min-height: 0; }
   .menu { background: #252a30; border: 1px solid #606a73; border-radius: 4px; color: #fff; display: inline-block; }
   .main { height: 100%; }
   .header { padding: 9px 12px; }
   .status { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .shell *, .shell *::before, .shell *::after { scroll-behavior: auto; transition-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) { .shell, .shell *, .shell *::before, .shell *::after { scroll-behavior: auto; transition-duration: .01ms !important; } }

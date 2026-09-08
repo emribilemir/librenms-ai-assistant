@@ -26,9 +26,9 @@ test("suggestion surface communicates clickability without default or hover unde
 });
 
 test("demo follow-up is a whole clickable surface with an aligned trailing icon and no underline", () => {
-  expect(demoCss).toMatch(/\.question button\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/i);
-  expect(demoCss).toMatch(/\.question button:focus-visible\s*\{[^}]*outline:\s*2px solid/i);
-  expect(demoCss).not.toMatch(/\.question button:hover[^}]*text-decoration:\s*underline/i);
+  expect(demoCss).toMatch(/\.ask\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*space-between/i);
+  expect(demoCss).toMatch(/\.ask:focus-visible\s*\{[^}]*outline:\s*2px solid/i);
+  expect(demoCss).not.toMatch(/\.ask:hover[^}]*text-decoration:\s*underline/i);
 });
 
 test("collapsed inspector is a compact continuation with no reserved height", () => {

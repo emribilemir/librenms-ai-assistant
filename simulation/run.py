@@ -43,6 +43,15 @@ SCENARIO_IDS = (
     "port-down-up-event",
     "investigation-incident",
 )
+DEVICE_SCENARIO_IDS = ("location-change", "device-down-up")
+
+
+class DemoScenarioFailure(RuntimeError):
+    def __init__(self, boundary, error_code, safe_message):
+        super().__init__(safe_message)
+        self.boundary = boundary
+        self.error_code = error_code
+        self.safe_message = safe_message
 
 
 @dataclass(frozen=True)
@@ -54,30 +63,81 @@ class DemoTarget:
     offline_fixture: str
     snmp_endpoint: str
     supported_scenarios: tuple[str, ...]
+    baseline_status: str = "up"
+    test_port_index: int | None = None
+    test_port_id: int | None = None
     alert_rule_id: int | None = None
 
 
-# Only targets whose fixture ownership and required Port 2 OIDs were verified
-# on the UTM lab are exposed here. Inventory membership alone is insufficient.
+# This bounded manifest is the single source of truth for mutable SNMPSim targets.
+# Only the two J9772 fixtures expose the verified Port 2 contract; other online
+# fixtures support device/location actions, while intentional baseline-down
+# fixtures remain visible but advertise no unsafe action.
+def _target(
+    target_id,
+    device_id,
+    ip,
+    supported_scenarios,
+    *,
+    baseline_status="up",
+    test_port_index=None,
+    test_port_id=None,
+    alert_rule_id=None,
+):
+    fixture_root = f"/opt/snmpsim-lab/data/{target_id}"
+    return DemoTarget(
+        target_id=target_id,
+        hostname=target_id,
+        device_id=device_id,
+        fixture=f"{fixture_root}/public.snmprec",
+        offline_fixture=f"{fixture_root}/offline.snmprec",
+        snmp_endpoint=f"udp:{ip}:1611",
+        supported_scenarios=tuple(supported_scenarios),
+        baseline_status=baseline_status,
+        test_port_index=test_port_index,
+        test_port_id=test_port_id,
+        alert_rule_id=alert_rule_id,
+    )
+
+
 TARGETS = {
-    "lab-j9772a-01": DemoTarget(
-        target_id="lab-j9772a-01",
-        hostname="lab-j9772a-01",
-        device_id=1,
-        fixture="/opt/snmpsim-lab/data/lab-j9772a-01/public.snmprec",
-        offline_fixture="/opt/snmpsim-lab/data/lab-j9772a-01/offline.snmprec",
-        snmp_endpoint="udp:127.0.0.11:1611",
-        supported_scenarios=SCENARIO_IDS,
+    "lab-j9772a-01": _target(
+        "lab-j9772a-01", 1, "127.0.0.11", SCENARIO_IDS,
+        test_port_index=2,
+        test_port_id=2,
         alert_rule_id=13,
     ),
-    "lab-j9772a-02": DemoTarget(
-        target_id="lab-j9772a-02",
-        hostname="lab-j9772a-02",
-        device_id=2,
-        fixture="/opt/snmpsim-lab/data/lab-j9772a-02/public.snmprec",
-        offline_fixture="/opt/snmpsim-lab/data/lab-j9772a-02/offline.snmprec",
-        snmp_endpoint="udp:127.0.0.12:1611",
-        supported_scenarios=SCENARIO_IDS,
+    "lab-j9772a-02": _target(
+        "lab-j9772a-02", 2, "127.0.0.12", SCENARIO_IDS,
+        test_port_index=2,
+        test_port_id=6,
+    ),
+    "lab-j9775a-01": _target(
+        "lab-j9775a-01", 3, "127.0.0.13", (), baseline_status="down"
+    ),
+    "lab-j9775a-02": _target(
+        "lab-j9775a-02", 4, "127.0.0.14", DEVICE_SCENARIO_IDS
+    ),
+    "lab-jl357a-01": _target(
+        "lab-jl357a-01", 5, "127.0.0.15", DEVICE_SCENARIO_IDS
+    ),
+    "lab-j4850a-01": _target(
+        "lab-j4850a-01", 6, "127.0.0.16", DEVICE_SCENARIO_IDS
+    ),
+    "lab-j4850a-02": _target(
+        "lab-j4850a-02", 7, "127.0.0.17", (), baseline_status="down"
+    ),
+    "lab-j9774a-01": _target(
+        "lab-j9774a-01", 8, "127.0.0.18", DEVICE_SCENARIO_IDS
+    ),
+    "lab-j9776a-01": _target(
+        "lab-j9776a-01", 9, "127.0.0.19", DEVICE_SCENARIO_IDS
+    ),
+    "lab-j9780a-01": _target(
+        "lab-j9780a-01", 10, "127.0.0.20", (), baseline_status="down"
+    ),
+    "lab-j9783a-01": _target(
+        "lab-j9783a-01", 11, "127.0.0.21", DEVICE_SCENARIO_IDS
     ),
 }
 
@@ -269,8 +329,17 @@ def api_backend():
 
 
 def current_port2(backend, target):
+    if target.test_port_index is None:
+        return None
     ports = backend.get_ports(device_id=target.device_id)
-    return next((port for port in ports if int(port.get("ifIndex")) == 2), None)
+    return next(
+        (
+            port
+            for port in ports
+            if int(port.get("ifIndex")) == target.test_port_index
+        ),
+        None,
+    )
 
 
 def current_events(backend, target):
@@ -300,9 +369,13 @@ def find_new_event(
 def require_port(backend, target, *, oper_status):
     port = current_port2(backend, target)
     if not port:
-        raise RuntimeError("LibreNMS API did not return port 2")
+        raise RuntimeError(
+            f"LibreNMS API did not return test port {target.test_port_index}"
+        )
     if port.get("ifAdminStatus") != "up" or port.get("ifOperStatus") != oper_status:
-        raise RuntimeError(f"unexpected LibreNMS port 2 state: {port}")
+        raise RuntimeError(
+            f"unexpected LibreNMS test port {target.test_port_index} state: {port}"
+        )
     return port
 
 
@@ -345,10 +418,20 @@ def restore_online_fixture(target):
 
 
 def set_baseline_records(target):
-    changed = False
-    changed |= set_record(target, LOCATION_OID, "4", BASELINE_LOCATION)
-    changed |= set_record(target, PORT2_ADMIN_OID, "2", "1")
-    changed |= set_record(target, PORT2_OPER_OID, "2", "2")
+    changed = set_record(target, LOCATION_OID, "4", BASELINE_LOCATION)
+    if target.test_port_index is not None:
+        changed |= set_record(
+            target,
+            f"1.3.6.1.2.1.2.2.1.7.{target.test_port_index}",
+            "2",
+            "1",
+        )
+        changed |= set_record(
+            target,
+            f"1.3.6.1.2.1.2.2.1.8.{target.test_port_index}",
+            "2",
+            "2",
+        )
     return changed
 
 
@@ -384,18 +467,20 @@ def event_line(event):
 
 
 def run_port_down(backend, target):
-    set_record(target, PORT2_OPER_OID, "2", "1")
+    oper_oid = f"1.3.6.1.2.1.2.2.1.8.{target.test_port_index}"
+    set_record(target, oper_oid, "2", "1")
     poll_device(target)
-    changed = set_record(target, PORT2_OPER_OID, "2", "2")
+    changed = set_record(target, oper_oid, "2", "2")
     poll_device(target)
     port = require_port(backend, target, oper_status="down")
     return changed, f"Port 2: admin={port['ifAdminStatus']} / oper={port['ifOperStatus']}", []
 
 
 def run_port_up(backend, target):
-    set_record(target, PORT2_OPER_OID, "2", "2")
+    oper_oid = f"1.3.6.1.2.1.2.2.1.8.{target.test_port_index}"
+    set_record(target, oper_oid, "2", "2")
     poll_device(target)
-    changed = set_record(target, PORT2_OPER_OID, "2", "1")
+    changed = set_record(target, oper_oid, "2", "1")
     poll_device(target)
     port = require_port(backend, target, oper_status="up")
     return changed, f"Port 2: admin={port['ifAdminStatus']} / oper={port['ifOperStatus']}", []
@@ -454,23 +539,24 @@ def run_device_down_up(backend, target):
 
 
 def run_port_down_up_event(backend, target):
-    set_record(target, PORT2_OPER_OID, "2", "2")
+    oper_oid = f"1.3.6.1.2.1.2.2.1.8.{target.test_port_index}"
+    set_record(target, oper_oid, "2", "2")
     poll_device(target)
     before_id = newest_event_id(current_events(backend, target))
-    set_record(target, PORT2_OPER_OID, "2", "1")
+    set_record(target, oper_oid, "2", "1")
     poll_device(target)
-    set_record(target, PORT2_OPER_OID, "2", "2")
+    set_record(target, oper_oid, "2", "2")
     poll_device(target)
     event = find_new_event(
         current_events(backend, target),
         after_id=before_id,
         event_type="interface",
-        reference="2",
+        reference=target.test_port_id,
         message_fragment="ifOperStatus: up -> down",
     )
     if not event:
         raise RuntimeError("LibreNMS did not record a new port down event")
-    set_record(target, PORT2_OPER_OID, "2", "1")
+    set_record(target, oper_oid, "2", "1")
     poll_device(target)
     require_port(backend, target, oper_status="up")
     return True, "Port 2 geçiş eventi kaydedildi", [event]
@@ -491,8 +577,10 @@ def _active_target_alert(backend, target):
 
 def run_investigation_incident(backend, target):
     ensure_online(target)
-    changed = set_record(target, PORT2_ADMIN_OID, "2", "1")
-    changed |= set_record(target, PORT2_OPER_OID, "2", "1")
+    admin_oid = f"1.3.6.1.2.1.2.2.1.7.{target.test_port_index}"
+    oper_oid = f"1.3.6.1.2.1.2.2.1.8.{target.test_port_index}"
+    changed = set_record(target, admin_oid, "2", "1")
+    changed |= set_record(target, oper_oid, "2", "1")
     poll_device(target)
     before_id = newest_event_id(current_events(backend, target))
 
@@ -500,18 +588,22 @@ def run_investigation_incident(backend, target):
     changed |= device_changed
     after_device_id = max(before_id, newest_event_id(device_events))
 
-    changed |= set_record(target, PORT2_OPER_OID, "2", "2")
+    changed |= set_record(target, oper_oid, "2", "2")
     poll_device(target)
     port = require_port(backend, target, oper_status="down")
     port_event = find_new_event(
         current_events(backend, target),
         after_id=after_device_id,
         event_type="interface",
-        reference="2",
+        reference=target.test_port_id,
         message_fragment="ifOperStatus: up -> down",
     )
     if not port_event:
-        raise RuntimeError("LibreNMS did not record the investigation port event")
+        raise DemoScenarioFailure(
+            "event_verification",
+            "demo_event_verification_failed",
+            "Senaryo olay doğrulamasında tamamlanamadı. Hedefi sıfırlayıp yeniden dene.",
+        )
 
     alert = _active_target_alert(backend, target)
     proof = [
@@ -600,22 +692,35 @@ SCENARIO_RUNNERS = {
 
 def reset_baseline(target_id="lab-j9772a-01"):
     target = resolve_target(target_id) if isinstance(target_id, str) else target_id
-    restored = ensure_online(target)
+    if target.baseline_status == "up":
+        restored = ensure_online(target)
+    else:
+        restored = restore_online_fixture(target)
     changed = set_baseline_records(target)
-    discover_device(target)
-    poll_device(target)
     backend = api_backend()
-    device = require_device_status(backend, target, 1)
-    port = require_port(backend, target, oper_status="down")
-    location = (device.get("location") or {}).get("location")
-    if location != BASELINE_LOCATION:
-        raise RuntimeError(f"reset location verification failed: {location}")
+    if target.baseline_status == "up":
+        discover_device(target)
+        poll_device(target)
+        device = require_device_status(backend, target, 1)
+        location = (device.get("location") or {}).get("location")
+        if location != BASELINE_LOCATION:
+            raise RuntimeError(f"reset location verification failed: {location}")
+    else:
+        poll_device(target, expect_down=True)
+        require_device_status(backend, target, 0)
+        location = BASELINE_LOCATION
+    port = (
+        require_port(backend, target, oper_status="down")
+        if target.test_port_index is not None
+        else None
+    )
     return {
         "changed": changed or restored,
         "target_id": target.target_id,
+        "baseline_status": target.baseline_status,
         "location": location,
-        "admin": port["ifAdminStatus"],
-        "oper": port["ifOperStatus"],
+        "admin": port["ifAdminStatus"] if port else None,
+        "oper": port["ifOperStatus"] if port else None,
     }
 
 
@@ -634,6 +739,7 @@ def demo_metadata():
                 "id": target.target_id,
                 "hostname": target.hostname,
                 "device_id": target.device_id,
+                "baseline_status": target.baseline_status,
                 "supported_scenarios": list(target.supported_scenarios),
             }
             for target in targets
@@ -667,16 +773,22 @@ def execute_scenario(scenario_id, target_id):
     target = resolve_target(target_id)
     if scenario_id not in target.supported_scenarios:
         raise ValueError(f"scenario {scenario_id} is unavailable for target {target_id}")
-    preflight(target)
     try:
+        preflight(target)
         ensure_online(target)
         outcome = SCENARIO_RUNNERS[scenario_id](api_backend(), target)
-    except Exception:
+    except Exception as error:
         try:
             reset_baseline(target)
         except Exception:
             pass
-        raise
+        if isinstance(error, DemoScenarioFailure):
+            raise
+        raise DemoScenarioFailure(
+            "scenario_execution",
+            "demo_scenario_failed",
+            "Senaryo güvenli doğrulama adımında tamamlanamadı. Hedefi sıfırlayıp yeniden dene.",
+        ) from error
     changed, verified, events = outcome[:3]
     details = outcome[3] if len(outcome) == 4 else {}
     return {

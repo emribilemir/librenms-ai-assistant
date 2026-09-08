@@ -65,8 +65,8 @@ Arayüzde bugün çalışan başlıca özellikler:
 - Doğrulanmış `device`, `port`, `alerts` ve `events` LibreNMS deep-link'leri
 - Investigation sırasında planner, resolver, tool ve finding aşamalarını gösteren
   işlem durumu; Demo Modu'nda ayrıntılı inspector
-- Allowlist'teki birden fazla hedefi seçebilen Demo Kontrolleri; senaryo çalıştırma,
-  seçili hedefi resetleme ve sonucu doğrudan **Sormayı dene** kartına taşıma
+- Backend manifestindeki 11 hedefi ve hedefe özel destek matrisini kullanan sağ
+  Demo Kontrolleri drawer'ı; doğrudan aksiyonlar, reset ve **Bu durumu AI'a sor** CTA'sı
 - Klavye odağı, erişilebilir isimler, boş/tek event durumları ve güvenli hata halleri
 
 ```text
@@ -220,8 +220,9 @@ değişmez.
 2. LibreNMS içindeki **AI Assistant** sayfasında model/durum sorgusu çalıştırın.
 3. Down port, aktif alarm ve son event sorgularındaki structured sonuçları açın.
 4. Bir investigation çalıştırıp işlem aşamalarını ve doğrulanmış deep-link'leri gösterin.
-5. Yetkili Demo Modu'nda ikinci hedefi seçin; bir senaryo çalıştırın, **Sormayı dene**
-   kartını kullanın ve aynı seçili hedefi **Laboratuvarı sıfırla** ile baseline'a döndürün.
+5. Yetkili Demo Modu'nda farklı bir hedef seçin; destekli aksiyonu çalıştırın,
+   **Bu durumu AI'a sor** CTA'sını kullanın ve aynı hedefi **Laboratuvarı sıfırla**
+   ile kendi baseline durumuna döndürün.
 
 ## Yerel Ollama ile PoC harness'i
 
@@ -279,10 +280,11 @@ testlerini, production build'i, LibreNMS plugin contract testlerini ve dar bir
 secret-pattern kontrolünü çalıştırır. Canlı UTM kabulü ise yalnız Codex in-app
 browser ile, `lab-status` yeşil olduktan sonra yürütülür.
 
-EMR-82 tesliminde doğrulanan mevcut kapsam: **196 Python testi**, **98 Assistant
+EMR-85 tesliminde doğrulanan mevcut kapsam: **201 Python testi**, **101 Assistant
 UI testi**, **9 LibreNMS plugin contract testi** ve başarılı Vite production
-build. Canlı kabulde iki allowlist hedefi, ikinci hedefte senaryo/reset akışı,
-structured event timeline ve `8 up / 3 down` lab baseline'ı doğrulandı.
+build. Canlı kabulde 11 hedeflik manifest, üç farklı cihaz modeli üzerinde
+mutasyon → poller → AI sorgusu → reset zinciri ve `8 up / 3 down` lab baseline'ı
+doğrulandı.
 
 Canlı Ollama/LibreNMS acceptance koşuları model, token ve erişilebilir lab
 ortamı gerektirdiği için offline suite'in parçası değildir.

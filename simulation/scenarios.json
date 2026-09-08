@@ -20,12 +20,12 @@
     "example_ai_question": "{hostname} en son ne zaman down oldu?"
   },
   "port-down-up-event": {
-    "label": "Port olayı üret",
+    "label": "Port olayı oluştur",
     "expected": "A new Port 2 ifOperStatus transition event is recorded",
     "example_ai_question": "{hostname} son eventlerini göster"
   },
   "investigation-incident": {
-    "label": "İnceleme olayı hazırla",
+    "label": "İnceleme senaryosu oluştur",
     "expected": "Correlated current and historical evidence is verified",
     "example_ai_question": "{hostname} cihazında şu an ne sorun var, son 24 saatte neler olmuş?"
   }

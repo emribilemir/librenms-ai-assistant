@@ -2,6 +2,7 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import hmac
+import io
 import json
 import os
 import tempfile
@@ -21,14 +22,15 @@ SCENARIOS = {
     "port-up": {"label": "Portu kaldır", "example_ai_question": "Port up?"},
     "location-change": {"label": "Konumu değiştir", "example_ai_question": "Where?"},
     "device-down-up": {"label": "Cihazı düşür / geri getir", "example_ai_question": "Last down?"},
-    "port-down-up-event": {"label": "Port olayı üret", "example_ai_question": "Events?"},
-    "investigation-incident": {"label": "İnceleme olayı hazırla", "example_ai_question": "Investigate?"},
+    "port-down-up-event": {"label": "Port olayı oluştur", "example_ai_question": "Events?"},
+    "investigation-incident": {"label": "İnceleme senaryosu oluştur", "example_ai_question": "Investigate?"},
 }
 TARGETS = [
     {
         "id": "lab-j9772a-01",
         "hostname": "lab-j9772a-01",
         "device_id": 1,
+        "baseline_status": "up",
         "supported_scenarios": list(SCENARIOS),
     }
 ]
@@ -108,7 +110,7 @@ class DemoControlRouteTests(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def make_client(self, *, enabled, runner=None):
+    def make_client(self, *, enabled, runner=None, logger=None):
         environment = {"AI_DEMO_MODE_ALLOWED": "1" if enabled else "0"}
         with patch.dict(os.environ, environment, clear=False), patch.object(
             app_module,
@@ -117,7 +119,8 @@ class DemoControlRouteTests(unittest.TestCase):
             create=True,
         ):
             app = app_module.create_app(
-                os.path.join(self.directory.name, "chat.sqlite3"), secret=SECRET
+                os.path.join(self.directory.name, "chat.sqlite3"), secret=SECRET,
+                logger=logger,
             )
         client = TestClient(app)
         if enabled:
@@ -253,6 +256,54 @@ class DemoControlRouteTests(unittest.TestCase):
         self.assertEqual(completed.status_code, 200)
         self.assertEqual(duplicate.status_code, 409)
         self.assertEqual(runner.calls, [("port-down", "lab-j9772a-01")])
+
+    def test_scenario_failure_returns_safe_guidance_and_logs_the_failure_boundary(self):
+        class BoundedFailure(RuntimeError):
+            boundary = "event_verification"
+            error_code = "demo_event_verification_failed"
+            safe_message = (
+                "Senaryo olay doğrulamasında tamamlanamadı. "
+                "Hedefi sıfırlayıp yeniden dene."
+            )
+
+        class FailingRunner(FakeSimulationRunner):
+            def execute_scenario(self, scenario_id, target_id):
+                raise BoundedFailure("raw fixture path must stay private")
+
+        log_output = io.StringIO()
+        logger = app_module.RestrictedJsonLogger(log_output)
+        client = self.make_client(enabled=True, runner=FailingRunner(), logger=logger)
+
+        response = client.post(
+            "/v1/demo/scenarios",
+            headers=bearer(demo_control=True),
+            json={
+                "scenario_id": "investigation-incident",
+                "target_id": "lab-j9772a-01",
+            },
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json()["detail"],
+            {
+                "code": "demo_event_verification_failed",
+                "message": (
+                    "Senaryo olay doğrulamasında tamamlanamadı. "
+                    "Hedefi sıfırlayıp yeniden dene."
+                ),
+            },
+        )
+        self.assertEqual(
+            json.loads(log_output.getvalue()),
+            {
+                "user_id": "alice",
+                "route": "/v1/demo/scenarios",
+                "stage": "event_verification",
+                "error_code": "demo_event_verification_failed",
+            },
+        )
+        self.assertNotIn("fixture", log_output.getvalue())
 
 
 if __name__ == "__main__":

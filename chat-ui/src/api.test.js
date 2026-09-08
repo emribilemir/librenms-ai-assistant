@@ -75,6 +75,26 @@ test("demo requests send only the bounded scenario and target ids", async () => 
   ]);
 });
 
+test("demo request exposes only the backend's bounded actionable error", async () => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: false,
+    status: 503,
+    json: async () => ({
+      detail: {
+        code: "demo_event_verification_failed",
+        message: "Senaryo olay doğrulamasında tamamlanamadı. Hedefi sıfırlayıp yeniden dene.",
+      },
+    }),
+  });
+
+  await expect(runDemoScenario("investigation-incident", "lab-j9772a-02", "token"))
+    .rejects.toMatchObject({
+      status: 503,
+      code: "demo_event_verification_failed",
+      userMessage: "Senaryo olay doğrulamasında tamamlanamadı. Hedefi sıfırlayıp yeniden dene.",
+    });
+});
+
 test("demo mode state reads and writes only its bounded boolean", async () => {
   global.fetch = jest.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => ({ allowed: true, enabled: false }) })
