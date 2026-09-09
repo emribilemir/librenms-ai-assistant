@@ -19,9 +19,6 @@ sys.path.insert(0, str(POC_DIR))
 from librenms_backend import LibreNMSBackend  # noqa: E402
 
 
-SSH_HOST = os.environ.get("LAB_SSH_HOST", "librenms-vm")
-SSH_USER = os.environ.get("LAB_SSH_USER", "").strip()
-SSH_KEY = Path(os.path.expanduser(os.environ["LAB_SSH_KEY"])) if os.environ.get("LAB_SSH_KEY") else None
 RESPONDER = "/opt/snmpsim-venv/bin/snmpsim-command-responder"
 RESPONDER_PATTERN = (
     "^/opt/snmpsim-venv/bin/python3 "
@@ -30,8 +27,6 @@ RESPONDER_PATTERN = (
 DEVICES_UP = "/opt/snmpsim-lab/devices-up.txt"
 SNMPSIM_UNIT = os.environ.get("LAB_SNMPSIM_UNIT", "librenms-snmpsim.service")
 LOCATION_OID = "1.3.6.1.2.1.1.6.0"
-PORT2_ADMIN_OID = "1.3.6.1.2.1.2.2.1.7.2"
-PORT2_OPER_OID = "1.3.6.1.2.1.2.2.1.8.2"
 BASELINE_LOCATION = "Test Lab"
 DEMO_LOCATION = "EMR-55 Demo Lab"
 
@@ -43,7 +38,12 @@ SCENARIO_IDS = (
     "port-down-up-event",
     "investigation-incident",
 )
-DEVICE_SCENARIO_IDS = ("location-change", "device-down-up")
+PORT_SCENARIO_IDS = (
+    "port-down",
+    "port-up",
+    "port-down-up-event",
+    "investigation-incident",
+)
 
 
 class DemoScenarioFailure(RuntimeError):
@@ -65,14 +65,12 @@ class DemoTarget:
     supported_scenarios: tuple[str, ...]
     baseline_status: str = "up"
     test_port_index: int | None = None
-    test_port_id: int | None = None
     alert_rule_id: int | None = None
 
 
 # This bounded manifest is the single source of truth for mutable SNMPSim targets.
-# Only the two J9772 fixtures expose the verified Port 2 contract; other online
-# fixtures support device/location actions, while intentional baseline-down
-# fixtures remain visible but advertise no unsafe action.
+# Every fixture gets the same explicit test-port contract. LibreNMS port_id is not
+# stable fixture metadata, so it is resolved from this target's device_id/ifIndex.
 def _target(
     target_id,
     device_id,
@@ -81,7 +79,6 @@ def _target(
     *,
     baseline_status="up",
     test_port_index=None,
-    test_port_id=None,
     alert_rule_id=None,
 ):
     fixture_root = f"/opt/snmpsim-lab/data/{target_id}"
@@ -95,7 +92,6 @@ def _target(
         supported_scenarios=tuple(supported_scenarios),
         baseline_status=baseline_status,
         test_port_index=test_port_index,
-        test_port_id=test_port_id,
         alert_rule_id=alert_rule_id,
     )
 
@@ -104,40 +100,47 @@ TARGETS = {
     "lab-j9772a-01": _target(
         "lab-j9772a-01", 1, "127.0.0.11", SCENARIO_IDS,
         test_port_index=2,
-        test_port_id=2,
         alert_rule_id=13,
     ),
     "lab-j9772a-02": _target(
         "lab-j9772a-02", 2, "127.0.0.12", SCENARIO_IDS,
         test_port_index=2,
-        test_port_id=6,
     ),
     "lab-j9775a-01": _target(
-        "lab-j9775a-01", 3, "127.0.0.13", (), baseline_status="down"
+        "lab-j9775a-01", 3, "127.0.0.13", SCENARIO_IDS,
+        baseline_status="down", test_port_index=2,
     ),
     "lab-j9775a-02": _target(
-        "lab-j9775a-02", 4, "127.0.0.14", DEVICE_SCENARIO_IDS
+        "lab-j9775a-02", 4, "127.0.0.14", SCENARIO_IDS,
+        test_port_index=2,
     ),
     "lab-jl357a-01": _target(
-        "lab-jl357a-01", 5, "127.0.0.15", DEVICE_SCENARIO_IDS
+        "lab-jl357a-01", 5, "127.0.0.15", SCENARIO_IDS,
+        test_port_index=2,
     ),
     "lab-j4850a-01": _target(
-        "lab-j4850a-01", 6, "127.0.0.16", DEVICE_SCENARIO_IDS
+        "lab-j4850a-01", 6, "127.0.0.16", SCENARIO_IDS,
+        test_port_index=2,
     ),
     "lab-j4850a-02": _target(
-        "lab-j4850a-02", 7, "127.0.0.17", (), baseline_status="down"
+        "lab-j4850a-02", 7, "127.0.0.17", SCENARIO_IDS,
+        baseline_status="down", test_port_index=2,
     ),
     "lab-j9774a-01": _target(
-        "lab-j9774a-01", 8, "127.0.0.18", DEVICE_SCENARIO_IDS
+        "lab-j9774a-01", 8, "127.0.0.18", SCENARIO_IDS,
+        test_port_index=2,
     ),
     "lab-j9776a-01": _target(
-        "lab-j9776a-01", 9, "127.0.0.19", DEVICE_SCENARIO_IDS
+        "lab-j9776a-01", 9, "127.0.0.19", SCENARIO_IDS,
+        test_port_index=2,
     ),
     "lab-j9780a-01": _target(
-        "lab-j9780a-01", 10, "127.0.0.20", (), baseline_status="down"
+        "lab-j9780a-01", 10, "127.0.0.20", SCENARIO_IDS,
+        baseline_status="down", test_port_index=2,
     ),
     "lab-j9783a-01": _target(
-        "lab-j9783a-01", 11, "127.0.0.21", DEVICE_SCENARIO_IDS
+        "lab-j9783a-01", 11, "127.0.0.21", SCENARIO_IDS,
+        test_port_index=2,
     ),
 }
 
@@ -150,13 +153,8 @@ def resolve_target(target_id, targets=None):
 
 
 def ssh(command, *, input_text=None, check=True, timeout=180):
-    destination = f"{SSH_USER}@{SSH_HOST}" if SSH_USER else SSH_HOST
-    command_line = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
-    if SSH_KEY is not None:
-        command_line.extend(["-i", os.fspath(SSH_KEY)])
-    command_line.extend([destination, command])
     result = subprocess.run(
-        command_line,
+        ["ssh", "librenms-vm", command],
         input=input_text,
         text=True,
         capture_output=True,
@@ -215,6 +213,55 @@ def set_record(target, oid, value_type, value):
     return False
 
 
+def test_port_records(target):
+    index = target.test_port_index
+    if index is None:
+        return ()
+    return (
+        ("1.3.6.1.2.1.2.1.0", "2", "1"),
+        (f"1.3.6.1.2.1.2.2.1.1.{index}", "2", str(index)),
+        (f"1.3.6.1.2.1.2.2.1.2.{index}", "4", f"GigabitEthernet{index}"),
+        (f"1.3.6.1.2.1.2.2.1.3.{index}", "2", "6"),
+        (f"1.3.6.1.2.1.2.2.1.4.{index}", "2", "1500"),
+        (f"1.3.6.1.2.1.2.2.1.5.{index}", "66", "1000000000"),
+        (f"1.3.6.1.2.1.2.2.1.7.{index}", "2", "1"),
+        (f"1.3.6.1.2.1.2.2.1.8.{index}", "2", "2"),
+        (f"1.3.6.1.2.1.31.1.1.1.1.{index}", "4", str(index)),
+        (f"1.3.6.1.2.1.31.1.1.1.15.{index}", "66", "1000"),
+        (f"1.3.6.1.2.1.31.1.1.1.18.{index}", "4", "Demo-Test-Port"),
+    )
+
+
+def ensure_test_port_contract(target):
+    records = test_port_records(target)
+    if not records:
+        return False
+    before = read_fixture(target)
+    lines = before.splitlines()
+    by_oid = {}
+    for line in lines:
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            continue
+        by_oid.setdefault(parts[0], []).append(parts)
+    additions = []
+    for oid, value_type, value in records:
+        matches = by_oid.get(oid, [])
+        if len(matches) > 1:
+            raise ValueError(f"duplicate fixture record for {oid}")
+        if matches:
+            if matches[0][1] != value_type:
+                raise ValueError(f"unexpected fixture type for {oid}")
+            continue
+        additions.append(f"{oid}|{value_type}|{value}")
+    if not additions:
+        return False
+    separator = "" if not before or before.endswith("\n") else "\n"
+    after = before + separator + "\n".join(additions) + "\n"
+    write_fixture(target, after)
+    return True
+
+
 def single_responder_pid(output):
     values = [line.strip() for line in output.splitlines() if line.strip()]
     if len(values) != 1 or not values[0].isdigit():
@@ -243,9 +290,16 @@ def systemd_responder_available():
     return result.returncode == 0
 
 
+def systemd_responder_active():
+    return ssh(
+        f"systemctl is-active --quiet {shlex.quote(SNMPSIM_UNIT)}",
+        check=False,
+    ).returncode == 0
+
+
 def stop_responder():
     pid = responder_pid()
-    if systemd_responder_available():
+    if systemd_responder_available() and systemd_responder_active():
         ssh(f"sudo -n systemctl stop {shlex.quote(SNMPSIM_UNIT)}")
     else:
         ssh(f"sudo -n -u librenms kill {pid}")
@@ -259,14 +313,22 @@ def stop_responder():
 def start_responder(target, *, target_online):
     if responder_pid(required=False) is not None:
         raise RuntimeError("refusing to start a second responder")
-    if systemd_responder_available():
+    temporary_baseline_down = target_online and target.baseline_status == "down"
+    if systemd_responder_available() and not temporary_baseline_down:
         ssh(f"sudo -n systemctl start {shlex.quote(SNMPSIM_UNIT)}")
     else:
+        extra_target = ""
+        if temporary_baseline_down:
+            endpoint = target.snmp_endpoint.removeprefix("udp:")
+            extra_target = (
+                f"\ncmd+=(--v3-engine-id auto --data-dir={shlex.quote(str(Path(target.fixture).parent))} "
+                f"--agent-udpv4-endpoint={shlex.quote(endpoint)})"
+            )
         start_script = f"""
 cmd=({shlex.quote(RESPONDER)} --cache-dir=/opt/snmpsim-lab/cache)
 while IFS='|' read -r ip host model; do
   cmd+=(--v3-engine-id auto "--data-dir=/opt/snmpsim-lab/data/$host" "--agent-udpv4-endpoint=$ip:1611")
-done < {shlex.quote(DEVICES_UP)}
+done < {shlex.quote(DEVICES_UP)}{extra_target}
 nohup "${{cmd[@]}}" >/tmp/emr55-snmpsim.log 2>&1 &
 """.strip()
         ssh("sudo -n -u librenms bash -c " + shlex.quote(start_script))
@@ -436,8 +498,6 @@ def set_baseline_records(target):
 
 
 def preflight(target):
-    if SSH_KEY is not None and not SSH_KEY.is_file():
-        raise RuntimeError(f"SSH key not found: {SSH_KEY}")
     ssh(
         "set -eu; "
         "sudo -n -u librenms true; "
@@ -454,7 +514,7 @@ def ensure_online(target):
     pid = responder_pid(required=False)
     if pid is None:
         start_responder(target, target_online=True)
-    elif restored:
+    elif restored or not snmp_available(target):
         restart_responder(target, target_online=True)
     return restored
 
@@ -542,6 +602,10 @@ def run_port_down_up_event(backend, target):
     oper_oid = f"1.3.6.1.2.1.2.2.1.8.{target.test_port_index}"
     set_record(target, oper_oid, "2", "2")
     poll_device(target)
+    port = require_port(backend, target, oper_status="down")
+    port_id = int(port.get("port_id") or 0)
+    if port_id <= 0:
+        raise RuntimeError("LibreNMS API did not return the test port id")
     before_id = newest_event_id(current_events(backend, target))
     set_record(target, oper_oid, "2", "1")
     poll_device(target)
@@ -551,7 +615,7 @@ def run_port_down_up_event(backend, target):
         current_events(backend, target),
         after_id=before_id,
         event_type="interface",
-        reference=target.test_port_id,
+        reference=port_id,
         message_fragment="ifOperStatus: up -> down",
     )
     if not event:
@@ -591,11 +655,14 @@ def run_investigation_incident(backend, target):
     changed |= set_record(target, oper_oid, "2", "2")
     poll_device(target)
     port = require_port(backend, target, oper_status="down")
+    port_id = int(port.get("port_id") or 0)
+    if port_id <= 0:
+        raise RuntimeError("LibreNMS API did not return the test port id")
     port_event = find_new_event(
         current_events(backend, target),
         after_id=after_device_id,
         event_type="interface",
-        reference=target.test_port_id,
+        reference=port_id,
         message_fragment="ifOperStatus: up -> down",
     )
     if not port_event:
@@ -696,6 +763,7 @@ def reset_baseline(target_id="lab-j9772a-01"):
         restored = ensure_online(target)
     else:
         restored = restore_online_fixture(target)
+    contract_changed = ensure_test_port_contract(target)
     changed = set_baseline_records(target)
     backend = api_backend()
     if target.baseline_status == "up":
@@ -706,6 +774,13 @@ def reset_baseline(target_id="lab-j9772a-01"):
         if location != BASELINE_LOCATION:
             raise RuntimeError(f"reset location verification failed: {location}")
     else:
+        target_was_online = snmp_available(target)
+        if target_was_online:
+            poll_device(target)
+        if target_was_online:
+            restart_responder(target, target_online=False)
+        elif responder_pid(required=False) is None:
+            start_responder(target, target_online=False)
         poll_device(target, expect_down=True)
         require_device_status(backend, target, 0)
         location = BASELINE_LOCATION
@@ -715,7 +790,7 @@ def reset_baseline(target_id="lab-j9772a-01"):
         else None
     )
     return {
-        "changed": changed or restored,
+        "changed": changed or restored or contract_changed,
         "target_id": target.target_id,
         "baseline_status": target.baseline_status,
         "location": location,
@@ -741,6 +816,23 @@ def demo_metadata():
                 "device_id": target.device_id,
                 "baseline_status": target.baseline_status,
                 "supported_scenarios": list(target.supported_scenarios),
+                "unsupported_scenarios": {
+                    scenario_id: "Bu fixture'da uygun test portu yok"
+                    for scenario_id in SCENARIO_IDS
+                    if scenario_id not in target.supported_scenarios
+                    and scenario_id in {
+                        "port-down", "port-up", "port-down-up-event", "investigation-incident"
+                    }
+                },
+                "test_port": (
+                    {
+                        "if_index": target.test_port_index,
+                        "baseline_admin": "up",
+                        "baseline_oper": "down",
+                    }
+                    if target.test_port_index is not None
+                    else None
+                ),
             }
             for target in targets
         ],
@@ -776,6 +868,9 @@ def execute_scenario(scenario_id, target_id):
     try:
         preflight(target)
         ensure_online(target)
+        ensure_test_port_contract(target)
+        if scenario_id in PORT_SCENARIO_IDS:
+            discover_device(target)
         outcome = SCENARIO_RUNNERS[scenario_id](api_backend(), target)
     except Exception as error:
         try:

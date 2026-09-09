@@ -36,7 +36,7 @@ const demoScenarios = [
 const demoMetadata = {
   supportedTargets: [
     { id: "lab-j9772a-01", hostname: "lab-j9772a-01", device_id: 1, supported_scenarios: demoScenarios.map((item) => item.id) },
-    { id: "lab-j9772a-02", hostname: "lab-j9772a-02", device_id: 2, supported_scenarios: ["port-up"] },
+    { id: "lab-j9772a-02", hostname: "lab-j9772a-02", device_id: 2, supported_scenarios: ["port-up"], unsupported_scenarios: { "port-down": "Bu fixture'da uygun test portu yok" } },
   ],
   scenarios: demoScenarios,
 };
@@ -93,7 +93,7 @@ test("demo edge handle opens a Turkish drawer, narrows the shell, and closes ind
   expect(target).toHaveValue("lab-j9772a-01");
   fireEvent.change(target, { target: { value: "lab-j9772a-02" } });
   expect(screen.getByRole("button", { name: "Portu düşür" })).toBeDisabled();
-  expect(screen.getAllByText("Bu hedefte desteklenmiyor").length).toBeGreaterThan(0);
+  expect(screen.getByText("Bu fixture'da uygun test portu yok")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Portu kaldır" }));
   await waitFor(() => expect(api.runDemoScenario).toHaveBeenCalledWith("port-up", "lab-j9772a-02", "plugin-token"));
 

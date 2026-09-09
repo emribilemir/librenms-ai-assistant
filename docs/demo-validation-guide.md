@@ -1,4 +1,4 @@
-# EMR-85 demo ve investigation doğrulama rehberi
+# EMR-85/86 demo ve investigation doğrulama rehberi
 
 Demo Kontrolleri yalnız doğrulanmış UTM laboratuvar hedeflerini değiştirir. Web
 arayüzü ve CLI aynı `simulation/run.py` yürütücüsünü kullanır; kullanıcıdan
@@ -13,21 +13,34 @@ kullanılır. Arayüz hedefleri veya destek matrisini ayrıca hardcode etmez:
 |---|---|---:|---|
 | `lab-j9772a-01` | `lab-j9772a-01` | 1 | Altı senaryonun tamamı |
 | `lab-j9772a-02` | `lab-j9772a-02` | 2 | Altı senaryonun tamamı |
-| `lab-j9775a-01` | `lab-j9775a-01` | 3 | Senaryo yok; baseline kapalı, reset destekli |
-| `lab-j9775a-02` | `lab-j9775a-02` | 4 | Konum ve cihaz geçişi |
-| `lab-jl357a-01` | `lab-jl357a-01` | 5 | Konum ve cihaz geçişi |
-| `lab-j4850a-01` | `lab-j4850a-01` | 6 | Konum ve cihaz geçişi |
-| `lab-j4850a-02` | `lab-j4850a-02` | 7 | Senaryo yok; baseline kapalı, reset destekli |
-| `lab-j9774a-01` | `lab-j9774a-01` | 8 | Konum ve cihaz geçişi |
-| `lab-j9776a-01` | `lab-j9776a-01` | 9 | Konum ve cihaz geçişi |
-| `lab-j9780a-01` | `lab-j9780a-01` | 10 | Senaryo yok; baseline kapalı, reset destekli |
-| `lab-j9783a-01` | `lab-j9783a-01` | 11 | Konum ve cihaz geçişi |
+| `lab-j9775a-01` | `lab-j9775a-01` | 3 | Altı senaryonun tamamı; baseline kapalı |
+| `lab-j9775a-02` | `lab-j9775a-02` | 4 | Altı senaryonun tamamı |
+| `lab-jl357a-01` | `lab-jl357a-01` | 5 | Altı senaryonun tamamı |
+| `lab-j4850a-01` | `lab-j4850a-01` | 6 | Altı senaryonun tamamı |
+| `lab-j4850a-02` | `lab-j4850a-02` | 7 | Altı senaryonun tamamı; baseline kapalı |
+| `lab-j9774a-01` | `lab-j9774a-01` | 8 | Altı senaryonun tamamı |
+| `lab-j9776a-01` | `lab-j9776a-01` | 9 | Altı senaryonun tamamı |
+| `lab-j9780a-01` | `lab-j9780a-01` | 10 | Altı senaryonun tamamı; baseline kapalı |
+| `lab-j9783a-01` | `lab-j9783a-01` | 11 | Altı senaryonun tamamı |
 
-Port OID'leri ve LibreNMS port kimliği doğrulanmış iki J9772A hedefi port ve
-investigation senaryolarını destekler. Diğer hedefler seçicide kalır; destekli
-olmayan aksiyonlar neden metniyle disabled gösterilir. Yeni hedef veya aksiyon
-eklemek için fixture yazılabilirliği, gerekli OID'ler, SNMP endpoint'i ve
-LibreNMS nesne kimlikleri birlikte doğrulanmalıdır.
+EMR-86 öncesinde yalnız iki J9772A fixture'ı standart IF-MIB Port 2 kayıtlarını
+taşıyor ve yalnız bu iki hedef manifestte `test_port_index/test_port_id` ile
+işaretleniyordu. Diğer model fixture'larında port OID'leri yoktu; frontend ise
+ek hard-code kullanmadan bu dar backend capability listesini gösteriyordu.
+
+Runner artık her allowlisted hedef için `ifIndex=2`, baseline `admin=up / oper=down`
+test-port contract'ını idempotent olarak fixture'a ekler. Model ve sistem OID'leri
+korunur; eksik bounded IF-MIB satırları dışında veri değiştirilmez. LibreNMS'nin
+discovery sırasında ürettiği `port_id` manifestte sabitlenmez: seçili hedefin
+`device_id + ifIndex` eşleşmesinden çalıştırma anında çözülür. Böylece event
+doğrulaması başka cihaza veya aynı numaralı başka bir port kimliğine düşmez.
+
+Baseline-down hedefler senaryo süresince mevcut sekiz hedefe eklenen tek bounded
+SNMPSim endpoint ile geçici olarak açılır. Reset responder'ı tekrar kalıcı
+`devices-up.txt` listesine döndürür ve cihazın intentional down durumunu korur.
+Gelecekte gerçekten desteklenemeyen bir hedef eklenirse manifest
+`unsupported_scenarios` alanında kısa teknik nedeni taşır; UI bu nedeni butonun
+altında gösterir.
 
 ## CLI kullanımı
 
@@ -43,6 +56,7 @@ python3 simulation/run.py device-down-up --target lab-j9772a-01
 python3 simulation/run.py port-down-up-event --target lab-j9772a-01
 python3 simulation/run.py investigation-incident --target lab-j9772a-01
 python3 simulation/run.py location-change --target lab-j4850a-01
+python3 simulation/reset.py --target lab-j4850a-01
 ```
 
 | Senaryo | Canlı doğrulama | Önerilen soru |
@@ -62,7 +76,7 @@ baseline kurtarması çalışır.
 
 `investigation-incident` aşağıdaki kanıtları tek akışta hazırlar:
 
-1. Cihazı ve Port 2'yi `up/up` durumunda poll eder.
+1. Seçili cihazı ve manifestteki test portunu `up/up` durumunda poll eder.
 2. Fixture'ı geçici olarak çevrimdışı/çevrimiçi yaparak gerçek LibreNMS device
    down ve up eventleri üretir.
 3. Port 2'yi `admin=up / oper=down` durumuna getirir ve gerçek interface eventini
@@ -70,9 +84,9 @@ baseline kurtarması çalışır.
 4. Seçili cihaz için tanımlı gerçek aktif alarmı varsa proof listesine ekler;
    yoksa alarm kontrolünü açıkça `unavailable` gösterir.
 
-Olay doğrulaması SNMP `ifIndex` yerine hedef manifestindeki gerçek LibreNMS
-`port_id` değerini kullanır. Böylece ikinci J9772A hedefindeki Port 2 için
-`eventlog.reference=6` doğru eşleşir.
+Olay doğrulaması test portunu manifestteki SNMP `ifIndex` ile seçer, ardından
+seçili cihaz için API'den dönen gerçek LibreNMS `port_id` değerini kullanır.
+Bu kimlik discovery'ye bağlı olduğundan hard-code edilmez.
 
 Önerilen soru normal sohbet akışını tam bir kez kullanır. Sonuç doğrulaması yanıt
 metnini, gizli reasoning'i veya ikinci bir LLM judge'ı kullanmaz. Tamamlanan
@@ -115,6 +129,7 @@ kullanın:
 
 ```bash
 python3 simulation/reset.py
+python3 simulation/reset.py --target lab-j9775a-01
 ```
 
 Doğrulanmış baseline hedefe bağlıdır:
@@ -123,7 +138,7 @@ Doğrulanmış baseline hedefe bağlıdır:
 8 hedef: device status=up
 3 hedef: device status=down
 location=Test Lab
-J9772A Port 2: ifAdminStatus=up, ifOperStatus=down
+tüm hedeflerde test Port 2: ifAdminStatus=up, ifOperStatus=down
 ```
 
 Reset offline fixture adını geri getirir, gerekirse responder'ı tek instance
@@ -132,11 +147,12 @@ ve sonucu gerçek LibreNMS API verisiyle doğrular.
 
 ## Son canlı kabul
 
-8 Eylül 2026 tarihinde Codex in-app browser ile masaüstü UTM kabulü tamamlandı.
-J9772A, JL357A ve J4850A modellerinde mutasyon, gerçek poller, normal sohbetten
-AI sorgusu ve reset zinciri doğrulandı. `lab-j9772a-02` investigation akışı
-interface event `#336` ve gerçek `port_id=6` ile geçti. Baseline-kapalı
-`lab-j9775a-01` hedefinin disabled açıklamaları ve kapalı durumu koruyan reseti
-de doğrulandı. Ayrıntılar
-[`acceptance/2026-09-08-emr-85-live-acceptance.md`](acceptance/2026-09-08-emr-85-live-acceptance.md)
+9 Eylül 2026 tarihinde Codex in-app browser ile masaüstü UTM kabulü yenilendi.
+J9772A dışındaki JL357A, J4850A ve J9774A model ailelerinde port mutasyonları,
+gerçek interface eventleri, investigation akışları ve reset zinciri geçti.
+Baseline-kapalı `lab-j9775a-01` senaryo sırasında geçici olarak açıldı ve reset
+sonunda başlangıçtaki down durumuna döndü. Arayüzde J4850A port olayı üretildi;
+normal AI sohbeti yeni `#393`–`#395` interface eventlerini gösterdi ve hedef UI
+üzerinden tekrar baseline'a sıfırlandı. Ayrıntılar
+[`acceptance/2026-09-09-emr-86-live-acceptance.md`](acceptance/2026-09-09-emr-86-live-acceptance.md)
 dosyasındadır.

@@ -319,6 +319,34 @@ def create_app(database_path=None, *, secret=None, adapter=None, logger=None,
                             for item in target.get("supported_scenarios", [])
                             if item in DEMO_SCENARIO_IDS
                         ],
+                        "unsupported_scenarios": {
+                            key: str(value)[:240]
+                            for key, value in (
+                                target.get("unsupported_scenarios") or {}
+                            ).items()
+                            if key in DEMO_SCENARIO_IDS and isinstance(value, str)
+                        },
+                        "test_port": (
+                            {
+                                "if_index": _positive_int(
+                                    target.get("test_port", {}).get("if_index")
+                                ),
+                                "baseline_admin": (
+                                    target.get("test_port", {}).get("baseline_admin")
+                                    if target.get("test_port", {}).get("baseline_admin")
+                                    in {"up", "down"}
+                                    else "down"
+                                ),
+                                "baseline_oper": (
+                                    target.get("test_port", {}).get("baseline_oper")
+                                    if target.get("test_port", {}).get("baseline_oper")
+                                    in {"up", "down"}
+                                    else "down"
+                                ),
+                            }
+                            if isinstance(target.get("test_port"), dict)
+                            else None
+                        ),
                     }
                     for target in targets
                     if isinstance(target, dict) and target.get("id")

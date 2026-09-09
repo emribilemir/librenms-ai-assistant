@@ -32,6 +32,8 @@ TARGETS = [
         "device_id": 1,
         "baseline_status": "up",
         "supported_scenarios": list(SCENARIOS),
+        "unsupported_scenarios": {},
+        "test_port": {"if_index": 2, "baseline_admin": "up", "baseline_oper": "down"},
     }
 ]
 
