@@ -32,6 +32,16 @@
 .portTable td[data-status="positive"] { color: #79c995; font-weight: 650; }
 .portTable td[data-status="problem"] { color: #f08087; font-weight: 650; }
 .portTable td[data-status="neutral"] { color: #a3adb5; font-weight: 620; }
+.portFactList { display: grid; gap: 8px; }
+.portFact { border-bottom: 1px solid #30373d; min-width: 0; padding: 4px 0 10px; }
+.portFactHeading { align-items: center; color: #8f99a2; display: flex; font-size: 10px; font-weight: 650; gap: 10px; justify-content: space-between; letter-spacing: .035em; text-transform: uppercase; }
+.portFactHeading a { align-items: center; color: #f0b0b4; display: inline-flex; gap: 5px; text-decoration: none; text-transform: none; }
+.portFactHeading a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.portFactHeading a:focus-visible { border-radius: 3px; outline: 2px solid #ef7a82; outline-offset: 2px; }
+.portFactValue { color: #f2f4f5; font-size: 20px; font-weight: 650; letter-spacing: -.02em; line-height: 1.25; margin: 7px 0 3px; overflow-wrap: anywhere; }
+.portFactContext { color: #a3adb5; font-size: 11px; line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+.portFactContext[data-status="problem"] { color: #d9989d; }
+.portFactContext[data-status="positive"] { color: #91c9a5; }
 .alertHeading { align-items: flex-end; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 7px; }
 .alertHeading .structuredTitle { margin-bottom: 2px; }
 .alertCount { color: #a9b2b9; font-size: 11px; margin: 0; }

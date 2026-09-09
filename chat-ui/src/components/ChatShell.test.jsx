@@ -495,12 +495,15 @@ test("a structured speed query visibly renders the verified LibreNMS speed", () 
     role: "assistant",
     content: [{ type: "text", text: "lab-j9772a-01 portları:\nPort 2: 1 Gbps" }],
     createdAt: new Date(),
-    metadata: { custom: { structuredResult: {
-      kind: "ports",
-      requested_fact: "speed",
-      device: { device_id: 7, hostname: "lab-j9772a-01" },
-      ports: [{ device_id: 7, port_id: 41, ifIndex: 2, ifName: "2", admin_status: "up", oper_status: "down", speed_bps: 1_000_000_000 }],
-    } } },
+    metadata: { custom: {
+      structuredResult: {
+        kind: "ports",
+        requested_fact: "speed",
+        device: { device_id: 7, hostname: "lab-j9772a-01" },
+        ports: [{ device_id: 7, port_id: 41, ifIndex: 2, ifName: "2", ifAlias: "Test-Down", admin_status: "up", oper_status: "down", speed_bps: 1_000_000_000 }],
+      },
+      navigationTargets: [{ kind: "port", label: "Port detayını aç", entity_id: 41, href: "/device/7/port/port=41" }],
+    } },
   }];
   const runtimeStore = { messages, convertMessage: (message) => message, isRunning: false, onNew: async () => {} };
   function Fixture() {
@@ -510,8 +513,11 @@ test("a structured speed query visibly renders the verified LibreNMS speed", () 
 
   render(<Fixture />);
 
-  expect(screen.getByRole("columnheader", { name: "Hız" })).toBeVisible();
-  expect(screen.getByRole("cell", { name: "1 Gbps" })).toBeVisible();
+  const fact = screen.getByRole("group", { name: "lab-j9772a-01 Port 2 hız bilgisi" });
+  expect(within(fact).getByRole("link", { name: "Port 2" })).toHaveAttribute("href", "/device/7/port/port=41");
+  expect(within(fact).getByText("1 Gbps")).toBeVisible();
+  expect(within(fact).getByText("Down · Admin Up · Test-Down")).toBeVisible();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });
 
 test("a structured speed query explicitly reports missing LibreNMS speed", () => {
@@ -535,7 +541,8 @@ test("a structured speed query explicitly reports missing LibreNMS speed", () =>
 
   render(<Fixture />);
 
-  expect(screen.getByRole("cell", { name: "Hız bilgisi yok" })).toBeVisible();
+  expect(screen.getByText("LibreNMS'te hız bilgisi yok.")).toBeVisible();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });
 
 test("unresolved structured port rows show only the compact device fallback action", () => {

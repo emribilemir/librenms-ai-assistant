@@ -155,11 +155,35 @@ function StructuredPortResult({ result, navigationTargets }) {
   const rowTargets = new Map(targets.filter((target) => target.kind === "port").map((target) => [target.entity_id, target]));
   const hostname = result.device.hostname || `Cihaz ${result.device.device_id}`;
   const showSpeed = result.requested_fact === "speed";
+  if (showSpeed) {
+    return (
+      <section className={styles.structuredResult} data-slot="assistant-answer">
+        <p className={styles.structuredTitle}>{hostname}</p>
+        <div className={styles.portFactList}>{result.ports.map((port, index) => {
+          const status = portStatus(port);
+          const target = port.port_id ? rowTargets.get(port.port_id) : null;
+          const expectedHref = port.port_id ? `/device/${result.device.device_id}/port/port=${port.port_id}` : null;
+          const label = portLabel(port);
+          const context = [status.label, `Admin ${titleCaseStatus(port.admin_status)}`, port.ifAlias || port.ifDescr].filter(Boolean).join(" · ");
+          return (
+            <div className={styles.portFact} role="group" aria-label={`${hostname} ${label} hız bilgisi`} key={port.port_id || `${port.ifIndex || "row"}-${index}`}>
+              <div className={styles.portFactHeading}>
+                {target?.href === expectedHref ? <a href={target.href} target="_blank" rel="noopener noreferrer" aria-label={label}>{label}<ExternalLink size={12} aria-hidden="true" /></a> : <span>{label}</span>}
+                <span>Hız</span>
+              </div>
+              <p className={styles.portFactValue}>{port.speed_bps ? formatSpeed(port.speed_bps) : "LibreNMS'te hız bilgisi yok."}</p>
+              <p className={styles.portFactContext} data-status={status.semantic}>{context}</p>
+            </div>
+          );
+        })}</div>
+      </section>
+    );
+  }
   return (
     <section className={styles.structuredResult} data-slot="assistant-answer">
       <p className={styles.structuredTitle}>{hostname} portları</p>
       <table className={styles.portTable} aria-label={`${hostname} portları`}>
-        <thead><tr><th>Port</th><th>Durum</th><th>Admin</th>{showSpeed ? <th>Hız</th> : null}<th>Açıklama</th></tr></thead>
+        <thead><tr><th>Port</th><th>Durum</th><th>Admin</th><th>Açıklama</th></tr></thead>
         <tbody>{result.ports.map((port, index) => {
           const status = portStatus(port);
           const target = port.port_id ? rowTargets.get(port.port_id) : null;
@@ -170,7 +194,6 @@ function StructuredPortResult({ result, navigationTargets }) {
               <td>{target?.href === expectedHref ? <a href={target.href} target="_blank" rel="noopener noreferrer" aria-label={label}>{label}<ExternalLink size={12} aria-hidden="true" /></a> : <span>{label}</span>}</td>
               <td data-status={status.semantic}>{status.label}</td>
               <td>{titleCaseStatus(port.admin_status)}</td>
-              {showSpeed ? <td>{port.speed_bps ? formatSpeed(port.speed_bps) : "Hız bilgisi yok"}</td> : null}
               <td>{port.ifAlias || port.ifDescr || "—"}</td>
             </tr>
           );
