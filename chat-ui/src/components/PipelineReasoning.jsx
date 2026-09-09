@@ -41,7 +41,7 @@ export function PipelineReasoning({ inspection, variant = "details" }) {
       <div className={styles.progress} data-streaming="true" data-slot="pipeline-progress">
         <span className={styles.progressStatus} role="status" aria-live="polite">
           <span className={styles.progressDot} aria-hidden="true" />
-          <span className={styles.shimmer}>{progressLabel(lines)}</span>
+          <span className="shimmer">{progressLabel(lines)}</span>
         </span>
       </div>
     );

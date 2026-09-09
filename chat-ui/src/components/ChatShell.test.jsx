@@ -960,7 +960,9 @@ test("live SSE stages replace the checklist with one compact assistant-side stat
 
   render(<Fixture />);
 
-  expect(screen.getByRole("status")).toHaveTextContent("Cihaz çözümleniyor…");
+  const progress = screen.getByRole("status");
+  expect(progress).toHaveTextContent("Cihaz çözümleniyor…");
+  expect(progress.querySelector(".shimmer")).toHaveTextContent("Cihaz çözümleniyor…");
   expect(screen.queryByRole("button", { name: /Cihazı çözümlüyor/i })).not.toBeInTheDocument();
   expect(screen.queryByText(/Soruyu sınıflandırdı/)).not.toBeInTheDocument();
   expect(screen.queryByText("Validating…")).not.toBeInTheDocument();

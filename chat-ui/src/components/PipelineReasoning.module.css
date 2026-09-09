@@ -1,6 +1,6 @@
 .root { display: contents; }
 .progress { align-items: center; color: #aeb7be; display: inline-flex; font-size: 12px; gap: 8px; line-height: 1.45; min-height: 28px; padding: 1px 0 5px; }
-.progressStatus { align-items: center; display: inline-flex; gap: 8px; }
+.progressStatus { --shimmer-color: #fff; align-items: center; display: inline-flex; gap: 8px; }
 .progressDot { animation: pulse 1.25s ease-in-out infinite; background: #d9232e; border-radius: 50%; box-shadow: 0 0 0 4px rgba(217, 35, 46, .12); flex: none; height: 5px; width: 5px; }
 .trigger { align-items: center; background: transparent; border: 0; border-radius: 7px; color: #929ca4; display: inline-flex; font: inherit; font-size: 11px; gap: 5px; min-height: 28px; padding: 4px 7px; transition: background-color 180ms ease, color 180ms ease, transform 180ms ease; }
 .trigger:hover { background: #30363c; color: #eef1f3; }
@@ -18,7 +18,5 @@
 .telemetry { align-items: center; color: #747f88; display: flex; flex-wrap: wrap; font-size: 10px; gap: 4px 12px; margin: 2px 0 5px; min-height: 0; overflow: hidden; }
 .telemetry span { position: relative; }
 .telemetry span + span::before { background: #59636c; border-radius: 50%; content: ""; height: 3px; left: -8px; position: absolute; top: 6px; width: 3px; }
-.shimmer { animation: shimmer 1.8s linear infinite; background: linear-gradient(90deg, #8d969f 18%, #fff 48%, #8d969f 78%); background-clip: text; background-size: 220% 100%; color: transparent; }
-@keyframes shimmer { to { background-position: -220% 0; } }
 @keyframes pulse { 50% { opacity: .45; transform: scale(.82); } }
-@media (prefers-reduced-motion: reduce) { .panel, .chevron, .trigger { transition: none; } .shimmer, .progressDot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .panel, .chevron, .trigger { transition: none; } .progressStatus :global(.shimmer), .progressDot { animation: none; } }

@@ -13,17 +13,20 @@
     "@assistant-ui/react-markdown": "0.14.13",
     "lucide-react": "1.39.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "tw-shimmer": "^0.4.12"
   },
   "devDependencies": {
     "@babel/preset-env": "7.28.6",
     "@babel/preset-react": "7.28.5",
     "@playwright/test": "1.62.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "babel-jest": "30.2.0",
     "jest": "30.2.0",
     "jest-environment-jsdom": "30.2.0",
+    "tailwindcss": "^4.3.3",
     "vite": "8.0.0"
   }
 }
