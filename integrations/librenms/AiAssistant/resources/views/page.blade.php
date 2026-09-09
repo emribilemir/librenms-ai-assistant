@@ -1,3 +1,3 @@
-<link rel="stylesheet" href="{{ asset('plugins/ai-assistant/ai-assistant.css') }}?v=20260909-emr83-tw-shimmer">
+<link rel="stylesheet" href="{{ asset('plugins/ai-assistant/ai-assistant.css') }}?v=20260909-emr87-port-speed">
 <div id="root" data-ai-assistant-config="{{ $identity_json }}"></div>
-<script type="module" src="{{ asset('plugins/ai-assistant/ai-assistant.js') }}?v=20260909-emr83-tw-shimmer"></script>
+<script type="module" src="{{ asset('plugins/ai-assistant/ai-assistant.js') }}?v=20260909-emr87-port-speed"></script>
