@@ -1,7 +1,9 @@
 import importlib.util
+import io
 import json
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -76,6 +78,14 @@ class FixtureMutationTests(unittest.TestCase):
 
 
 class ProcessSelectionTests(unittest.TestCase):
+    def test_ssh_uses_only_the_canonical_vm_alias(self):
+        completed = SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
+        with patch.object(simulation_run.subprocess, "run", return_value=completed) as run:
+            result = simulation_run.ssh("sudo -n true")
+
+        self.assertEqual(result.stdout, "ok\n")
+        self.assertEqual(run.call_args.args[0], ["ssh", "librenms-vm", "sudo -n true"])
+
     def test_accepts_one_numeric_responder_pid(self):
         self.assertEqual(simulation_run.single_responder_pid("24260\n"), 24260)
 
@@ -88,6 +98,7 @@ class ProcessSelectionTests(unittest.TestCase):
     def test_stop_responder_uses_the_boot_persistent_systemd_unit(self):
         with (
             patch.object(simulation_run, "systemd_responder_available", return_value=True),
+            patch.object(simulation_run, "systemd_responder_active", return_value=True),
             patch.object(simulation_run, "responder_pid", side_effect=[24260, None]),
             patch.object(simulation_run, "ssh", return_value=SimpleNamespace(returncode=0)) as ssh,
         ):
@@ -156,6 +167,27 @@ class EventSelectionTests(unittest.TestCase):
 
 
 class ScenarioManifestTests(unittest.TestCase):
+    def test_reset_cli_routes_the_allowlisted_target_to_its_own_baseline(self):
+        reset_path = ROOT / "simulation" / "reset.py"
+        spec = importlib.util.spec_from_file_location("emr86_simulation_reset", reset_path)
+        reset_module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"run": simulation_run}):
+            spec.loader.exec_module(reset_module)
+        result = {
+            "changed": True,
+            "baseline_status": "down",
+            "location": "Test Lab",
+            "admin": "up",
+            "oper": "down",
+        }
+        with (
+            patch.object(reset_module, "reset_baseline", return_value=result) as reset,
+            redirect_stdout(io.StringIO()),
+        ):
+            reset_module.main(["--target", "lab-j9775a-01"])
+
+        reset.assert_called_once_with("lab-j9775a-01")
+
     def test_manifest_contains_only_the_bounded_showcase(self):
         scenarios = json.loads(
             (ROOT / "simulation" / "scenarios.json").read_text(encoding="utf-8")
@@ -257,41 +289,64 @@ class ScenarioManifestTests(unittest.TestCase):
         )
         by_target = {target["id"]: target for target in metadata["supported_targets"]}
         all_scenarios = list(simulation_run.SCENARIO_IDS)
-        common_scenarios = ["location-change", "device-down-up"]
-        self.assertEqual(by_target["lab-j9772a-01"]["supported_scenarios"], all_scenarios)
-        self.assertEqual(by_target["lab-j9772a-02"]["supported_scenarios"], all_scenarios)
-        self.assertEqual(by_target["lab-j9775a-02"]["supported_scenarios"], common_scenarios)
-        self.assertEqual(by_target["lab-jl357a-01"]["supported_scenarios"], common_scenarios)
-        self.assertEqual(by_target["lab-j4850a-01"]["supported_scenarios"], common_scenarios)
-        self.assertEqual(by_target["lab-j9774a-01"]["supported_scenarios"], common_scenarios)
-        self.assertEqual(by_target["lab-j9776a-01"]["supported_scenarios"], common_scenarios)
-        self.assertEqual(by_target["lab-j9783a-01"]["supported_scenarios"], common_scenarios)
-        self.assertEqual(by_target["lab-j9775a-01"]["supported_scenarios"], [])
-        self.assertEqual(by_target["lab-j4850a-02"]["supported_scenarios"], [])
-        self.assertEqual(by_target["lab-j9780a-01"]["supported_scenarios"], [])
+        for target in by_target.values():
+            self.assertEqual(target["supported_scenarios"], all_scenarios)
+            self.assertEqual(
+                target["test_port"],
+                {"if_index": 2, "baseline_admin": "up", "baseline_oper": "down"},
+            )
+            self.assertEqual(target["unsupported_scenarios"], {})
         self.assertEqual(by_target["lab-j9775a-01"]["baseline_status"], "down")
         scenarios = {scenario["id"]: scenario for scenario in metadata["scenarios"]}
         self.assertEqual(
             scenarios["investigation-incident"]["supported_target_ids"],
-            ["lab-j9772a-01", "lab-j9772a-02"],
+            list(by_target),
         )
         self.assertEqual(
             scenarios["location-change"]["supported_target_ids"],
-            [
-                "lab-j9772a-01",
-                "lab-j9772a-02",
-                "lab-j9775a-02",
-                "lab-jl357a-01",
-                "lab-j4850a-01",
-                "lab-j9774a-01",
-                "lab-j9776a-01",
-                "lab-j9783a-01",
-            ],
+            list(by_target),
         )
         self.assertEqual(
             metadata["scenarios"][-1]["example_question"],
             "lab-j9772a-01 cihazında şu an ne sorun var, son 24 saatte neler olmuş?",
         )
+
+    def test_missing_fixture_port_contract_is_added_once_without_replacing_model_data(self):
+        target = simulation_run.TARGETS["lab-jl357a-01"]
+        original = (
+            "1.3.6.1.2.1.1.1.0|4|Aruba JL357A\n"
+            "1.3.6.1.2.1.1.6.0|4|Test Lab\n"
+        )
+        with (
+            patch.object(simulation_run, "read_fixture", side_effect=[original, original]),
+            patch.object(simulation_run, "write_fixture") as write_fixture,
+        ):
+            self.assertTrue(simulation_run.ensure_test_port_contract(target))
+            written = write_fixture.call_args.args[1]
+
+        self.assertIn("1.3.6.1.2.1.1.1.0|4|Aruba JL357A\n", written)
+        self.assertIn("1.3.6.1.2.1.2.2.1.1.2|2|2\n", written)
+        self.assertIn("1.3.6.1.2.1.2.2.1.7.2|2|1\n", written)
+        self.assertIn("1.3.6.1.2.1.2.2.1.8.2|2|2\n", written)
+
+        with (
+            patch.object(simulation_run, "read_fixture", return_value=written),
+            patch.object(simulation_run, "write_fixture") as second_write,
+        ):
+            self.assertFalse(simulation_run.ensure_test_port_contract(target))
+        second_write.assert_not_called()
+
+    def test_baseline_down_target_is_temporarily_added_to_the_bounded_responder(self):
+        target = simulation_run.TARGETS["lab-j9775a-01"]
+        with (
+            patch.object(simulation_run, "restore_online_fixture", return_value=False),
+            patch.object(simulation_run, "snmp_available", return_value=False),
+            patch.object(simulation_run, "responder_pid", return_value=77),
+            patch.object(simulation_run, "restart_responder") as restart,
+        ):
+            simulation_run.ensure_online(target)
+
+        restart.assert_called_once_with(target, target_online=True)
 
     def test_reset_skips_port_contract_for_a_device_only_target(self):
         target = simulation_run.DemoTarget(
@@ -320,7 +375,12 @@ class ScenarioManifestTests(unittest.TestCase):
             patch.object(
                 simulation_run,
                 "require_port",
-                return_value={"ifAdminStatus": "up", "ifOperStatus": "down"},
+                return_value={
+                    "port_id": 2,
+                    "ifIndex": 2,
+                    "ifAdminStatus": "up",
+                    "ifOperStatus": "down",
+                },
             ),
         ):
             result = simulation_run.reset_baseline(target)
@@ -356,18 +416,29 @@ class ScenarioManifestTests(unittest.TestCase):
             patch.object(simulation_run, "set_record", return_value=False),
             patch.object(simulation_run, "discover_device"),
             patch.object(simulation_run, "poll_device") as poll_device,
+            patch.object(simulation_run, "snmp_available", return_value=True),
+            patch.object(simulation_run, "restart_responder") as restart_responder,
             patch.object(simulation_run, "api_backend", return_value=backend),
             patch.object(simulation_run, "require_device_status", return_value=backend.get_device.return_value),
             patch.object(
                 simulation_run,
                 "require_port",
-                return_value={"ifAdminStatus": "up", "ifOperStatus": "down"},
+                return_value={
+                    "port_id": 6,
+                    "ifIndex": 2,
+                    "ifAdminStatus": "up",
+                    "ifOperStatus": "down",
+                },
             ),
         ):
             result = simulation_run.reset_baseline(target)
 
         ensure_online.assert_not_called()
-        poll_device.assert_called_once_with(target, expect_down=True)
+        restart_responder.assert_called_once_with(target, target_online=False)
+        self.assertEqual(
+            poll_device.call_args_list,
+            [unittest.mock.call(target), unittest.mock.call(target, expect_down=True)],
+        )
         self.assertEqual(result["baseline_status"], "down")
 
     def test_execute_scenario_reuses_the_existing_runner_and_bounds_result(self):
@@ -380,6 +451,8 @@ class ScenarioManifestTests(unittest.TestCase):
         with (
             patch.object(simulation_run, "preflight") as preflight,
             patch.object(simulation_run, "ensure_online") as ensure_online,
+            patch.object(simulation_run, "ensure_test_port_contract", return_value=False),
+            patch.object(simulation_run, "discover_device"),
             patch.object(simulation_run, "api_backend", return_value="backend"),
             patch.dict(
                 simulation_run.SCENARIO_RUNNERS,
@@ -432,6 +505,8 @@ class ScenarioManifestTests(unittest.TestCase):
         with (
             patch.object(simulation_run, "preflight") as preflight,
             patch.object(simulation_run, "ensure_online") as ensure_online,
+            patch.object(simulation_run, "ensure_test_port_contract", return_value=False),
+            patch.object(simulation_run, "discover_device"),
             patch.object(simulation_run, "api_backend", return_value="backend"),
             patch.dict(simulation_run.SCENARIO_RUNNERS, {"port-up": runner}, clear=True),
             patch.object(
@@ -448,6 +523,27 @@ class ScenarioManifestTests(unittest.TestCase):
         runner.assert_called_once_with("backend", second)
         self.assertEqual(result["target_id"], "lab-j9772a-02")
         self.assertEqual(result["example_question"], "lab-j9772a-02 Port 2 ne durumda?")
+
+    def test_port_scenario_discovers_an_already_provisioned_target_before_running(self):
+        target = simulation_run.TARGETS["lab-jl357a-01"]
+        runner = unittest.mock.Mock(return_value=(True, "port verified", []))
+        with (
+            patch.object(simulation_run, "preflight"),
+            patch.object(simulation_run, "ensure_online"),
+            patch.object(simulation_run, "ensure_test_port_contract", return_value=False),
+            patch.object(simulation_run, "discover_device") as discover,
+            patch.object(simulation_run, "api_backend", return_value="backend"),
+            patch.dict(simulation_run.SCENARIO_RUNNERS, {"port-up": runner}, clear=True),
+            patch.object(
+                simulation_run,
+                "load_scenarios",
+                return_value={"port-up": {"example_ai_question": "{hostname} port 2 ne durumda?"}},
+            ),
+        ):
+            simulation_run.execute_scenario("port-up", target.target_id)
+
+        discover.assert_called_once_with(target)
+        runner.assert_called_once_with("backend", target)
 
     def test_investigation_incident_returns_real_verified_contract(self):
         target = simulation_run.TARGETS["lab-j9772a-01"]
@@ -486,7 +582,16 @@ class ScenarioManifestTests(unittest.TestCase):
             patch.object(simulation_run, "poll_device", return_value=True),
             patch.object(simulation_run, "run_device_down_up", return_value=(True, "ok", [down_event, up_event])),
             patch.object(simulation_run, "current_events", side_effect=[[], [port_event]]),
-            patch.object(simulation_run, "require_port", return_value={"ifAdminStatus": "up", "ifOperStatus": "down"}),
+            patch.object(
+                simulation_run,
+                "require_port",
+                return_value={
+                    "port_id": 2,
+                    "ifIndex": 2,
+                    "ifAdminStatus": "up",
+                    "ifOperStatus": "down",
+                },
+            ),
         ):
             changed, verified, events, details = simulation_run.run_investigation_incident(
                 backend, target
@@ -537,7 +642,12 @@ class ScenarioManifestTests(unittest.TestCase):
             patch.object(
                 simulation_run,
                 "require_port",
-                return_value={"ifAdminStatus": "up", "ifOperStatus": "down"},
+                return_value={
+                    "port_id": 6,
+                    "ifIndex": 2,
+                    "ifAdminStatus": "up",
+                    "ifOperStatus": "down",
+                },
             ),
         ):
             with self.assertRaises(RuntimeError) as captured:
@@ -560,7 +670,7 @@ class ScenarioManifestTests(unittest.TestCase):
             "event_id": 323,
             "timestamp": "2026-09-08 17:00:00",
             "type": "interface",
-            "reference": "6",
+            "reference": "62",
             "message": "ifOperStatus: up -> down",
         }
         backend = unittest.mock.Mock()
@@ -582,7 +692,12 @@ class ScenarioManifestTests(unittest.TestCase):
             patch.object(
                 simulation_run,
                 "require_port",
-                return_value={"ifAdminStatus": "up", "ifOperStatus": "down"},
+                return_value={
+                    "port_id": 62,
+                    "ifIndex": 2,
+                    "ifAdminStatus": "up",
+                    "ifOperStatus": "down",
+                },
             ),
             patch.object(simulation_run, "_active_target_alert", return_value=None),
         ):
@@ -591,7 +706,7 @@ class ScenarioManifestTests(unittest.TestCase):
                     backend, target
                 )
             except RuntimeError as error:
-                self.fail(f"target-aware event lookup rejected port_id=6: {error}")
+                self.fail(f"target-aware event lookup rejected live port_id=62: {error}")
 
         self.assertEqual(events[-1]["event_id"], 323)
         self.assertEqual(details["proof"][2]["event_id"], 323)
@@ -602,6 +717,8 @@ class ScenarioManifestTests(unittest.TestCase):
         with (
             patch.object(simulation_run, "preflight"),
             patch.object(simulation_run, "ensure_online"),
+            patch.object(simulation_run, "ensure_test_port_contract", return_value=False),
+            patch.object(simulation_run, "discover_device"),
             patch.object(simulation_run, "api_backend", return_value="backend"),
             patch.dict(
                 simulation_run.SCENARIO_RUNNERS,

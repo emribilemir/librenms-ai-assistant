@@ -78,7 +78,7 @@ function ResultSummary({ result }) {
   );
 }
 
-function ActionGroup({ label, scenarios, selectedTargetId, running, onRun }) {
+function ActionGroup({ label, scenarios, selectedTarget, running, onRun }) {
   if (!scenarios.length) return null;
   return (
     <section className={styles.group} aria-label={label}>
@@ -87,7 +87,8 @@ function ActionGroup({ label, scenarios, selectedTargetId, running, onRun }) {
         {scenarios.map((scenario) => {
           const presentation = ACTIONS[scenario.id] || { icon: Activity, description: "Bounded demo aksiyonunu çalıştır" };
           const Icon = presentation.icon;
-          const unsupported = !scenario.supported_target_ids?.includes(selectedTargetId);
+          const unsupported = !scenario.supported_target_ids?.includes(selectedTarget?.id);
+          const unsupportedReason = selectedTarget?.unsupported_scenarios?.[scenario.id] || "Bu hedefte desteklenmiyor";
           return (
             <button
               key={scenario.id}
@@ -99,7 +100,7 @@ function ActionGroup({ label, scenarios, selectedTargetId, running, onRun }) {
               <span className={styles.actionIcon}><Icon size={15} aria-hidden="true" /></span>
               <span className={styles.actionCopy}>
                 <strong>{scenario.label}</strong>
-                <small>{unsupported ? "Bu hedefte desteklenmiyor" : presentation.description}</small>
+                <small>{unsupported ? unsupportedReason : presentation.description}</small>
               </span>
               <ChevronRight className={styles.actionArrow} size={15} aria-hidden="true" />
             </button>
@@ -151,10 +152,10 @@ export function DemoControls({ available, open, scenarios, targets, selectedTarg
               </option>
             ))}
           </select>
-          {selectedTarget?.baseline_status === "down" ? <small>Bu hedef başlangıçta kapalıdır; güvenli senaryolar kullanılamaz.</small> : null}
+          {selectedTarget?.baseline_status === "down" ? <small>Reset bu hedefi başlangıçtaki kapalı durumuna döndürür.</small> : null}
         </label>
-        <ActionGroup label="Cihaz ve port" scenarios={deviceScenarios} selectedTargetId={selectedTargetId} running={running} onRun={onRun} />
-        <ActionGroup label="Olay ve inceleme" scenarios={incidentScenarios} selectedTargetId={selectedTargetId} running={running} onRun={onRun} />
+        <ActionGroup label="Cihaz ve port" scenarios={deviceScenarios} selectedTarget={selectedTarget} running={running} onRun={onRun} />
+        <ActionGroup label="Olay ve inceleme" scenarios={incidentScenarios} selectedTarget={selectedTarget} running={running} onRun={onRun} />
         {running ? <p className={styles.running} role="status">{RUNNING_COPY[runningScenarioId] || "Senaryo çalıştırılıyor…"}</p> : null}
         {resultWithActions ? <ResultSummary result={resultWithActions} /> : null}
         {verification ? (
