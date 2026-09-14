@@ -8,7 +8,7 @@ Environment: authenticated LibreNMS 26.8.1 lab in UTM, exercised only through th
 
 | Check | Result |
 | --- | --- |
-| Git source | PASS — `origin/main` at `1cdb0c4` after PRs [#20](https://github.com/emribilemir/isbaklibrenms/pull/20), [#21](https://github.com/emribilemir/isbaklibrenms/pull/21), and [#22](https://github.com/emribilemir/isbaklibrenms/pull/22). |
+| Git source | PASS — `origin/main` at `1cdb0c4` after PRs [#20](https://github.com/emribilemir/librenms-ai-assistant/pull/20), [#21](https://github.com/emribilemir/librenms-ai-assistant/pull/21), and [#22](https://github.com/emribilemir/librenms-ai-assistant/pull/22). |
 | Frontend asset version | PASS — the authenticated page loaded both CSS and JS with `?v=20260907-emr68c`. |
 | Plugin deployment | PASS — only `/opt/librenms/app/Plugins/AiAssistant/` and `/opt/librenms/html/plugins/ai-assistant/` were replaced; LibreNMS core `git status --short` remained empty. |
 | Recoverable backup | `/opt/librenms/.ai-assistant-backups/20260907-emr68c-1cdb0c4` |

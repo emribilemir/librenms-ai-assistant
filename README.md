@@ -152,8 +152,8 @@ lab-j9772a-01'de ne sorun var?
 Chat servisi test bağımlılıklarını kurduktan sonra offline suite'i çalıştırın:
 
 ```bash
-git clone https://github.com/emribilemir/isbaklibrenms.git
-cd isbaklibrenms
+git clone https://github.com/emribilemir/librenms-ai-assistant.git
+cd librenms-ai-assistant
 python3 -m venv .venv
 .venv/bin/python -m pip install -r librenms-hybrid-poc/requirements-chat-service.txt
 .venv/bin/python -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
