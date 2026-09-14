@@ -25,7 +25,7 @@ named target and has a rollback window.
 
    ```sh
    export AI_ASSISTANT_SHARED_SECRET='replace-with-exactly-32-ASCII-characters'
-   cd /path/to/isbaklibrenms
+   cd /path/to/librenms-ai-assistant
    cp .env.example .env
    # Fill the placeholders, then use the reproducible launchd entrypoint:
    ./scripts/lab-up
@@ -51,7 +51,7 @@ It backs up existing plugin/assets to a timestamped directory, uses
 ready, and restores the backup if either deployment copy fails.
 
 ```sh
-cd /path/to/isbaklibrenms
+cd /path/to/librenms-ai-assistant
 sudo integrations/librenms/AiAssistant/scripts/deploy-plugin.sh /opt/librenms
 ```
 
