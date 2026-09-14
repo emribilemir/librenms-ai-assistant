@@ -1,23 +1,24 @@
 # LibreNMS AI Assistant — Natural-Language Hybrid PoC
 
-LibreNMS verilerine doğal dille, güvenli ve doğrulanabilir biçimde erişmenin
-uygulanabilirliğini araştıran read-only bir proof of concept.
+A read-only proof of concept investigating whether LibreNMS data can be accessed
+safely and verifiably through natural language.
 
-Proje; yerel Qwen modeliyle doğal dil planlama, deterministik cihaz çözümleme,
-LibreNMS `/api/v0` sorguları, native LibreNMS eklentisi ve kanıta dayalı cevap
-üretimi arasındaki sınırları test eder. Tüm LibreNMS erişimi read-only kalır.
+The project tests the boundaries between natural-language planning with a local
+Qwen model, deterministic device resolution, LibreNMS `/api/v0` queries, a
+native LibreNMS plugin, and evidence-grounded answer generation. All access to
+LibreNMS remains read-only.
 
-## Temel yaklaşım
+## Core approach
 
-> Qwen isteği yapılandırır; resolver kimliği çözer; LibreNMS operasyonel
-> gerçeği sağlar; Python kritik kararları doğrular.
+> Qwen structures the request; the resolver establishes identity; LibreNMS
+> provides operational truth; Python validates critical decisions.
 
 ```text
-Kullanıcı sorgusu
+User query
         |
         v
 Qwen semantic planner
-(route + intent + ham referans + structured filtreler)
+(route + intent + raw reference + structured filters)
         |
         v
 Strict plan validation
@@ -29,45 +30,49 @@ Resolver v5
         v
 Read-only LibreNMS backend
         |
-        +--> Direct read: deterministik cevap
+        +--> Direct read: deterministic answer
         |
         +--> Investigation: typed findings -> Qwen claims -> validation/judge
                                                |
-                                               +--> güvenli fallback
+                                               +--> safe fallback
 ```
 
-### Sorumluluk sınırları
+### Responsibility boundaries
 
-| Katman | Sorumluluk | Yapmadığı şey |
+| Layer | Responsibility | What it does not do |
 |---|---|---|
-| Qwen planner | Doğal dili doğrulanabilir structured plana dönüştürmek | Cihaz seçmek veya backend verisi olmadan durum iddia etmek |
-| Plan doğrulayıcı | Schema, tip, route–intent ve alan tutarlılığını kontrol etmek | Kullanıcı cümlesini regex kurallarıyla yeniden yorumlamak |
-| Resolver v5 | Hostname, SKU, model ve katalog filtrelerini çözmek | Belirsiz eşleşmede rastgele cihaz seçmek |
-| LibreNMS backend | Cihaz, port, alarm ve event gerçeklerini sağlamak | Write endpointi çağırmak veya veri tahmin etmek |
-| Grounding katmanı | Bulguları sabit referanslarla paketlemek ve claim'leri doğrulamak | Kanıtta bulunmayan kök neden üretmek |
+| Qwen planner | Convert natural language into a verifiable structured plan | Select a device or claim operational state without backend evidence |
+| Plan validator | Check schema, types, route–intent alignment, and field consistency | Reinterpret the user's sentence with regex rules |
+| Resolver v5 | Resolve hostnames, SKUs, models, and catalog filters | Pick a random device when a match is ambiguous |
+| LibreNMS backend | Provide device, port, alert, and event facts | Call write endpoints or guess data |
+| Grounding layer | Package findings with stable references and validate claims | Invent a root cause that is absent from the evidence |
 
 ## Native Assistant UI
 
-PoC yalnızca bir CLI değildir. [`chat-ui/`](chat-ui/) altında React 19, Vite 8
-ve [assistant-ui](https://www.assistant-ui.com/) primitive'leriyle geliştirilen
-chat deneyimi, [`integrations/librenms/AiAssistant/`](integrations/librenms/AiAssistant/)
-üzerinden LibreNMS'in kendi oturum ve sayfa kabuğuna gömülür.
+The PoC is more than a CLI. The chat experience under
+[`chat-ui/`](chat-ui/), built with React 19, Vite 8, and
+[assistant-ui](https://www.assistant-ui.com/) primitives, is embedded in
+LibreNMS's own session and page shell through
+[`integrations/librenms/AiAssistant/`](integrations/librenms/AiAssistant/).
 
-Arayüzde bugün çalışan başlıca özellikler:
+The main features currently available in the interface are:
 
-- LibreNMS oturumundan imzalı kullanıcı kimliğiyle açılan native eklenti sayfası
-- Kalıcı sohbet geçmişi, arama, yeni sohbet ve güvenli silme akışı
-- Streaming yanıt, iptal/tekrar deneme ve aynı sohbette sıralı mesaj kuyruğu
-- Canlı envanterden cihaz seçici ve sorguya hazır başlangıç önerileri
-- Cihaz ve port sonuçları için okunabilir tablolar; alarm sonuçları için özet kartlar
-- Event sorguları için zaman, önem seviyesi, mesaj ve `up -> down` geçişlerini
-  ayıran kompakt timeline
-- Doğrulanmış `device`, `port`, `alerts` ve `events` LibreNMS deep-link'leri
-- Investigation sırasında planner, resolver, tool ve finding aşamalarını gösteren
-  işlem durumu; Demo Modu'nda ayrıntılı inspector
-- Backend manifestindeki 11 hedefi ve hedefe özel destek matrisini kullanan sağ
-  Demo Kontrolleri drawer'ı; doğrudan aksiyonlar, reset ve **Bu durumu AI'a sor** CTA'sı
-- Klavye odağı, erişilebilir isimler, boş/tek event durumları ve güvenli hata halleri
+- A native plugin page opened with signed user identity from the LibreNMS session
+- Persistent chat history, search, new-chat creation, and a safe deletion flow
+- Streaming responses, cancel/retry controls, and a sequential message queue
+  within each conversation
+- A device picker backed by live inventory and query-ready starter suggestions
+- Readable tables for device and port results, plus summary cards for alerts
+- A compact timeline for event queries that separates timestamps, severity,
+  messages, and `up -> down` transitions
+- Verified LibreNMS deep links for `device`, `port`, `alerts`, and `events`
+- Processing status for planner, resolver, tool, and finding stages during an
+  investigation, plus a detailed inspector in Demo Mode
+- A right-side Demo Controls drawer using the backend manifest's 11 targets and
+  target-specific support matrix, with direct actions, reset, and the
+  **Bu durumu AI'a sor** (“Ask AI about this state”) CTA
+- Keyboard focus handling, accessible names, empty and single-event states, and
+  safe error states
 
 ```text
 LibreNMS plugin page
@@ -82,22 +87,24 @@ Signed /v1 chat API + SSE
 Hybrid planner / resolver / read-only LibreNMS backend
 ```
 
-Normal sohbet ve LibreNMS okumaları salt okunurdur. Lab fixture'larını değiştiren
-Demo Kontrolleri ayrıca `AI_DEMO_MODE_ALLOWED=1` ve imzalı `demo_control`
-capability'si ister; yalnız `AI_DEV_AUTH=1` deployed uygulamada bu yetkiyi açmaz.
+Normal chat and LibreNMS reads are read-only. Demo Controls that modify lab
+fixtures additionally require `AI_DEMO_MODE_ALLOWED=1` and a signed
+`demo_control` capability. Setting only `AI_DEV_AUTH=1` does not grant this
+permission in the deployed application.
 
-## Desteklenen sorgu kapsamı
+## Supported query scope
 
-- Tekil cihaz veya cihaz seti için canlı durum
-- Cihaz modeli, hostname, uptime, location ve işletim sistemi
-- Port admin/oper durumu, hız ve açıklama
-- Belirli port veya structured port filtreleri
-- Aktif alarm ve event listeleri
-- Son durum değişimi ve zaman pencereli event sorguları
-- Sabit kanıt kümesiyle güncel veya tarihsel investigation
-- Marka, aile, port sayısı ve PoE gibi katalog filtreleriyle cihaz seti çözümleme
+- Live status for a single device or a set of devices
+- Device model, hostname, uptime, location, and operating system
+- Port administrative/operational state, speed, and description
+- A specific port or structured port filters
+- Active alert and event lists
+- Latest state change and time-windowed event queries
+- Current or historical investigations over a fixed evidence set
+- Device-set resolution with catalog filters such as brand, family, port count,
+  and PoE capability
 
-Örnekler:
+Example Turkish queries:
 
 ```text
 lab-j9772a-01 açık mı?
@@ -109,47 +116,47 @@ lab-j9772a-01 son 30 dakikada status değiştirdi mi?
 lab-j9772a-01'de ne sorun var?
 ```
 
-## Depo yapısı
+## Repository structure
 
-| Yol | İçerik |
+| Path | Contents |
 |---|---|
-| [`chat-ui/`](chat-ui/) | React + assistant-ui tabanlı native sohbet, structured sonuçlar ve demo arayüzü |
-| [`integrations/librenms/AiAssistant/`](integrations/librenms/AiAssistant/) | LibreNMS plugin sayfası, imzalı identity köprüsü ve dağıtım sözleşmesi |
-| [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Güncel planner, orchestration ve backend adapter giriş noktaları |
-| [`librenms-hybrid-poc/tests/`](librenms-hybrid-poc/tests/) | Hybrid, chat, güvenlik ve ops offline regression suite'i |
-| [`librenms-hybrid-poc/fixtures/`](librenms-hybrid-poc/fixtures/) | PoC inventory, prompt ve acceptance girdileri |
-| [`librenms-hybrid-poc/hybrid-gold-v3/`](librenms-hybrid-poc/hybrid-gold-v3/) | Dondurulmuş Gold/Generated değerlendirme varlıkları ve uyumluluk girişleri |
-| [`simulation/`](simulation/) | Allowlist tabanlı, hedef-seçilebilir demo senaryoları |
-| [`scripts/`](scripts/) | Tek komutluk lab başlatma, sağlık ve kapatma girişleri |
-| [`ops/systemd/`](ops/systemd/) | Guest içinde unprivileged, boot-persistent SNMPSim servisi |
-| [`docs/history/`](docs/history/) | Tarihsel inceleme ve düzeltme raporları |
-| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Opsiyonel Debian, SSH, sudo ve SNMPSim kurulum rehberi |
-| [`docs/lab/`](docs/lab/) | Ayrıntılı tarihsel LibreNMS ve SNMPSim lab notları |
+| [`chat-ui/`](chat-ui/) | React + assistant-ui native chat, structured results, and demo interface |
+| [`integrations/librenms/AiAssistant/`](integrations/librenms/AiAssistant/) | LibreNMS plugin page, signed identity bridge, and deployment contract |
+| [`librenms-hybrid-poc/`](librenms-hybrid-poc/) | Current planner, orchestration, and backend adapter entry points |
+| [`librenms-hybrid-poc/tests/`](librenms-hybrid-poc/tests/) | Offline hybrid, chat, security, and operations regression suite |
+| [`librenms-hybrid-poc/fixtures/`](librenms-hybrid-poc/fixtures/) | PoC inventory, prompt, and acceptance inputs |
+| [`librenms-hybrid-poc/hybrid-gold-v3/`](librenms-hybrid-poc/hybrid-gold-v3/) | Frozen Gold/Generated evaluation assets and compatibility entry points |
+| [`simulation/`](simulation/) | Allowlisted, target-selectable demo scenarios |
+| [`scripts/`](scripts/) | Single-command lab startup, health, and shutdown entry points |
+| [`ops/systemd/`](ops/systemd/) | Unprivileged, boot-persistent SNMPSim service inside the guest |
+| [`docs/history/`](docs/history/) | Historical review and remediation reports |
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Optional Debian, SSH, sudo, and SNMPSim installation guide |
+| [`docs/lab/`](docs/lab/) | Detailed historical LibreNMS and SNMPSim lab notes |
 
-### Önemli dosyalar
+### Important files
 
 - [`hybrid_poc.py`](librenms-hybrid-poc/hybrid_poc.py): planner, resolver,
-  backend ve synthesis orchestration
-- [`live_query.py`](librenms-hybrid-poc/live_query.py): gerçek LibreNMS API'si
-  için komut satırı giriş noktası
+  backend, and synthesis orchestration
+- [`live_query.py`](librenms-hybrid-poc/live_query.py): command-line entry point
+  for the real LibreNMS API
 - [`planner_v2.py`](librenms-hybrid-poc/planner_v2.py): structured plan schema,
-  normalizasyon ve strict validation
+  normalization, and strict validation
 - [`librenms_backend.py`](librenms-hybrid-poc/librenms_backend.py): read-only
-  LibreNMS `/api/v0` adapter'ı
+  LibreNMS `/api/v0` adapter
 - [`investigation_grounding.py`](librenms-hybrid-poc/investigation_grounding.py):
-  typed findings, claim doğrulama, judge ve güvenli fallback sözleşmeleri
-- [`utility_facts.py`](librenms-hybrid-poc/utility_facts.py): deterministik cihaz,
-  port ve event fact seçicileri
-- [`resolver_v5.py`](librenms-hybrid-poc/resolver_v5.py): aktif structured katalog
-  filtreleme ve identity resolution
-- [`catalog_ingest.py`](librenms-hybrid-poc/catalog_ingest.py): aktif katalog ingest
-  ve identity index yardımcısı
+  typed findings, claim validation, judge, and safe-fallback contracts
+- [`utility_facts.py`](librenms-hybrid-poc/utility_facts.py): deterministic
+  device, port, and event fact selectors
+- [`resolver_v5.py`](librenms-hybrid-poc/resolver_v5.py): active structured
+  catalog filtering and identity resolution
+- [`catalog_ingest.py`](librenms-hybrid-poc/catalog_ingest.py): active catalog
+  ingestion and identity-index helper
 - [`emr52_acceptance_queries.json`](librenms-hybrid-poc/fixtures/emr52_acceptance_queries.json):
-  güncel canlı acceptance sorguları
+  current live acceptance queries
 
-## Hızlı başlangıç
+## Quick start
 
-Chat servisi test bağımlılıklarını kurduktan sonra offline suite'i çalıştırın:
+Install the chat service's test dependencies, then run the offline suite:
 
 ```bash
 git clone https://github.com/emribilemir/librenms-ai-assistant.git
@@ -159,11 +166,10 @@ python3 -m venv .venv
 .venv/bin/python -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
 ```
 
-Offline suite, harici LibreNMS veya Ollama bağlantısı gerektirmez. Backend
-adapter testleri yalnızca process içinde açılan localhost test sunucusunu
-kullanır.
+The offline suite does not require an external LibreNMS or Ollama connection.
+Backend adapter tests use only an in-process localhost test server.
 
-Assistant UI test ve production build'i:
+To test and build the Assistant UI for production:
 
 ```bash
 cd chat-ui
@@ -172,32 +178,32 @@ npm test -- --runInBand
 npm run build
 ```
 
-Build çıktısı `chat-ui/dist/` altında oluşur ve native eklentinin yüklediği
-statik asset'lere dağıtılır. Ayrıntılı eklenti adımları için
+Build output is generated under `chat-ui/dist/` and deployed to the static
+assets loaded by the native plugin. See
 [`integrations/librenms/AiAssistant/docs/deployment.md`](integrations/librenms/AiAssistant/docs/deployment.md)
-dosyasına bakın.
+for detailed plugin deployment steps.
 
-## Opsiyonel uçtan uca lab kurulumu
+## Optional end-to-end lab setup
 
-Offline testler için Debian, UTM, macOS, LibreNMS veya SNMPSim gerekmez.
-Gerçek LibreNMS discovery/poller/API zincirini fiziksel cihaz olmadan denemek
-isteyenler opsiyonel lab ortamını kurabilir:
+The offline tests do not require Debian, UTM, macOS, LibreNMS, or SNMPSim.
+Anyone who wants to exercise the real LibreNMS discovery/poller/API chain
+without physical devices can set up the optional lab environment:
 
 ```text
 SNMPSim -> LibreNMS discovery/poller -> LibreNMS API -> Hybrid PoC
 ```
 
-- [Kurulum rehberi](docs/INSTALLATION.md): Debian/Linux hazırlığı, SSH, sudo,
-  firewall, native servis kontrolleri ve SNMPSim kurulumu
-- [Ayrıntılı lab günlüğü](docs/lab/librenms_native_lab_kurulum_ve_snmpsim_notlari_v2.md):
-  doğrulanmış UTM + Debian 13 ARM64 kurulumunun tarihsel adımları ve sorunları
+- [Installation guide](docs/INSTALLATION.md): Debian/Linux preparation, SSH,
+  sudo, firewall, native service checks, and SNMPSim installation
+- [Detailed lab journal](docs/lab/librenms_native_lab_kurulum_ve_snmpsim_notlari_v2.md):
+  historical steps and issues from the verified UTM + Debian 13 ARM64 setup
 
-macOS/UTM yalnız doğrulanmış referans ortamdır; zorunlu değildir. Eşdeğer bir
-Linux sunucu veya VM ve herhangi bir SSH istemcisi kullanılabilir.
+macOS/UTM is only the verified reference environment; it is not required. An
+equivalent Linux server or VM and any SSH client can be used.
 
-Lab yapılandırması makineye özeldir ve repoya girmez. Önce `.env.example`
-dosyasını `.env` olarak kopyalayıp SSH, LibreNMS ve backend alanlarını doldurun.
-Ardından canonical yaşam döngüsünü kullanın:
+Lab configuration is machine-specific and is not committed to the repository.
+First copy `.env.example` to `.env` and fill in the SSH, LibreNMS, and backend
+fields. Then use the canonical lifecycle:
 
 ```bash
 ./scripts/lab-up
@@ -205,28 +211,29 @@ Ardından canonical yaşam döngüsünü kullanın:
 ./scripts/lab-down
 ```
 
-`lab-up`, isteğe bağlı UTM başlatma, bounded SSH bekleme, LibreNMS servisleri,
-boot-persistent SNMPSim ve launchd backend kurulumunu birlikte yürütür.
-`lab-status`; servisleri, tek unprivileged responder sürecini, 8 up / 3 down
-baseline envanterini, LibreNMS API/web ve backend health endpointini doğrular.
-SQLite çalışma verisi varsayılan olarak kullanıcının state dizininde tutulur.
-Demo mutation endpointleri yalnız imzalı `demo_control` capability'sine sahip
-operator kimliğine açıktır; global-read kullanıcıların normal sohbet erişimi
-değişmez.
+`lab-up` coordinates optional UTM startup, bounded SSH waiting, LibreNMS
+services, boot-persistent SNMPSim, and the launchd backend installation.
+`lab-status` verifies the services, the single unprivileged responder process,
+the 8-up/3-down baseline inventory, LibreNMS API/web access, and the backend
+health endpoint. SQLite runtime data is stored in the user's state directory by
+default. Demo mutation endpoints are available only to an operator identity
+with a signed `demo_control` capability; normal chat access for global-read
+users remains unchanged.
 
-### Kısa sunum akışı
+### Short demo flow
 
-1. `./scripts/lab-status` ile servisler ve `8 up / 3 down` baseline'ını gösterin.
-2. LibreNMS içindeki **AI Assistant** sayfasında model/durum sorgusu çalıştırın.
-3. Down port, aktif alarm ve son event sorgularındaki structured sonuçları açın.
-4. Bir investigation çalıştırıp işlem aşamalarını ve doğrulanmış deep-link'leri gösterin.
-5. Yetkili Demo Modu'nda farklı bir hedef seçin; destekli aksiyonu çalıştırın,
-   **Bu durumu AI'a sor** CTA'sını kullanın ve aynı hedefi **Laboratuvarı sıfırla**
-   ile kendi baseline durumuna döndürün.
+1. Run `./scripts/lab-status` to show the services and the 8-up/3-down baseline.
+2. Run a model or status query on the **AI Assistant** page in LibreNMS.
+3. Open the structured results for down-port, active-alert, and latest-event
+   queries.
+4. Run an investigation and show the processing stages and verified deep links.
+5. In authorized Demo Mode, select another target, run a supported action, use
+   **Bu durumu AI'a sor** (“Ask AI about this state”), and return that target to
+   its own baseline with **Laboratuvarı sıfırla** (“Reset lab”).
 
-## Yerel Ollama ile PoC harness'i
+## PoC harness with local Ollama
 
-Yerel `http://localhost:11434` adresinde uygun model çalışıyorsa:
+If a compatible model is running locally at `http://localhost:11434`:
 
 ```bash
 python3 librenms-hybrid-poc/hybrid_poc.py \
@@ -236,10 +243,10 @@ python3 librenms-hybrid-poc/hybrid_poc.py \
   --out /tmp/librenms-hybrid-results.json
 ```
 
-## Gerçek LibreNMS API ile canlı sorgu
+## Live queries against the real LibreNMS API
 
-Read-only kullanım için legacy `/api/v0` token'ını environment üzerinden
-sağlayın. Gerçek token'ı repoya veya shell history'ye yazmayın.
+For read-only use, provide a legacy `/api/v0` token through the environment.
+Never write a real token to the repository or shell history.
 
 ```bash
 export LIBRENMS_TOKEN="<read-only-token>"
@@ -250,78 +257,80 @@ python3 librenms-hybrid-poc/live_query.py "lab-j9772a-01 port 2 ne durumda?"
 python3 librenms-hybrid-poc/live_query.py "lab-j9772a-01'de ne sorun var?"
 ```
 
-`live_query.py`, Gold planner sözleşmesini, runtime `resolver_v5`'i ve gerçek
-`LibreNMSBackend` adapter'ını kullanır. İlk cihaz sorgusundan dönen gerçek
-LibreNMS `device_id`, sonraki port/alarm/event çağrılarına aktarılır; fixture
-kimliği backend gerçeği olarak kullanılmaz.
+`live_query.py` uses the Gold planner contract, runtime `resolver_v5`, and the
+real `LibreNMSBackend` adapter. The real LibreNMS `device_id` returned by the
+first device query is passed to subsequent port, alert, and event calls; fixture
+identity is never treated as backend truth.
 
-## Güvenlik ve doğruluk kuralları
+## Security and correctness rules
 
-- Backend yalnızca read-only endpointlerle sınırlıdır.
-- Token environment üzerinden alınır ve sanitize edilmiş trace'e yazılmaz.
-- Atomik durum ve utility fact cevapları LLM tarafından yeniden yorumlanmaz.
-- Ambiguous referanslarda clarification üretilir; rastgele cihaz seçilmez.
-- Eşleşme veya backend verisi yoksa değer tahmin edilmez.
-- Device-set status cevapları her hostname için ayrı canlı backend çağrısı yapar.
-- Investigation yalnızca alınmış `device + ports + alerts + events` kanıtını
-  kullanır.
-- Mekanik veya semantic doğrulama başarısızsa generated cevap atılır ve
-  deterministik fallback kullanılır.
-- Geçersiz planner çıktısı resolver veya backend'e ulaşmaz.
+- The backend is restricted to read-only endpoints.
+- The token is read from the environment and never written to sanitized traces.
+- Atomic state and utility-fact answers are not reinterpreted by the LLM.
+- Ambiguous references produce a clarification; no random device is selected.
+- Values are never guessed when there is no match or backend data.
+- Device-set status answers make a separate live backend call for each hostname.
+- Investigations use only the retrieved `device + ports + alerts + events`
+  evidence.
+- If mechanical or semantic validation fails, the generated answer is discarded
+  and a deterministic fallback is used.
+- Invalid planner output never reaches the resolver or backend.
 
-Kaynak Excel yalnızca marka ve model bilgisi sağlar. `lab-<sku>-NN`
-hostname'leri, device ID'ler ve operasyonel durumlar synthetic fixture'dır;
-gerçek İSBAK operasyon verisi olarak yorumlanmamalıdır.
+The source spreadsheet provides only brand and model information. The
+`lab-<sku>-NN` hostnames, device IDs, and operational states are synthetic
+fixtures and must not be interpreted as real ISBAK operational data.
 
-## Doğrulama
+## Verification
 
-CI her push ve pull request'te tam offline Python suite'ini, frontend unit
-testlerini, production build'i, LibreNMS plugin contract testlerini ve dar bir
-secret-pattern kontrolünü çalıştırır. Canlı UTM kabulü ise yalnız Codex in-app
-browser ile, `lab-status` yeşil olduktan sonra yürütülür.
+On every push and pull request, CI runs the complete offline Python suite,
+frontend unit tests, the production build, LibreNMS plugin contract tests, and a
+narrow secret-pattern check. Live UTM acceptance is performed only through the
+Codex in-app browser after `lab-status` is green.
 
-EMR-85 tesliminde doğrulanan mevcut kapsam: **201 Python testi**, **101 Assistant
-UI testi**, **9 LibreNMS plugin contract testi** ve başarılı Vite production
-build. Canlı kabulde 11 hedeflik manifest, üç farklı cihaz modeli üzerinde
-mutasyon → poller → AI sorgusu → reset zinciri ve `8 up / 3 down` lab baseline'ı
-doğrulandı.
+The scope verified for the EMR-85 delivery consists of **201 Python tests**,
+**101 Assistant UI tests**, **9 LibreNMS plugin contract tests**, and a successful
+Vite production build. Live acceptance verified the 11-target manifest, the
+mutation → poller → AI query → reset chain across three device models, and the
+8-up/3-down lab baseline.
 
-Canlı Ollama/LibreNMS acceptance koşuları model, token ve erişilebilir lab
-ortamı gerektirdiği için offline suite'in parçası değildir.
+Live Ollama/LibreNMS acceptance runs are not part of the offline suite because
+they require a model, a token, and an accessible lab environment.
 
-## Yerel deney çıktıları
+## Local experiment outputs
 
-Harness sonuçları, loglar, comparison raporları ve external-judge export'ları
-yeniden üretilebilir çalışma çıktılarıdır; Git tarafından izlenmez. Varsayılan
-PoC sonucu işletim sisteminin geçici dizinine yazılır. Kalıcı bir deney kanıtı
-gerekiyorsa model, runtime ve commit bilgisiyle ayrı bir release artifact'ı
-olarak saklanmalıdır.
+Harness results, logs, comparison reports, and external-judge exports are
+reproducible runtime outputs and are not tracked by Git. By default, PoC results
+are written to the operating system's temporary directory. When persistent
+experiment evidence is required, it should be stored as a separate release
+artifact with model, runtime, and commit information.
 
-## Bilinen sınırlar
+## Known limitations
 
-- Proje production deployment, write operation veya yetkilendirme yönetimi
-  içermez.
-- RAG uygulanmadı; katalog ve doküman bağlamı için olası B planıdır.
-- Generator ve judge aynı Qwen modelini ayrı çağrılarda kullanır; judge bağımsız
-  bir doğruluk kaynağı değildir.
-- Investigation kalitesi, backend'in sağladığı veri ve event-window coverage'ı
-  ile sınırlıdır.
-- Kanıtlanmış kök neden yoksa sonuç `root_cause unknown` sınırında kalır.
+- The project does not include production deployment, write operations, or
+  authorization management.
+- RAG has not been implemented; it remains a possible fallback for catalog and
+  documentation context.
+- The generator and judge use the same Qwen model in separate calls, so the
+  judge is not an independent source of truth.
+- Investigation quality is limited by the data and event-window coverage
+  provided by the backend.
+- When no root cause is supported by evidence, the result remains bounded at
+  `root_cause unknown`.
 
-## Sonraki yön
+## Next direction
 
-Öncelik, doğrulanmış hybrid akışı LibreNMS'in native chat deneyimine read-only
-olarak bağlamaktır. Bu entegrasyonun sözleşmesi ve güvenlik sınırları
-korunduktan sonra planner, backend ve iki aşamalı investigation zincirindeki
-latency ölçülüp optimize edilecektir.
+The priority is to connect the verified hybrid flow to LibreNMS's native chat
+experience in read-only mode. Once the integration contract and security
+boundaries are preserved, latency across the planner, backend, and two-stage
+investigation chain will be measured and optimized.
 
-## Tasarım belgeleri
+## Design documents
 
-- [Planner/catalog/resolver sahiplik incelemesi](docs/history/LIBRENMS_PLANNER_CATALOG_RESOLVER_OWNERSHIP_REVIEW.md)
-- [Planner v2 düzeltme raporu](docs/history/PLANNER_V2_FIX_REPORT.md)
+- [Planner/catalog/resolver ownership review](docs/history/LIBRENMS_PLANNER_CATALOG_RESOLVER_OWNERSHIP_REVIEW.md)
+- [Planner v2 remediation report](docs/history/PLANNER_V2_FIX_REPORT.md)
 
-## Arayüz kaynağı
+## UI foundation
 
-Chat yüzeyi [assistant-ui](https://www.assistant-ui.com/) primitive'leri üzerine
-kuruludur; LibreNMS'e özgü veri güvenliği, görsel dil ve kontroller bu depoda
-uygulanır.
+The chat surface is built on
+[assistant-ui](https://www.assistant-ui.com/) primitives. LibreNMS-specific data
+safety, visual language, and controls are implemented in this repository.
