@@ -1,5 +1,7 @@
 # LibreNMS AI Assistant — Natural-Language Hybrid PoC
 
+[![CI](https://github.com/emribilemir/librenms-ai-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/emribilemir/librenms-ai-assistant/actions/workflows/ci.yml)
+
 A read-only proof of concept investigating whether LibreNMS data can be accessed
 safely and verifiably through natural language.
 
@@ -7,6 +9,29 @@ The project tests the boundaries between natural-language planning with a local
 Qwen model, deterministic device resolution, LibreNMS `/api/v0` queries, a
 native LibreNMS plugin, and evidence-grounded answer generation. All access to
 LibreNMS remains read-only.
+
+## Current status
+
+The repository is public and the complete offline test suite is reproducible
+without LibreNMS, UTM, Docker, Ollama, or production credentials. An optional
+Docker migration lab is also available for users who already have a verified
+LibreNMS backup and want to replace the native Debian/UTM lab.
+
+The Docker path was acceptance-tested on 17 September 2026 with OrbStack on
+Apple Silicon:
+
+| Check | Verified result |
+|---|---|
+| LibreNMS stack | LibreNMS, MariaDB, Redis, dispatcher, SNMPSim, and gateway running |
+| Migrated state | 11 devices, 15 ports, 1 user, 133 alert rows, and 346 RRD files |
+| Synthetic network baseline | 8 devices up and 3 intentionally down |
+| LibreNMS validator | Database, schema, poller, dispatcher, Redis, and RRD checks pass |
+| AI integration | Native plugin loads in a signed LibreNMS session and `/ai-api/healthz` returns `200` |
+| Frontend dependency audit | 0 known npm vulnerabilities with Vite 8.3.0 |
+
+Migration backups, database dumps, RRD data, SNMPSim runtime state, API tokens,
+application keys, and local `.env` files are deliberately excluded from Git.
+The checked-in Docker files are infrastructure and migration tooling only.
 
 ## Core approach
 
@@ -128,6 +153,7 @@ lab-j9772a-01'de ne sorun var?
 | [`librenms-hybrid-poc/hybrid-gold-v3/`](librenms-hybrid-poc/hybrid-gold-v3/) | Frozen Gold/Generated evaluation assets and compatibility entry points |
 | [`simulation/`](simulation/) | Allowlisted, target-selectable demo scenarios |
 | [`scripts/`](scripts/) | Single-command lab startup, health, and shutdown entry points |
+| [`ops/docker/`](ops/docker/) | Docker Compose migration stack, image builds, and UTM backup staging guide |
 | [`ops/systemd/`](ops/systemd/) | Unprivileged, boot-persistent SNMPSim service inside the guest |
 | [`docs/history/`](docs/history/) | Historical review and remediation reports |
 | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Optional Debian, SSH, sudo, and SNMPSim installation guide |
@@ -200,6 +226,17 @@ SNMPSim -> LibreNMS discovery/poller -> LibreNMS API -> Hybrid PoC
 
 macOS/UTM is only the verified reference environment; it is not required. An
 equivalent Linux server or VM and any SSH client can be used.
+
+For migration away from the native UTM guest, use the checksum-verifying
+staging command and Compose runbook in
+[`ops/docker/README.md`](ops/docker/README.md). The Docker stack preserves the
+MariaDB import, RRD history, and loopback-addressed SNMPSim lab while keeping
+runtime data and credentials outside Git.
+
+The current migration is intentionally two-phase: LibreNMS and its supporting
+services run in containers, while the Python AI backend continues to run on the
+host and is reached through the gateway. Containerizing that backend is a
+future portability improvement, not a blocker for the verified local stack.
 
 Lab configuration is machine-specific and is not committed to the repository.
 First copy `.env.example` to `.env` and fill in the SSH, LibreNMS, and backend
@@ -283,15 +320,15 @@ fixtures and must not be interpreted as real ISBAK operational data.
 ## Verification
 
 On every push and pull request, CI runs the complete offline Python suite,
-frontend unit tests, the production build, LibreNMS plugin contract tests, and a
-narrow secret-pattern check. Live UTM acceptance is performed only through the
-Codex in-app browser after `lab-status` is green.
+frontend unit tests, the production build, LibreNMS plugin contract tests,
+Docker Compose configuration validation, and a narrow secret-pattern check.
+Live LibreNMS acceptance is performed only through the Codex in-app browser.
 
-The scope verified for the EMR-85 delivery consists of **201 Python tests**,
-**101 Assistant UI tests**, **9 LibreNMS plugin contract tests**, and a successful
-Vite production build. Live acceptance verified the 11-target manifest, the
-mutation → poller → AI query → reset chain across three device models, and the
-8-up/3-down lab baseline.
+The current verified scope consists of **213 Python tests**, **103 Assistant UI
+tests**, **9 LibreNMS plugin contract tests**, a valid Docker Compose model, and
+a successful Vite production build. Live acceptance verified the native plugin,
+AI backend health path, migrated LibreNMS state, and the 8-up/3-down lab
+baseline.
 
 Live Ollama/LibreNMS acceptance runs are not part of the offline suite because
 they require a model, a token, and an accessible lab environment.
@@ -308,6 +345,12 @@ artifact with model, runtime, and commit information.
 
 - The project does not include production deployment, write operations, or
   authorization management.
+- The Docker migration currently keeps the Python AI backend on the host; the
+  LibreNMS, database, Redis, dispatcher, SNMPSim, and gateway services are
+  containerized.
+- The Docker lab requires a user-provided, checksum-verified migration backup;
+  no database, RRD, device recording, credential, or application-key material
+  is distributed in this repository.
 - RAG has not been implemented; it remains a possible fallback for catalog and
   documentation context.
 - The generator and judge use the same Qwen model in separate calls, so the
@@ -319,10 +362,10 @@ artifact with model, runtime, and commit information.
 
 ## Next direction
 
-The priority is to connect the verified hybrid flow to LibreNMS's native chat
-experience in read-only mode. Once the integration contract and security
-boundaries are preserved, latency across the planner, backend, and two-stage
-investigation chain will be measured and optimized.
+The next portability step is to containerize the Python AI backend, add an
+explicit container health check, and remove the remaining host-network
+dependency. After that, release builds can pin tested image digests and measure
+latency across the planner, backend, and two-stage investigation chain.
 
 ## Design documents
 
