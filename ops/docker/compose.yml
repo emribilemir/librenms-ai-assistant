@@ -1,0 +1,130 @@
+name: librenms-ai-lab
+
+services:
+  db:
+    image: "${MARIADB_IMAGE:-mariadb:11.8}"
+    command:
+      - mariadbd
+      - --innodb-file-per-table=1
+      - --lower-case-table-names=0
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      TZ: "${TZ:-Europe/Istanbul}"
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-librenms}"
+      MYSQL_USER: "${MYSQL_USER:-librenms}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD in ops/docker/.env}"
+    volumes:
+      - "db-data:/var/lib/mysql"
+      - "./state/import/librenms.sql.gz:/docker-entrypoint-initdb.d/00-librenms.sql.gz:ro"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: "${REDIS_IMAGE:-redis:7.2-alpine}"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - "redis-data:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  librenms:
+    build:
+      context: ../..
+      dockerfile: ops/docker/librenms.Dockerfile
+      args:
+        LIBRENMS_IMAGE: "${LIBRENMS_IMAGE:-librenms/librenms:latest}"
+    image: "${LOCAL_LIBRENMS_IMAGE:-librenms-ai-assistant:local}"
+    hostname: librenms
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    extra_hosts: &lab_hosts
+      - "lab-j9772a-01:127.0.0.11"
+      - "lab-j9772a-02:127.0.0.12"
+      - "lab-j9775a-01:127.0.0.13"
+      - "lab-j9775a-02:127.0.0.14"
+      - "lab-jl357a-01:127.0.0.15"
+      - "lab-j4850a-01:127.0.0.16"
+      - "lab-j4850a-02:127.0.0.17"
+      - "lab-j9774a-01:127.0.0.18"
+      - "lab-j9776a-01:127.0.0.19"
+      - "lab-j9780a-01:127.0.0.20"
+      - "lab-j9783a-01:127.0.0.21"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: &librenms_environment
+      TZ: "${TZ:-Europe/Istanbul}"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      DB_HOST: db
+      DB_NAME: "${MYSQL_DATABASE:-librenms}"
+      DB_USER: "${MYSQL_USER:-librenms}"
+      DB_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD in ops/docker/.env}"
+      DB_TIMEOUT: "60"
+      APP_KEY: "${LIBRENMS_APP_KEY:?set LIBRENMS_APP_KEY in ops/docker/.env}"
+      REDIS_HOST: redis
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      LIBRENMS_BASE_URL: "/"
+    volumes:
+      - "./state/librenms:/data"
+    restart: unless-stopped
+
+  dispatcher:
+    image: "${LOCAL_LIBRENMS_IMAGE:-librenms-ai-assistant:local}"
+    depends_on:
+      - librenms
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    extra_hosts: *lab_hosts
+    environment:
+      <<: *librenms_environment
+      SIDECAR_DISPATCHER: "1"
+      DISPATCHER_NODE_ID: dispatcher1
+    volumes:
+      - "./state/librenms:/data"
+    restart: unless-stopped
+
+  snmpsim:
+    build:
+      context: ../..
+      dockerfile: ops/docker/snmpsim.Dockerfile
+    network_mode: service:dispatcher
+    depends_on:
+      - dispatcher
+    volumes:
+      - "./state/snmpsim-lab:/opt/snmpsim-lab"
+    restart: unless-stopped
+
+  gateway:
+    image: "${NGINX_IMAGE:-nginx:alpine}"
+    depends_on:
+      - librenms
+    environment:
+      AI_BACKEND_HOST: "${AI_BACKEND_HOST:-host.docker.internal}"
+      AI_BACKEND_PORT: "${AI_BACKEND_PORT:-8765}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${LIBRENMS_HTTP_PORT:-8080}:80"
+    volumes:
+      - "./gateway.conf:/etc/nginx/templates/default.conf.template:ro"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  redis-data:

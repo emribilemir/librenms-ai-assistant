@@ -23,6 +23,8 @@ jobs:
         run: python3 -m unittest discover -s librenms-hybrid-poc -p 'test_*.py' -v
       - name: Plugin contract suite
         run: python3 -m unittest discover -s integrations/librenms/AiAssistant/tests -p 'test_*.py' -v
+      - name: Docker Compose contract
+        run: docker compose --env-file ops/docker/.env.example -f ops/docker/compose.yml config --quiet
       - name: Repository secret-pattern guard
         run: |
           ! git grep -nE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|X-Auth-Token:[[:space:]]*[A-Za-z0-9_-]{16,})' -- ':!docs/history/**' ':!docs/lab/**'
@@ -40,6 +42,8 @@ jobs:
           cache: npm
           cache-dependency-path: chat-ui/package-lock.json
       - run: npm ci
+      - name: Dependency audit
+        run: npm audit --audit-level=high
       - name: Unit tests
         run: npm test -- --runInBand
       - name: Production build

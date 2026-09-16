@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Stage a verified UTM backup into the local Docker Compose state layout."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+from pathlib import Path, PurePosixPath
+import shutil
+import sys
+import tarfile
+import tempfile
+
+
+REQUIRED_FILES = ("librenms.sql.gz", "librenms-files.tar.gz")
+LEGACY_FILES = {
+    "opt/librenms/config.php",
+    "opt/librenms/.env",
+    "etc/nginx/sites-enabled/librenms.vhost",
+}
+LEGACY_PREFIXES = (
+    "opt/librenms/app/Plugins/AiAssistant/",
+    "opt/librenms/html/plugins/ai-assistant/",
+)
+
+
+class StagingError(RuntimeError):
+    pass
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_checksums(backup: Path) -> None:
+    checksum_file = backup / "SHA256SUMS"
+    if not checksum_file.is_file():
+        raise StagingError("checksum file is missing: SHA256SUMS")
+
+    expected: dict[str, str] = {}
+    for line in checksum_file.read_text(encoding="utf-8").splitlines():
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        expected[parts[1].lstrip("*")] = parts[0].lower()
+
+    for name in REQUIRED_FILES:
+        source = backup / name
+        if not source.is_file():
+            raise StagingError(f"required backup file is missing: {name}")
+        wanted = expected.get(name)
+        if wanted is None:
+            raise StagingError(f"checksum is missing for {name}")
+        if sha256(source) != wanted:
+            raise StagingError(f"checksum verification failed for {name}")
+
+
+def safe_member_name(name: str) -> str:
+    path = PurePosixPath(name)
+    if path.is_absolute() or ".." in path.parts:
+        raise StagingError(f"unsafe archive member: {name}")
+    return path.as_posix().rstrip("/")
+
+
+def staged_destination(root: Path, name: str) -> Path | None:
+    rrd_prefix = "opt/librenms/rrd/"
+    snmpsim_prefix = "opt/snmpsim-lab/"
+    if name.startswith(rrd_prefix):
+        return root / "librenms" / "rrd" / name.removeprefix(rrd_prefix)
+    if name.startswith(snmpsim_prefix):
+        return root / "snmpsim-lab" / name.removeprefix(snmpsim_prefix)
+    if name in LEGACY_FILES or name.startswith(LEGACY_PREFIXES):
+        return root / "legacy" / name
+    return None
+
+
+def extract_selected(archive_path: Path, root: Path) -> None:
+    extracted_files = 0
+    with tarfile.open(archive_path, "r:gz") as archive:
+        members = archive.getmembers()
+        for member in members:
+            safe_member_name(member.name)
+
+        for member in members:
+            name = safe_member_name(member.name)
+            destination = staged_destination(root, name)
+            if destination is None:
+                continue
+            if member.issym() or member.islnk():
+                raise StagingError(f"unsafe archive link: {member.name}")
+            if member.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            if not member.isfile():
+                continue
+            source = archive.extractfile(member)
+            if source is None:
+                raise StagingError(f"could not read archive member: {member.name}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with source, destination.open("wb") as output:
+                shutil.copyfileobj(source, output)
+            mode = member.mode & 0o777
+            if name == "opt/librenms/.env":
+                mode = 0o600
+            os.chmod(destination, mode)
+            extracted_files += 1
+
+    if extracted_files == 0:
+        raise StagingError("backup archive contains no migratable files")
+
+
+def stage(backup: Path, target: Path) -> None:
+    backup = backup.resolve()
+    target = target.resolve()
+    if not backup.is_dir():
+        raise StagingError(f"backup directory does not exist: {backup}")
+    if target.exists():
+        raise StagingError(f"target already exists: {target}")
+
+    verify_checksums(backup)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{target.name}.staging-", dir=target.parent))
+    try:
+        import_dir = temporary / "import"
+        import_dir.mkdir(parents=True)
+        sql_target = import_dir / "librenms.sql.gz"
+        shutil.copyfile(backup / "librenms.sql.gz", sql_target)
+        os.chmod(sql_target, 0o600)
+        extract_selected(backup / "librenms-files.tar.gz", temporary)
+        (temporary / "librenms" / "rrd").mkdir(parents=True, exist_ok=True)
+        (temporary / "snmpsim-lab").mkdir(parents=True, exist_ok=True)
+        temporary.rename(target)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Verify and stage a LibreNMS UTM migration backup for Docker Compose."
+    )
+    parser.add_argument("backup", type=Path)
+    parser.add_argument("target", type=Path)
+    args = parser.parse_args()
+    try:
+        stage(args.backup, args.target)
+    except (OSError, tarfile.TarError, StagingError) as exc:
+        print(f"docker migration staging failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Docker migration state staged at {args.target.resolve()}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
