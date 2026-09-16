@@ -48,7 +48,7 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    extra_hosts: &lab_hosts
+    extra_hosts:
       - "lab-j9772a-01:127.0.0.11"
       - "lab-j9772a-02:127.0.0.12"
       - "lab-j9775a-01:127.0.0.13"
@@ -65,7 +65,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment: &librenms_environment
+    environment:
       TZ: "${TZ:-Europe/Istanbul}"
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-1000}"
@@ -90,9 +90,32 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    extra_hosts: *lab_hosts
+    extra_hosts:
+      - "lab-j9772a-01:127.0.0.11"
+      - "lab-j9772a-02:127.0.0.12"
+      - "lab-j9775a-01:127.0.0.13"
+      - "lab-j9775a-02:127.0.0.14"
+      - "lab-jl357a-01:127.0.0.15"
+      - "lab-j4850a-01:127.0.0.16"
+      - "lab-j4850a-02:127.0.0.17"
+      - "lab-j9774a-01:127.0.0.18"
+      - "lab-j9776a-01:127.0.0.19"
+      - "lab-j9780a-01:127.0.0.20"
+      - "lab-j9783a-01:127.0.0.21"
     environment:
-      <<: *librenms_environment
+      TZ: "${TZ:-Europe/Istanbul}"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      DB_HOST: db
+      DB_NAME: "${MYSQL_DATABASE:-librenms}"
+      DB_USER: "${MYSQL_USER:-librenms}"
+      DB_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD in ops/docker/.env}"
+      DB_TIMEOUT: "60"
+      APP_KEY: "${LIBRENMS_APP_KEY:?set LIBRENMS_APP_KEY in ops/docker/.env}"
+      REDIS_HOST: redis
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      LIBRENMS_BASE_URL: "/"
       SIDECAR_DISPATCHER: "1"
       DISPATCHER_NODE_ID: dispatcher1
     volumes:
