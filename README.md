@@ -237,6 +237,8 @@ The current migration is intentionally two-phase: LibreNMS and its supporting
 services run in containers, while the Python AI backend continues to run on the
 host and is reached through the gateway. Containerizing that backend is a
 future portability improvement, not a blocker for the verified local stack.
+The container stack includes MariaDB, Redis, RRDcached, the LibreNMS web
+service, its dispatcher, SNMPSim, and the gateway.
 
 Lab configuration is machine-specific and is not committed to the repository.
 First copy `.env.example` to `.env` and fill in the SSH, LibreNMS, and backend
@@ -324,7 +326,7 @@ frontend unit tests, the production build, LibreNMS plugin contract tests,
 Docker Compose configuration validation, and a narrow secret-pattern check.
 Live LibreNMS acceptance is performed only through the Codex in-app browser.
 
-The current verified scope consists of **213 Python tests**, **103 Assistant UI
+The current verified scope consists of **214 Python tests**, **103 Assistant UI
 tests**, **9 LibreNMS plugin contract tests**, a valid Docker Compose model, and
 a successful Vite production build. Live acceptance verified the native plugin,
 AI backend health path, migrated LibreNMS state, and the 8-up/3-down lab
@@ -345,9 +347,9 @@ artifact with model, runtime, and commit information.
 
 - The project does not include production deployment, write operations, or
   authorization management.
-- The Docker migration currently keeps the Python AI backend on the host; the
-  LibreNMS, database, Redis, dispatcher, SNMPSim, and gateway services are
-  containerized.
+- The Docker migration currently keeps the Python AI backend and persistent
+  SQLite chat history on the host; LibreNMS, MariaDB, Redis, RRDcached,
+  dispatcher, SNMPSim, and the gateway are containerized.
 - The Docker lab requires a user-provided, checksum-verified migration backup;
   no database, RRD, device recording, credential, or application-key material
   is distributed in this repository.

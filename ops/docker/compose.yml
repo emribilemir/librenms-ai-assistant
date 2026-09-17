@@ -37,6 +37,22 @@ services:
       retries: 12
     restart: unless-stopped
 
+  rrdcached:
+    image: "${RRDCACHED_IMAGE:-crazymax/rrdcached:latest}"
+    environment:
+      TZ: "${TZ:-Europe/Istanbul}"
+      PUID: "${PUID:-1000}"
+      PGID: "${RRDCACHED_PGID:-1000}"
+      LOG_LEVEL: LOG_INFO
+      WRITE_TIMEOUT: "1800"
+      WRITE_JITTER: "1800"
+      WRITE_THREADS: "4"
+      FLUSH_DEAD_DATA_INTERVAL: "3600"
+    volumes:
+      - "./state/librenms/rrd:/data/db"
+      - "./state/rrdcached-journal:/data/journal"
+    restart: unless-stopped
+
   librenms:
     build:
       context: ../..
@@ -65,6 +81,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rrdcached:
+        condition: service_started
     environment:
       TZ: "${TZ:-Europe/Istanbul}"
       PUID: "${PUID:-1000}"
@@ -76,6 +94,7 @@ services:
       DB_TIMEOUT: "60"
       APP_KEY: "${LIBRENMS_APP_KEY:?set LIBRENMS_APP_KEY in ops/docker/.env}"
       REDIS_HOST: redis
+      RRDCACHED_SERVER: rrdcached:42217
       CACHE_DRIVER: redis
       SESSION_DRIVER: redis
       LIBRENMS_BASE_URL: "/"
@@ -87,6 +106,7 @@ services:
     image: "${LOCAL_LIBRENMS_IMAGE:-librenms-ai-assistant:local}"
     depends_on:
       - librenms
+      - rrdcached
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -113,6 +133,7 @@ services:
       DB_TIMEOUT: "60"
       APP_KEY: "${LIBRENMS_APP_KEY:?set LIBRENMS_APP_KEY in ops/docker/.env}"
       REDIS_HOST: redis
+      RRDCACHED_SERVER: rrdcached:42217
       CACHE_DRIVER: redis
       SESSION_DRIVER: redis
       LIBRENMS_BASE_URL: "/"

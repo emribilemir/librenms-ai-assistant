@@ -142,6 +142,13 @@ class DockerComposeContractTests(unittest.TestCase):
 
         self.assertIn("proxy_set_header Host $http_host;", config)
 
+    def test_gateway_refreshes_the_librenms_container_address(self):
+        config = GATEWAY_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("resolver 127.0.0.11", config)
+        self.assertIn("set $librenms_upstream librenms:8000;", config)
+        self.assertIn("proxy_pass http://$librenms_upstream;", config)
+
     def test_compose_preserves_migrated_state_and_loopback_snmpsim_contract(self):
         ruby = subprocess.run(
             [
@@ -162,10 +169,30 @@ class DockerComposeContractTests(unittest.TestCase):
 
         self.assertEqual(
             set(services),
-            {"db", "redis", "librenms", "dispatcher", "snmpsim", "gateway"},
+            {"db", "redis", "rrdcached", "librenms", "dispatcher", "snmpsim", "gateway"},
+        )
+        self.assertEqual(
+            services["rrdcached"]["image"],
+            "${RRDCACHED_IMAGE:-crazymax/rrdcached:latest}",
+        )
+        self.assertIn(
+            "./state/librenms/rrd:/data/db",
+            services["rrdcached"]["volumes"],
+        )
+        self.assertIn(
+            "./state/rrdcached-journal:/data/journal",
+            services["rrdcached"]["volumes"],
         )
         self.assertIn("./state/librenms:/data", services["librenms"]["volumes"])
         self.assertIn("./state/librenms:/data", services["dispatcher"]["volumes"])
+        self.assertEqual(
+            services["librenms"]["environment"].get("RRDCACHED_SERVER"),
+            "rrdcached:42217",
+        )
+        self.assertEqual(
+            services["dispatcher"]["environment"].get("RRDCACHED_SERVER"),
+            "rrdcached:42217",
+        )
         self.assertEqual(
             services["librenms"]["environment"].get("APP_KEY"),
             "${LIBRENMS_APP_KEY:?set LIBRENMS_APP_KEY in ops/docker/.env}",
@@ -180,7 +207,10 @@ class DockerComposeContractTests(unittest.TestCase):
             services["db"]["volumes"],
         )
         self.assertIn("redis-data:/data", services["redis"]["volumes"])
-        self.assertEqual(set(compose["volumes"]), {"db-data", "redis-data"})
+        self.assertEqual(
+            set(compose["volumes"]),
+            {"db-data", "redis-data"},
+        )
         self.assertEqual(services["db"]["command"][0], "mariadbd")
         self.assertEqual(services["snmpsim"]["network_mode"], "service:dispatcher")
         self.assertIn("./state/snmpsim-lab:/opt/snmpsim-lab", services["snmpsim"]["volumes"])
