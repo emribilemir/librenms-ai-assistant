@@ -75,6 +75,31 @@ database because that source does not contain the Docker dispatcher setting.
 RRDcached keeps its database in the migrated `state/librenms/rrd` tree and its
 journal in the ignored `state/rrdcached-journal` directory.
 
+## Reconnect the host AI backend
+
+The host backend must use the Docker gateway after the migration. Replace any
+retired VM address in its private runtime environment with the published
+LibreNMS API URL:
+
+```sh
+LIBRENMS_BASE_URL=http://127.0.0.1:8080/api/v0
+```
+
+For the repository's macOS launchd setup, this value lives in
+`$AI_RUNTIME_ROOT/runtime.env` (or, when `AI_RUNTIME_ROOT` is unset,
+`~/Library/Application Support/LibreNMSAiAssistant/runtime.env`). Restart the
+service after changing it:
+
+```sh
+launchctl kickstart -k "gui/$(id -u)/com.emirbilici.librenms-ai-assistant"
+```
+
+Leaving `LIBRENMS_BASE_URL` pointed at the stopped UTM guest makes live device
+and suggestion requests wait for network timeouts. Because the chat service
+handles those requests alongside history loading, the Assistant can appear to
+have an empty history until the timeouts finish even though its persistent
+SQLite database is intact.
+
 The SQL dump is imported only when the Compose-managed `db-data` volume is
 empty. Do not remove that volume after the first successful start unless you
 intend to perform a fresh database import. MariaDB uses a named volume because
